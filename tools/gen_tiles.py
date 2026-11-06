@@ -67,6 +67,16 @@ BKG = [
         "::::::::",
         "::::::::",
     ]),
+    ("TILE_WATCH", [  # floor only a blind guard watches (bodies, suspicious acts)
+        "........",
+        ".:...:..",
+        "........",
+        "...:...:",
+        "........",
+        ".:...:..",
+        "........",
+        "...:...:",
+    ]),
     ("TILE_EXIT_SEEN", [
         "########",
         "#::::::#",
@@ -158,41 +168,51 @@ FONT_ORDER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:!-.>?"
 
 # ------------------------------------------------------------------- sprites
 # Guards differ only by where the eyes are, so facing reads at a glance
-# (the vision cone shows it too).
-def guard(eye_row):
-    return [
-        "..####..",
-        ".######.",
-        eye_row,
-        ".::::::.",
-        "..xxxx..",
-        ".xxxxxx.",
-        ".xxxxxx.",
-        ".##..##.",
-    ]
+# (the vision cone shows it too). Each uniform style changes hat and body.
+GUARD_STYLES = {
+    # name: (hat row 0, hat row 1, body row 4, body rows 5-6)
+    "GUARD":   ("..####..", ".######.", "..xxxx..", ".xxxxxx."),
+    "OFFICER": ("..####..", "#::::::#", "..#xx#..", ".#x##x#."),
+}
+
+def guard(eye_row, style="GUARD"):
+    h0, h1, b4, b5 = GUARD_STYLES[style]
+    return [h0, h1, eye_row, ".::::::.", b4, b5, b5, ".##..##."]
+
 
 def rotate_ccw(rows):
     """Rotate 8x8 art 90 degrees counter-clockwise (top edge -> left edge)."""
     return ["".join(rows[c][7 - r] for c in range(8)) for r in range(8)]
 
 
+def guard_set(style):
+    """6 tiles per style: facing up/right/down/left, subdued, body."""
+    p = "SPR_" + style + "_"
+    return [
+        (p + "UP",      guard(".######.", style)),
+        (p + "RIGHT",   guard(".:::#:#.", style)),
+        (p + "DOWN",    guard(".:#::#:.", style)),
+        (p + "LEFT",    guard(".#:#:::.", style)),
+        (p + "SUBDUED", guard(".:x::x:.", style)),            # mid-takedown
+        (p + "BODY",    rotate_ccw(guard(".:x::x:.", style))),  # lying down
+    ]
+
+
+def player(hat0, hat1, body):
+    return [hat0, hat1, "..#::#..", "...##...", ".#" + body + "#.",
+            "..####..", "...##...", "..#..#.."]
+
+
+# Order of the player tiles must match DISGUISE_* in game.h.
 SPRITES = [
-    ("SPR_PLAYER", [
-        "...##...",
-        "..####..",
-        "..#::#..",
-        "...##...",
-        ".#.##.#.",
-        "..####..",
-        "...##...",
-        "..#..#..",
-    ]),
-    ("SPR_GUARD_UP",    guard(".######.")),
-    ("SPR_GUARD_RIGHT", guard(".:::#:#.")),
-    ("SPR_GUARD_DOWN",  guard(".:#::#:.")),
-    ("SPR_GUARD_LEFT",  guard(".#:#:::.")),
-    ("SPR_GUARD_SUBDUED", guard(".:x::x:.")),   # dazed, mid-takedown
-    ("SPR_BODY", rotate_ccw(guard(".:-::-:.".replace("-", "x")))),  # lying down
+    ("SPR_PLAYER_NONE",    player("...##...", "..####..", ".##.")),
+    ("SPR_PLAYER_GUARD",   player("..####..", ".######.", "xxxx")),
+    ("SPR_PLAYER_OFFICER", player("..####..", "#::::::#", "x##x")),
+] + guard_set("GUARD") + guard_set("OFFICER") + [
+    ("SPR_BODY_STRIPPED", rotate_ccw([   # uniform taken
+        "...::...", "..::::..", ".:x::x:.", ".::::::.",
+        "..::::..", ".:::::..", ".::::::.", ".::..::.",
+    ])),
     ("SPR_CURSOR", [      # aiming at a valid target
         "##....##",
         "#......#",
@@ -275,6 +295,8 @@ def main():
           f"#define BKG_TILE_COUNT {len(bkg)}", ""]
     for i, (n, _) in enumerate(SPRITES):
         h.append(f"#define {n} {i}")
+    h += ["#define SPR_PLAYER  SPR_PLAYER_NONE   /* + DISGUISE_* */",
+          "#define SPR_GUARD_STYLE_TILES 6  /* up right down left subdued body */"]
     h += [f"#define SPRITE_TILE_COUNT {len(spr)}", "",
           "extern const uint8_t bkg_tile_data[];",
           "extern const uint8_t sprite_tile_data[];", "", "#endif", ""]

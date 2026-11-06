@@ -49,8 +49,8 @@ static const LevelDef test_level = {
     },
     2,
     {
-        { DIR_LEFT, 1, { {10, 3} } },  /* sentry looking left at the wall */
-        { DIR_UP,   1, { {15, 5} } },  /* sentry looking up */
+        { DIR_LEFT, 1, { {10, 3} }, DISGUISE_NONE, 0 },  /* sentry looking left at the wall */
+        { DIR_UP,   1, { {15, 5} }, DISGUISE_NONE, 0 },  /* sentry looking up */
     },
     { 2, 0 },
 };
@@ -219,8 +219,8 @@ static const LevelDef td_level = {
     },
     2,
     {
-        { DIR_LEFT, 1, { {5, 3} } },
-        { DIR_DOWN, 1, { {15, 1} } },
+        { DIR_LEFT, 1, { {5, 3} }, DISGUISE_NONE, 0 },
+        { DIR_DOWN, 1, { {15, 1} }, DISGUISE_NONE, 0 },
     },
     { 0, 0 },
 };
@@ -293,6 +293,133 @@ static void test_body_alarm(void)
     CHECK(s.status == STATUS_ALARM, "guard 1 saw the struggle");
 }
 
+/* Disguise tests. Guard 0 at (2,3) faces right: hostile to own clothes,
+ * blind to GUARD. Guard 1 patrols row 6: enforcer to own clothes, blind to
+ * GUARD. Both wear GUARD uniforms. */
+static const LevelDef dz_level = {
+    "DZ",
+    {
+        "####################",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+    },
+    2,
+    {
+        { DIR_RIGHT, 1, { {2, 3} },           DISGUISE_GUARD, "HBE" },
+        { DIR_RIGHT, 2, { {2, 6}, {17, 6} },  DISGUISE_GUARD, "EBE" },
+    },
+    { 0, 0 },
+};
+
+static void test_disguise_cones(void)
+{
+    static uint8_t vis[MAP_H][MAP_W];
+    GameState s;
+
+    game_load(&levels[0], &s);
+    CHECK(game_attitude(&s, 0) == ATT_ENFORCER, "no attitude string = enforcer");
+
+    /* hostile: 7 deep, up to 7 wide */
+    game_load(&dz_level, &s);
+    CHECK(game_attitude(&s, 0) == ATT_HOSTILE, "hostile to own clothes");
+    s.guards[1].x = 17;   /* move guard 1's cone out of the way */
+    game_compute_vision(&s, vis);
+    CHECK(vis[3][9] == VIS_SEEN, "hostile cone reaches 7");
+    CHECK(vis[3][10] == VIS_NONE, "but not 8");
+    CHECK(vis[6][9] == VIS_SEEN && vis[1][9] == VIS_SEEN, "7 tiles wide");
+    CHECK(vis[4][4] == VIS_SEEN && vis[5][4] == VIS_NONE, "3 wide at 2");
+    CHECK(vis[5][5] == VIS_SEEN && vis[6][5] == VIS_NONE, "5 wide at 3");
+    s.px = 9; s.py = 3;
+    game_step(&s, ACT_WAIT);
+    CHECK(s.status == STATUS_CAUGHT, "spotted at distance 7");
+
+    /* blind: no cone for the player, normal cone still watching */
+    game_load(&dz_level, &s);
+    s.disguise = DISGUISE_GUARD;
+    CHECK(game_attitude(&s, 0) == ATT_BLIND, "blind to GUARD");
+    game_compute_vision(&s, vis);
+    CHECK(vis[3][5] == VIS_WATCHED, "blind guard's cone shown as watched");
+    CHECK(vis[3][7] == VIS_NONE, "watch cone is the normal size");
+    s.px = 4; s.py = 3;
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING,
+          "standing right in front of a blind guard is fine");
+}
+
+static void test_disguise_suspicious(void)
+{
+    GameState s;
+
+    /* throwing in a blind guard's normal cone gets you caught */
+    game_load(&dz_level, &s);
+    s.disguise = DISGUISE_GUARD;
+    s.items[ITEM_STONE] = 2;
+    s.px = 5; s.py = 3;
+    CHECK(game_throw(&s, ITEM_STONE, 5, 1) && s.status == STATUS_CAUGHT,
+          "throwing is suspicious");
+    game_load(&dz_level, &s);
+    s.disguise = DISGUISE_GUARD;
+    s.items[ITEM_STONE] = 2;
+    s.px = 7; s.py = 3;
+    CHECK(game_throw(&s, ITEM_STONE, 7, 1) && s.status == STATUS_PLAYING,
+          "outside the normal cone it's fine");
+
+    /* bodies are still spotted */
+    game_load(&dz_level, &s);
+    s.disguise = DISGUISE_GUARD;
+    s.px = 12; s.py = 1;
+    s.guards[1].mode = GUARD_BODY;
+    s.guards[1].x = 4; s.guards[1].y = 3;
+    game_step(&s, ACT_WAIT);
+    CHECK(s.status == STATUS_ALARM, "blind guard still sees bodies");
+
+    /* a blind guard walking into you just waits */
+    game_load(&dz_level, &s);
+    s.disguise = DISGUISE_GUARD;
+    s.px = 4; s.py = 6;
+    game_step(&s, ACT_WAIT);
+    CHECK(s.guards[1].x == 3, "patrol moves up to you");
+    game_step(&s, ACT_WAIT);
+    CHECK(s.guards[1].x == 3 && s.status == STATUS_PLAYING, "and waits");
+    game_step(&s, ACT_UP);
+    game_step(&s, ACT_WAIT);
+    CHECK(s.guards[1].x == 5, "then walks on once you step aside");
+}
+
+static void test_take_uniform(void)
+{
+    GameState s;
+    game_load(&dz_level, &s);
+    s.px = 12; s.py = 1;
+    CHECK(game_uniform_here(&s) == 0xFF, "no body here");
+    CHECK(game_step(&s, ACT_UNIFORM) == 0, "nothing to take");
+    s.guards[1].mode = GUARD_BODY;
+    s.guards[1].x = 12; s.guards[1].y = 1;
+    CHECK(game_uniform_here(&s) == 1, "standing on a uniformed body");
+    CHECK(game_step(&s, ACT_UNIFORM) == 1, "take it (spends a turn)");
+    CHECK(s.disguise == DISGUISE_GUARD && s.guards[1].stripped, "wearing it");
+    CHECK(s.status == STATUS_PLAYING, "nobody saw");
+    CHECK(game_uniform_here(&s) == 0xFF, "a body has one uniform");
+
+    /* bodies from levels without uniforms give nothing */
+    game_load(&td_level, &s);
+    s.guards[0].mode = GUARD_BODY;
+    s.px = s.guards[0].x; s.py = s.guards[0].y;
+    CHECK(game_uniform_here(&s) == 0xFF, "no uniform defined");
+}
+
 /* Validate level data: row lengths, waypoints on floor and axis aligned. */
 static void test_level_data(void)
 {
@@ -315,6 +442,11 @@ static void test_level_data(void)
         game_load(lv, &s);
         for (i = 0; i < lv->guard_count; i++) {
             const GuardDef *d = &lv->guards[i];
+            CHECK(d->attitude == 0 || strlen(d->attitude) == DISGUISE_TYPES,
+                  "level %d guard %d attitude must have %d letters", l + 1, i,
+                  DISGUISE_TYPES);
+            CHECK(d->attitude == 0 || strspn(d->attitude, "HEB") == DISGUISE_TYPES,
+                  "level %d guard %d attitude letters are H, E or B", l + 1, i);
             for (w = 0; w < d->wp_count; w++) {
                 Point a = d->wp[w], b = d->wp[(w + 1) % d->wp_count];
                 CHECK(game_cell(a.x, a.y) != CELL_WALL,
@@ -341,7 +473,8 @@ typedef struct {
 /* Mechanics the solver may use; switch off to prove a level needs one. */
 #define USE_TAKEDOWN 1
 #define USE_DRAG     2
-#define USE_ALL      3
+#define USE_UNIFORM  4
+#define USE_ALL      7
 static int solver_use = USE_ALL;
 
 static Node *nodes;
@@ -395,6 +528,7 @@ static int solve(const LevelDef *lv, char *out, int outlen)
         for (a = 0; a < ACT_COUNT; a++) {
             if (a >= ACT_DRAG && a < ACT_DRAG + 4 && !(solver_use & USE_DRAG)) continue;
             if (a == ACT_TAKEDOWN && !(solver_use & USE_TAKEDOWN)) continue;
+            if (a == ACT_UNIFORM && !(solver_use & USE_UNIFORM)) continue;
             cand_code[ncand++] = (uint8_t)a;
         }
         for (item = 0; item < ITEM_TYPES; item++) {
@@ -449,6 +583,8 @@ static int solve(const LevelDef *lv, char *out, int outlen)
                 pos += snprintf(out + pos, outlen - pos, "%c", "urdl"[nd->action - ACT_DRAG]);
             else if (nd->action == ACT_TAKEDOWN)
                 pos += snprintf(out + pos, outlen - pos, " TAKEDOWN ");
+            else if (nd->action == ACT_UNIFORM)
+                pos += snprintf(out + pos, outlen - pos, " UNIFORM ");
             else
                 pos += snprintf(out + pos, outlen - pos, "%c", "URDLW"[nd->action]);
             if (pos >= outlen) break;
@@ -481,6 +617,7 @@ static const struct {
     { 4, 0,            "items" },
     { 5, USE_TAKEDOWN, "a takedown" },
     { 5, USE_DRAG,     "dragging the body" },
+    { 6, USE_UNIFORM,  "a disguise" },
 };
 
 static void test_mechanics_needed(void)
@@ -512,6 +649,9 @@ int main(void)
     test_patroller_resumes_route();
     test_takedown();
     test_body_alarm();
+    test_disguise_cones();
+    test_disguise_suspicious();
+    test_take_uniform();
     test_level_data();
     if (failures == 0) {
         test_solvable();

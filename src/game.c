@@ -115,16 +115,41 @@ static uint8_t line_of_sight(int8_t x0, int8_t y0, int8_t x1, int8_t y1)
     }
 }
 
-/* Cone shape: 1 tile wide right in front of the guard, 3 tiles wide
- * from distance 2 up to VISION_RANGE.
+/* Attitude toward the player's disguise, from the level's attitude string. */
+uint8_t game_attitude(const GameState *s, uint8_t idx)
+{
+    const char *a = level->guards[idx].attitude;
+    if (!a) return ATT_ENFORCER;
+    switch (a[s->disguise]) {
+    case 'H': return ATT_HOSTILE;
+    case 'B': return ATT_BLIND;
+    default:  return ATT_ENFORCER;
+    }
+}
+
+/* Cone shapes (guard G facing up). Normal (enforcer) cone:
  *
  *          . . .        distance 4
  *          . . .        distance 3
  *          . . .        distance 2
  *            .          distance 1
- *            G  (facing up)
- */
-uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y)
+ *            G
+ *
+ * Hostile cone: widens by one tile per side each step (up to HOSTILE_HALF)
+ * and reaches HOSTILE_RANGE: widths 1, 3, 5, 7, 7, 7, 7.
+ * cone is ATT_HOSTILE or ATT_ENFORCER. */
+static uint8_t cone_range(uint8_t cone)
+{
+    return cone == ATT_HOSTILE ? HOSTILE_RANGE : VISION_RANGE;
+}
+
+static int8_t cone_half(uint8_t cone, int8_t fwd)
+{
+    if (cone == ATT_HOSTILE) return fwd - 1 > HOSTILE_HALF ? HOSTILE_HALF : fwd - 1;
+    return fwd >= 2 ? 1 : 0;
+}
+
+static uint8_t cone_sees(const Guard *g, uint8_t x, uint8_t y, uint8_t cone)
 {
     int8_t rx = (int8_t)x - (int8_t)g->x;
     int8_t ry = (int8_t)y - (int8_t)g->y;
@@ -137,51 +162,75 @@ uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y)
     default:        fwd =  rx; side =  ry; break; /* DIR_RIGHT */
     }
 
-    if (fwd < 1 || fwd > VISION_RANGE) return 0;
+    if (fwd < 1 || fwd > (int8_t)cone_range(cone)) return 0;
     if (side < 0) side = -side;
-    if (side > (fwd >= 2 ? 1 : 0)) return 0;
+    if (side > cone_half(cone, fwd)) return 0;
     if (game_cell(x, y) == CELL_WALL) return 0;
 
     return line_of_sight((int8_t)g->x, (int8_t)g->y, (int8_t)x, (int8_t)y);
 }
 
+uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y)
+{
+    return cone_sees(g, x, y, ATT_ENFORCER);
+}
+
+/* The cone a guard uses for bodies and suspicious acts: its own, except
+ * blind guards still watch with the normal one. */
+static uint8_t watch_cone(uint8_t att)
+{
+    return att == ATT_HOSTILE ? ATT_HOSTILE : ATT_ENFORCER;
+}
+
 void game_compute_vision(const GameState *s, uint8_t vis[MAP_H][MAP_W])
 {
-    uint8_t i, x, y;
-    int8_t  fwd, side, tx, ty;
+    uint8_t i, x, y, att, cone, mark, range;
+    int8_t  fwd, side, half, tx, ty;
 
     for (y = 0; y < MAP_H; y++)
         for (x = 0; x < MAP_W; x++)
-            vis[y][x] = 0;
+            vis[y][x] = VIS_NONE;
 
     for (i = 0; i < s->guard_count; i++) {
         const Guard *g  = &s->guards[i];
         int8_t       fx, fy, lx, ly;
         if (!GUARD_ACTIVE(g)) continue;
+        att   = game_attitude(s, i);
+        cone  = watch_cone(att);
+        mark  = att == ATT_BLIND ? VIS_WATCHED : VIS_SEEN;
+        range = cone_range(cone);
         fx = dir_dx[g->facing];
         fy = dir_dy[g->facing];
         /* the "side" axis is the forward axis rotated 90 degrees */
         lx = -fy;
         ly = fx;
 
-        for (fwd = 1; fwd <= VISION_RANGE; fwd++) {
-            for (side = -1; side <= 1; side++) {
+        for (fwd = 1; fwd <= (int8_t)range; fwd++) {
+            half = cone_half(cone, fwd);
+            for (side = -half; side <= half; side++) {
                 tx = (int8_t)g->x + fx * fwd + lx * side;
                 ty = (int8_t)g->y + fy * fwd + ly * side;
                 if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
-                if (game_guard_sees(g, (uint8_t)tx, (uint8_t)ty))
-                    vis[ty][tx] = 1;
+                if (vis[ty][tx] >= mark) continue;
+                if (cone_sees(g, (uint8_t)tx, (uint8_t)ty, cone))
+                    vis[ty][tx] = mark;
             }
         }
     }
 }
 
-static uint8_t player_spotted(const GameState *s)
+/* Is the player spotted? suspicious = the player is doing something
+ * (takedown, dragging, throwing, changing) that even blind guards notice. */
+static uint8_t player_spotted(const GameState *s, uint8_t suspicious)
 {
-    uint8_t i;
-    for (i = 0; i < s->guard_count; i++)
-        if (GUARD_ACTIVE(&s->guards[i]) &&
-            game_guard_sees(&s->guards[i], s->px, s->py)) return 1;
+    uint8_t i, att;
+    for (i = 0; i < s->guard_count; i++) {
+        const Guard *g = &s->guards[i];
+        if (!GUARD_ACTIVE(g)) continue;
+        att = game_attitude(s, i);
+        if (att == ATT_BLIND && !suspicious) continue;
+        if (cone_sees(g, s->px, s->py, watch_cone(att))) return 1;
+    }
     return 0;
 }
 
@@ -194,7 +243,8 @@ static uint8_t body_spotted(const GameState *s)
         if (GUARD_ACTIVE(b)) continue;
         for (i = 0; i < s->guard_count; i++)
             if (GUARD_ACTIVE(&s->guards[i]) &&
-                game_guard_sees(&s->guards[i], b->x, b->y)) return 1;
+                cone_sees(&s->guards[i], b->x, b->y,
+                          watch_cone(game_attitude(s, i)))) return 1;
     }
     return 0;
 }
@@ -309,7 +359,10 @@ static uint8_t step_toward(GameState *s, uint8_t idx, uint8_t x, uint8_t y)
     }
 
     g->facing = d;
-    if (nx == s->px && ny == s->py) return STEP_BUMP;
+    if (nx == s->px && ny == s->py) {
+        if (game_attitude(s, idx) == ATT_BLIND) return STEP_OK;  /* waits */
+        return STEP_BUMP;
+    }
     if (guard_at(s, nx, ny, idx)) return STEP_OK;   /* blocked: wait */
     g->x = nx;
     g->y = ny;
@@ -335,7 +388,8 @@ static uint8_t guard_patrol(GameState *s, uint8_t idx)
     ny     = g->y + dir_dy[dir];
     g->facing = dir;
 
-    if (nx == s->px && ny == s->py) return 1;
+    if (nx == s->px && ny == s->py)
+        return game_attitude(s, idx) != ATT_BLIND;  /* blind guards wait */
     if (game_cell(nx, ny) == CELL_WALL || guard_at(s, nx, ny, idx))
         return 0;   /* blocked: wait this turn */
 
@@ -441,9 +495,9 @@ static uint8_t react_to_noise(GameState *s, uint8_t x, uint8_t y, uint8_t radius
 /* ------------------------------------------------------------------ */
 
 /* Caught or alarm? Sets status and returns 1 if the level is lost. */
-static uint8_t check_detection(GameState *s)
+static uint8_t check_detection(GameState *s, uint8_t suspicious)
 {
-    if (player_spotted(s)) {
+    if (player_spotted(s, suspicious)) {
         s->status = STATUS_CAUGHT;
         return 1;
     }
@@ -454,8 +508,10 @@ static uint8_t check_detection(GameState *s)
     return 0;
 }
 
-/* Everything after the player's action. noise = 0 means nothing thrown. */
-static void finish_turn(GameState *s, uint8_t noise, uint8_t nx, uint8_t ny)
+/* Everything after the player's action. noise = 0 means nothing thrown;
+ * suspicious = the action was one that blind guards notice too. */
+static void finish_turn(GameState *s, uint8_t noise, uint8_t nx, uint8_t ny,
+                        uint8_t suspicious)
 {
     uint8_t i, heard = 0;
 
@@ -465,7 +521,7 @@ static void finish_turn(GameState *s, uint8_t noise, uint8_t nx, uint8_t ny)
         s->status = STATUS_WON;
         return;
     }
-    if (check_detection(s)) return;
+    if (check_detection(s, suspicious)) return;
 
     if (noise) heard = react_to_noise(s, nx, ny, noise);
 
@@ -478,7 +534,7 @@ static void finish_turn(GameState *s, uint8_t noise, uint8_t nx, uint8_t ny)
         }
     }
 
-    if (check_detection(s)) return;
+    if (check_detection(s, suspicious)) return;
 
     if (s->takedown_left) {
         s->takedown_left--;
@@ -505,6 +561,16 @@ uint8_t game_takedown_target(const GameState *s)
         if (game_distance(g->x, g->y, s->px, s->py) == 1) return i;
     }
     return 0xFF;
+}
+
+uint8_t game_uniform_here(const GameState *s)
+{
+    uint8_t b;
+    if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
+    b = body_at(s, s->px, s->py);
+    if (b == 0xFF || s->guards[b].stripped) return 0xFF;
+    if (level->guards[b].uniform == DISGUISE_NONE) return 0xFF;
+    return b;
 }
 
 uint8_t game_body_adjacent(const GameState *s)
@@ -567,6 +633,7 @@ uint8_t game_can_drag(const GameState *s, uint8_t dir)
 uint8_t game_step(GameState *s, uint8_t action)
 {
     uint8_t nx, ny, b, bx, by;
+    uint8_t suspicious = s->takedown_left != 0;   /* mid-takedown */
 
     if (s->status != STATUS_PLAYING) return 0;
     if (s->takedown_left && action != ACT_WAIT) return 0;  /* locked */
@@ -585,17 +652,25 @@ uint8_t game_step(GameState *s, uint8_t action)
         s->py += dir_dy[dir];
         s->guards[b].x = bx;
         s->guards[b].y = by;
+        suspicious = 1;
+    } else if (action == ACT_UNIFORM) {
+        b = game_uniform_here(s);
+        if (b == 0xFF) return 0;
+        s->disguise = level->guards[b].uniform;
+        s->guards[b].stripped = 1;
+        suspicious = 1;
     } else if (action == ACT_TAKEDOWN) {
         b = game_takedown_target(s);
         if (b == 0xFF) return 0;
         s->guards[b].mode  = GUARD_SUBDUED;
         s->takedown_guard  = b;
         s->takedown_left   = TAKEDOWN_TURNS;
+        suspicious = 1;
     } else if (action != ACT_WAIT) {
         return 0;
     }
 
-    finish_turn(s, 0, 0, 0);
+    finish_turn(s, 0, 0, 0, suspicious);
     return 1;
 }
 
@@ -616,7 +691,7 @@ uint8_t game_throw(GameState *s, uint8_t item, uint8_t x, uint8_t y)
     if (!game_can_throw(s, item, x, y)) return 0;
 
     s->items[item]--;
-    finish_turn(s, item_defs[item].noise, x, y);
+    finish_turn(s, item_defs[item].noise, x, y, 1);
     return 1;
 }
 

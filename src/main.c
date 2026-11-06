@@ -5,7 +5,8 @@
  * Controls (playing):
  *   D-pad        move one tile (spends a turn); you can walk over bodies
  *   A            wait one turn            (after escaping: next level)
- *   B            take down an adjacent guard (when prompted)
+ *   B            take down an adjacent guard, or take the uniform of
+ *                the body you stand on (when prompted)
  *   B + D-pad    hold B to drag a body behind you, or push one ahead
  *   SELECT       open inventory
  *   START        tap: undo    hold: restart level
@@ -139,6 +140,7 @@ static void draw_hud(void)
     else if (state.status == STATUS_WON)    put_text(0, "ESCAPED!   A:NEXT");
     else if (ui_mode == UI_AIM)          put_text(0, "A:THROW B:BACK");
     else if (game_takedown_target(&state) != 0xFF) put_text(0, "B:TAKEDOWN");
+    else if (game_uniform_here(&state) != 0xFF)    put_text(0, "B:TAKE UNIFORM");
     else if (game_body_adjacent(&state)) put_text(0, "HOLD B:DRAG");
     else if (has_items())                put_text(0, "SEL:ITEMS START:UNDO");
     else                                 put_text(0, "A:WAIT START:UNDO");
@@ -163,11 +165,13 @@ static void draw_map(void)
             if (cell == CELL_WALL) {
                 row_buf[x] = TILE_WALL;
             } else if (cell == CELL_EXIT) {
-                row_buf[x] = seen ? TILE_EXIT_SEEN : TILE_EXIT;
+                row_buf[x] = seen == VIS_SEEN ? TILE_EXIT_SEEN : TILE_EXIT;
             } else {
                 aim = (ui_mode == UI_AIM) && game_can_throw(&state, inv_item, x, y);
-                if (aim) row_buf[x] = seen ? TILE_AIM_SEEN : TILE_AIM;
-                else     row_buf[x] = seen ? TILE_SEEN : TILE_FLOOR;
+                if (aim)                    row_buf[x] = seen == VIS_SEEN ? TILE_AIM_SEEN : TILE_AIM;
+                else if (seen == VIS_SEEN)  row_buf[x] = TILE_SEEN;
+                else if (seen)              row_buf[x] = TILE_WATCH;  /* blind guard */
+                else                        row_buf[x] = TILE_FLOOR;
             }
         }
         set_bkg_tiles(0, y, MAP_W, 1, row_buf);
@@ -189,11 +193,18 @@ static void draw_cursor(void)
     move_sprite(SPRITE_CURSOR, SPR_X(aim_x), SPR_Y(aim_y));
 }
 
+/* First sprite tile of a guard's uniform style (see SPR_GUARD_STYLE_TILES). */
+static uint8_t guard_tiles(uint8_t i)
+{
+    if (levels[level_idx].guards[i].uniform == DISGUISE_OFFICER) return SPR_OFFICER_UP;
+    return SPR_GUARD_UP;
+}
+
 static void draw_sprites(void)
 {
     uint8_t i;
 
-    set_sprite_tile(SPRITE_PLAYER, SPR_PLAYER);
+    set_sprite_tile(SPRITE_PLAYER, SPR_PLAYER + state.disguise);
     move_sprite(SPRITE_PLAYER, SPR_X(state.px), SPR_Y(state.py));
 
     for (i = 0; i < MAX_GUARDS; i++) {
@@ -201,9 +212,11 @@ static void draw_sprites(void)
         uint8_t noise = SPRITE_NOISE + i;
         if (i < state.guard_count) {
             const Guard *g = &state.guards[i];
-            if (g->mode == GUARD_BODY)         set_sprite_tile(spr, SPR_BODY);
-            else if (g->mode == GUARD_SUBDUED) set_sprite_tile(spr, SPR_GUARD_SUBDUED);
-            else                               set_sprite_tile(spr, SPR_GUARD_UP + g->facing);
+            uint8_t base = guard_tiles(i);
+            if (g->mode == GUARD_BODY)
+                set_sprite_tile(spr, g->stripped ? SPR_BODY_STRIPPED : base + 5);
+            else if (g->mode == GUARD_SUBDUED) set_sprite_tile(spr, base + 4);
+            else                               set_sprite_tile(spr, base + g->facing);
             move_sprite(spr, SPR_X(g->x), SPR_Y(g->y));
             /* mark the spot this guard is heading to investigate */
             if (g->mode == GUARD_INVESTIGATE) {
@@ -322,9 +335,10 @@ static void struggle_frames(uint8_t frames)
 {
     uint8_t f, spr = SPRITE_GUARD + state.takedown_guard;
     uint8_t facing = state.guards[state.takedown_guard].facing;
+    uint8_t base   = guard_tiles(state.takedown_guard);
     for (f = 0; f < frames; f++) {
         vsync();
-        set_sprite_tile(spr, (f & 4) ? SPR_GUARD_SUBDUED : SPR_GUARD_UP + facing);
+        set_sprite_tile(spr, (f & 4) ? base + 4 : base + facing);
     }
 }
 
@@ -357,6 +371,7 @@ static void input_play(uint8_t pressed, uint8_t keys)
 
     if (pressed & J_B) {
         if (game_takedown_target(&state) != 0xFF) do_takedown();
+        else if (game_uniform_here(&state) != 0xFF) do_action(ACT_UNIFORM);
         return;   /* otherwise B only matters while held (dragging) */
     }
 

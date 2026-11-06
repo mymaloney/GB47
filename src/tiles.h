@@ -9,31 +9,43 @@
 #define TILE_WALL 2
 #define TILE_EXIT 3
 #define TILE_SEEN 4
-#define TILE_EXIT_SEEN 5
-#define TILE_AIM 6
-#define TILE_AIM_SEEN 7
-#define TILE_WIN_EDGE 8
+#define TILE_WATCH 5
+#define TILE_EXIT_SEEN 6
+#define TILE_AIM 7
+#define TILE_AIM_SEEN 8
+#define TILE_WIN_EDGE 9
 
-#define FONT_BASE   9   /* '0'-'9', then 'A'-'Z' */
-#define FONT_COLON  45
-#define FONT_BANG   46
-#define FONT_DASH   47
-#define FONT_PERIOD 48
-#define FONT_GT     49
-#define FONT_QMARK  50
-#define BKG_TILE_COUNT 51
+#define FONT_BASE   10   /* '0'-'9', then 'A'-'Z' */
+#define FONT_COLON  46
+#define FONT_BANG   47
+#define FONT_DASH   48
+#define FONT_PERIOD 49
+#define FONT_GT     50
+#define FONT_QMARK  51
+#define BKG_TILE_COUNT 52
 
-#define SPR_PLAYER 0
-#define SPR_GUARD_UP 1
-#define SPR_GUARD_RIGHT 2
-#define SPR_GUARD_DOWN 3
-#define SPR_GUARD_LEFT 4
-#define SPR_GUARD_SUBDUED 5
-#define SPR_BODY 6
-#define SPR_CURSOR 7
-#define SPR_CURSOR_BAD 8
-#define SPR_NOISE 9
-#define SPRITE_TILE_COUNT 10
+#define SPR_PLAYER_NONE 0
+#define SPR_PLAYER_GUARD 1
+#define SPR_PLAYER_OFFICER 2
+#define SPR_GUARD_UP 3
+#define SPR_GUARD_RIGHT 4
+#define SPR_GUARD_DOWN 5
+#define SPR_GUARD_LEFT 6
+#define SPR_GUARD_SUBDUED 7
+#define SPR_GUARD_BODY 8
+#define SPR_OFFICER_UP 9
+#define SPR_OFFICER_RIGHT 10
+#define SPR_OFFICER_DOWN 11
+#define SPR_OFFICER_LEFT 12
+#define SPR_OFFICER_SUBDUED 13
+#define SPR_OFFICER_BODY 14
+#define SPR_BODY_STRIPPED 15
+#define SPR_CURSOR 16
+#define SPR_CURSOR_BAD 17
+#define SPR_NOISE 18
+#define SPR_PLAYER  SPR_PLAYER_NONE   /* + DISGUISE_* */
+#define SPR_GUARD_STYLE_TILES 6  /* up right down left subdued body */
+#define SPRITE_TILE_COUNT 19
 
 extern const uint8_t bkg_tile_data[];
 extern const uint8_t sprite_tile_data[];

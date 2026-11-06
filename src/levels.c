@@ -6,6 +6,11 @@
  * must be a straight line (same row or same column as the previous point).
  * A guard with a single waypoint is a stationary sentry.
  *
+ * After the waypoints: the uniform the guard wears (what the player gets
+ * from its body; DISGUISE_NONE = none) and its attitude to each disguise
+ * as a string indexed by DISGUISE_*: 'H' hostile, 'E' enforcer, 'B' blind
+ * (0 = enforcer to everything). See game.h.
+ *
  * Items: { stones, bottles } the player starts with.
  *
  * Each row must be exactly 20 characters. tests/test_game.c checks that
@@ -39,7 +44,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         1,
         {
-            { DIR_RIGHT, 2, { {1, 5}, {18, 5} } },
+            { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
     },
@@ -67,8 +72,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         2,
         {
-            { DIR_DOWN, 3, { {7, 4},  {7, 13}, {7, 1} } },
-            { DIR_UP,   3, { {11, 10}, {11, 1}, {11, 13} } },
+            { DIR_DOWN, 3, { {7, 4},  {7, 13}, {7, 1} }, DISGUISE_NONE, 0 },
+            { DIR_UP,   3, { {11, 10}, {11, 1}, {11, 13} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
     },
@@ -96,8 +101,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         2,
         {
-            { DIR_LEFT, 1, { {14, 10} } },
-            { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} } },
+            { DIR_LEFT, 1, { {14, 10} }, DISGUISE_NONE, 0 },
+            { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
     },
@@ -126,7 +131,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         1,
         {
-            { DIR_LEFT, 1, { {12, 6} } },
+            { DIR_LEFT, 1, { {12, 6} }, DISGUISE_NONE, 0 },
         },
         { 1, 1 },   /* one stone, one bottle */
     },
@@ -155,8 +160,42 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         2,
         {
-            { DIR_UP,    1, { {9, 3} } },
-            { DIR_RIGHT, 2, { {5, 2}, {13, 2} } },
+            { DIR_UP,    1, { {9, 3} }, DISGUISE_NONE, 0 },
+            { DIR_RIGHT, 2, { {5, 2}, {13, 2} }, DISGUISE_NONE, 0 },
+        },
+        { 0, 0 },
+    },
+
+    /* 6: The hall sentry is hostile to your clothes (huge cone) but blind
+     * to his own uniform. Take one from the lone guard, then get past the
+     * officer, who still checks guards. */
+    {
+        "DRESS CODE",
+        {
+            "####################",
+            "#P.......#........E#",
+            "#........#.........#",
+            "#........#.........#",
+            "#..................#",
+            "#........#.........#",
+            "#........#.........#",
+            "#........#.........#",
+            "####################",
+            "####################",
+            "####################",
+            "####################",
+            "####################",
+            "####################",
+            "####################",
+            "####################",
+        },
+        3,
+        {
+            /*                                        attitude to: own clothes,
+                                                      GUARD, OFFICER         */
+            { DIR_RIGHT, 2, { {2, 6}, {7, 6} },  DISGUISE_GUARD,   "EBE" },
+            { DIR_LEFT,  1, { {17, 4} },         DISGUISE_GUARD,   "HBE" },
+            { DIR_DOWN,  2, { {14, 1}, {14, 7} }, DISGUISE_OFFICER, "HEB" },
         },
         { 0, 0 },
     },
