@@ -13,6 +13,7 @@
 
 #include "../src/game.h"
 #include "../src/levels.h"
+#include "../tools/solver.h"
 
 static int failures = 0;
 
@@ -438,7 +439,7 @@ static void test_level_data(void)
         }
         CHECK(players == 1, "level %d needs exactly one P", l + 1);
         CHECK(exits >= 1, "level %d needs an exit", l + 1);
-        CHECK(strlen(lv->name) <= 13, "level %d name too long", l + 1);
+        CHECK(strlen(lv->name) <= 12, "level %d name too long", l + 1);
         game_load(lv, &s);
         for (i = 0; i < lv->guard_count; i++) {
             const GuardDef *d = &lv->guards[i];
@@ -458,139 +459,17 @@ static void test_level_data(void)
     }
 }
 
-/* ---- Breadth-first solver (moves, waits and throws) ---- */
+/* ---- Solvability (tools/solver.c) ---- */
 
-#define MAX_STATES (1 << 20)
-#define HASH_SIZE  (1 << 22)
-
-typedef struct {
-    GameState s;
-    int       parent;
-    uint8_t   action;      /* ACT_* or 0x80 | item for a throw */
-    uint8_t   tx, ty;
-} Node;
-
-/* Mechanics the solver may use; switch off to prove a level needs one. */
-#define USE_TAKEDOWN 1
-#define USE_DRAG     2
-#define USE_UNIFORM  4
-#define USE_ALL      7
-static int solver_use = USE_ALL;
-
-static Node *nodes;
-static int  *table;        /* open addressing: node index + 1, 0 = empty */
-
-static uint32_t hash_state(const GameState *s)
+static int solve(const LevelDef *lv, int use, char *out, int outlen)
 {
-    const uint8_t *p = (const uint8_t *)s;
-    uint32_t h = 2166136261u;
-    size_t i;
-    for (i = 0; i < sizeof *s; i++) h = (h ^ p[i]) * 16777619u;
-    return h;
-}
-
-/* Returns 1 if newly added. Turn counter is ignored (zeroed). */
-static int visit(const GameState *s, int count)
-{
-    uint32_t h = hash_state(s) & (HASH_SIZE - 1);
-    while (table[h]) {
-        if (memcmp(&nodes[table[h] - 1].s, s, sizeof *s) == 0) return 0;
-        h = (h + 1) & (HASH_SIZE - 1);
-    }
-    table[h] = count + 1;
-    return 1;
-}
-
-/* Shortest solution length, 0 if unsolvable, -1 if the search was too big.
- * Writes the moves into out: U R D L W, u r d l = drag/push that way,
- * TAKEDOWN, and e.g. S8,6 for "stone at (8,6)". */
-static int solve(const LevelDef *lv, char *out, int outlen)
-{
-    int head = 0, tail = 1, found = -1;
-
-    if (!nodes) nodes = malloc(sizeof(Node) * MAX_STATES);
-    if (!table) table = malloc(sizeof(int) * HASH_SIZE);
-    memset(table, 0, sizeof(int) * HASH_SIZE);
-
-    game_load(lv, &nodes[0].s);
-    nodes[0].parent = -1;
-    visit(&nodes[0].s, 0);
-
-    while (head < tail && found < 0) {
-        int cur = head++;
-        const GameState *cs = &nodes[cur].s;
-        int a, item, dx, dy;
-        /* candidate actions: 5 moves/wait, then throws near the player */
-        int    ncand = 0;
-        uint8_t cand_code[ACT_COUNT + ITEM_TYPES * 13 * 13],
-                cand_x[ACT_COUNT + ITEM_TYPES * 13 * 13],
-                cand_y[ACT_COUNT + ITEM_TYPES * 13 * 13];
-        for (a = 0; a < ACT_COUNT; a++) {
-            if (a >= ACT_DRAG && a < ACT_DRAG + 4 && !(solver_use & USE_DRAG)) continue;
-            if (a == ACT_TAKEDOWN && !(solver_use & USE_TAKEDOWN)) continue;
-            if (a == ACT_UNIFORM && !(solver_use & USE_UNIFORM)) continue;
-            cand_code[ncand++] = (uint8_t)a;
-        }
-        for (item = 0; item < ITEM_TYPES; item++) {
-            if (!cs->items[item]) continue;
-            for (dy = -6; dy <= 6; dy++)
-                for (dx = -6; dx <= 6; dx++) {
-                    int x = cs->px + dx, y = cs->py + dy;
-                    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
-                    if (!game_can_throw(cs, (uint8_t)item, (uint8_t)x, (uint8_t)y)) continue;
-                    cand_code[ncand] = (uint8_t)(0x80 | item);
-                    cand_x[ncand] = (uint8_t)x;
-                    cand_y[ncand] = (uint8_t)y;
-                    ncand++;
-                }
-        }
-
-        for (a = 0; a < ncand && found < 0; a++) {
-            GameState n = *cs;
-            uint8_t code = cand_code[a];
-            if (code & 0x80) {
-                if (!game_throw(&n, code & 0x7F, cand_x[a], cand_y[a])) continue;
-            } else if (!game_step(&n, code)) {
-                continue;
-            }
-            if (n.status == STATUS_CAUGHT || n.status == STATUS_ALARM) continue;
-            n.turn = 0;
-            if (tail >= MAX_STATES) return -1;
-            if (!visit(&n, tail)) continue;
-            nodes[tail].s = n;
-            nodes[tail].parent = cur;
-            nodes[tail].action = code;
-            nodes[tail].tx = (code & 0x80) ? cand_x[a] : 0;
-            nodes[tail].ty = (code & 0x80) ? cand_y[a] : 0;
-            if (n.status == STATUS_WON) found = tail;
-            tail++;
-        }
-    }
+    static SolveStep steps[1024];
+    int states, len = solver_run(lv, use, steps, 1024, &states);
     if (getenv("SOLVER_STATS"))
-        fprintf(stderr, "  [%s: %d states]\n", lv->name, tail);
-    if (found < 0) return 0;
-
-    {
-        int path[1024], len = 0, k, pos = 0;
-        for (k = found; nodes[k].parent >= 0; k = nodes[k].parent) path[len++] = k;
-        out[0] = 0;
-        for (k = len - 1; k >= 0; k--) {
-            const Node *nd = &nodes[path[k]];
-            if (nd->action & 0x80)
-                pos += snprintf(out + pos, outlen - pos, " %c%d,%d ",
-                                item_defs[nd->action & 0x7F].name[0], nd->tx, nd->ty);
-            else if (nd->action >= ACT_DRAG && nd->action < ACT_DRAG + 4)
-                pos += snprintf(out + pos, outlen - pos, "%c", "urdl"[nd->action - ACT_DRAG]);
-            else if (nd->action == ACT_TAKEDOWN)
-                pos += snprintf(out + pos, outlen - pos, " TAKEDOWN ");
-            else if (nd->action == ACT_UNIFORM)
-                pos += snprintf(out + pos, outlen - pos, " UNIFORM ");
-            else
-                pos += snprintf(out + pos, outlen - pos, "%c", "URDLW"[nd->action]);
-            if (pos >= outlen) break;
-        }
-        return len;
-    }
+        fprintf(stderr, "  [%s: %d states]\n", lv->name, states);
+    out[0] = 0;
+    if (len > 0) solver_format(steps, len < 1024 ? len : 1024, out, outlen);
+    return len;
 }
 
 static void test_solvable(void)
@@ -598,7 +477,7 @@ static void test_solvable(void)
     int l;
     char sol[1024];
     for (l = 0; l < LEVEL_COUNT; l++) {
-        int len = solve(&levels[l], sol, sizeof sol);
+        int len = solve(&levels[l], SOLVE_USE_ALL, sol, sizeof sol);
         CHECK(len > 0, "level %d (%s) is not solvable (%d)", l + 1,
               levels[l].name, len);
         if (len > 0)
@@ -608,32 +487,28 @@ static void test_solvable(void)
 }
 
 /* Each level must actually need the mechanics it teaches: with that
- * mechanic switched off, the solver must fail. */
+ * mechanic switched off, the solver must fail. The level editor can show
+ * the same check for any level. */
 static const struct {
     int  level;        /* 1-based */
-    int  without;      /* USE_* bits to switch off, or 0 to remove items */
+    int  without;      /* SOLVE_USE_* bits to switch off */
     const char *what;
 } required[] = {
-    { 4, 0,            "items" },
-    { 5, USE_TAKEDOWN, "a takedown" },
-    { 5, USE_DRAG,     "dragging the body" },
-    { 6, USE_UNIFORM,  "a disguise" },
+    { 4, SOLVE_USE_ITEMS,    "items" },
+    { 5, SOLVE_USE_TAKEDOWN, "a takedown" },
+    { 5, SOLVE_USE_DRAG,     "dragging the body" },
+    { 6, SOLVE_USE_UNIFORM,  "a disguise" },
 };
 
 static void test_mechanics_needed(void)
 {
     unsigned r;
-    int i;
     char sol[1024];
     for (r = 0; r < sizeof required / sizeof required[0]; r++) {
-        LevelDef copy = levels[required[r].level - 1];
-        if (required[r].without == 0)
-            for (i = 0; i < ITEM_TYPES; i++) copy.items[i] = 0;
-        solver_use = USE_ALL & ~required[r].without;
-        CHECK(solve(&copy, sol, sizeof sol) == 0,
+        const LevelDef *lv = &levels[required[r].level - 1];
+        CHECK(solve(lv, SOLVE_USE_ALL & ~required[r].without, sol, sizeof sol) == 0,
               "level %d (%s) can be beaten without %s: %s",
-              required[r].level, copy.name, required[r].what, sol);
-        solver_use = USE_ALL;
+              required[r].level, lv->name, required[r].what, sol);
     }
 }
 

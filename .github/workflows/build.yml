@@ -15,6 +15,9 @@ jobs:
       - name: Test game rules and solve levels
         run: make test
 
+      - name: Test level editor bridge and generated levels
+        run: make test-editor
+
       - name: Install GBDK-2020
         run: |
           curl -sSL -o gbdk.tar.gz \

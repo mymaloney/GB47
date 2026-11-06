@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GB47 Level Editor</title>
+<link rel="stylesheet" href="/editor.css">
+</head>
+<body>
+<header class="topbar">
+  <h1>GB47 Level Editor</h1>
+  <span id="save-state" class="save-state">Loading…</span>
+  <div class="spacer"></div>
+  <button id="btn-undo-edit" title="Undo edit (Ctrl+Z)">Undo</button>
+  <button id="btn-redo-edit" title="Redo edit (Ctrl+Shift+Z)">Redo</button>
+  <button id="btn-save" class="primary" title="Save levels/levels.json and regenerate src/levels.c (Ctrl+S)">Save</button>
+  <button id="btn-build" title="Run make to build the ROM (needs GBDK)">Build ROM</button>
+</header>
+
+<main class="layout">
+  <!-- Level list -->
+  <aside class="panel levels-panel">
+    <h2>Levels</h2>
+    <ol id="level-list" class="level-list"></ol>
+    <div class="row-buttons">
+      <button id="lv-new" title="New level">New</button>
+      <button id="lv-dup" title="Duplicate this level">Copy</button>
+      <button id="lv-up" title="Move up">▲</button>
+      <button id="lv-down" title="Move down">▼</button>
+      <button id="lv-del" class="danger" title="Delete this level">Delete</button>
+    </div>
+  </aside>
+
+  <!-- Screen -->
+  <section class="stage">
+    <div class="tabs">
+      <button id="tab-edit" class="tab active">Edit</button>
+      <button id="tab-play" class="tab">Playtest</button>
+    </div>
+    <canvas id="screen" width="480" height="432" tabindex="0" aria-label="Game Boy screen"></canvas>
+
+    <div id="edit-tools" class="tools">
+      <div class="toolbar" id="toolbar">
+        <button data-tool="wall"  title="Paint walls (1)"><b>1</b> Wall</button>
+        <button data-tool="floor" title="Paint floor (2)"><b>2</b> Floor</button>
+        <button data-tool="exit"  title="Paint exits (3)"><b>3</b> Exit</button>
+        <button data-tool="start" title="Place player start (4)"><b>4</b> Start</button>
+        <button data-tool="guard" title="Add a guard, or click one to select it (5)"><b>5</b> Guard</button>
+        <button data-tool="route" title="Add waypoints to the selected guard; drag to move, right-click to remove (6)"><b>6</b> Route</button>
+      </div>
+      <p id="tool-hint" class="hint"></p>
+      <label class="inline">Show cones as seen by a player in
+        <select id="preview-disguise">
+          <option value="-1">(hide cones)</option>
+          <option value="0" selected>own clothes</option>
+          <option value="1">GUARD uniform</option>
+          <option value="2">OFFICER uniform</option>
+        </select>
+      </label>
+    </div>
+
+    <div id="play-tools" class="tools" hidden>
+      <div class="row-buttons">
+        <button id="play-restart">Restart</button>
+        <button id="play-undo">Undo</button>
+        <button id="play-exit">Back to editing</button>
+      </div>
+      <table class="keys">
+        <tr><td><kbd>←↑↓→</kbd></td><td>D-pad: move (hold <kbd>X</kbd> to drag/push a body)</td></tr>
+        <tr><td><kbd>Z</kbd></td><td>A: wait</td></tr>
+        <tr><td><kbd>X</kbd></td><td>B: takedown / take uniform; hold to drag</td></tr>
+        <tr><td><kbd>Shift</kbd></td><td>SELECT: inventory</td></tr>
+        <tr><td><kbd>Enter</kbd></td><td>START: tap undo, hold restart</td></tr>
+      </table>
+      <p id="play-status" class="hint"></p>
+    </div>
+  </section>
+
+  <!-- Properties -->
+  <aside class="panel props-panel">
+    <h2>Level</h2>
+    <label>Name <input id="lv-name" maxlength="12" spellcheck="false"></label>
+    <label>Notes <textarea id="lv-notes" rows="2" placeholder="Design notes (kept as a comment in levels.c)"></textarea></label>
+    <div class="items" id="lv-items"></div>
+
+    <h2>Guards <span id="guard-count" class="muted"></span></h2>
+    <div id="guard-list" class="guard-list"></div>
+    <div id="guard-props" class="guard-props" hidden>
+      <div class="two">
+        <label>Facing <select id="g-facing"></select></label>
+        <label>Uniform <select id="g-uniform"></select></label>
+      </div>
+      <label class="check"><input type="checkbox" id="g-custom"> Custom attitudes</label>
+      <div id="g-attitudes" class="attitudes"></div>
+      <div class="route-head">Route <span class="muted">(loop; 1 point = sentry)</span></div>
+      <ol id="g-route" class="route"></ol>
+      <div class="row-buttons">
+        <button id="g-route-close" title="Add the corner needed to walk straight back to the start">Close loop</button>
+        <button id="g-route-clear">Clear route</button>
+        <button id="g-delete" class="danger">Delete guard</button>
+      </div>
+    </div>
+
+    <h2>Check</h2>
+    <ul id="errors" class="errors"></ul>
+    <div class="row-buttons">
+      <button id="btn-solve" class="primary">Solve</button>
+      <button id="btn-watch" disabled>Watch solution</button>
+    </div>
+    <div id="solve-result" class="solve-result"></div>
+  </aside>
+</main>
+
+<dialog id="build-dialog">
+  <h2>Build ROM</h2>
+  <pre id="build-output"></pre>
+  <form method="dialog"><button>Close</button></form>
+</dialog>
+
+<script src="/editor.js"></script>
+</body>
+</html>

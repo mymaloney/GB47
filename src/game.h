@@ -106,7 +106,7 @@ typedef struct {
 } GuardDef;
 
 typedef struct {
-    const char *name;        /* shown in the HUD, max 13 chars */
+    const char *name;        /* shown in the HUD, max 12 chars */
     /* '#' wall, '.' floor, 'E' exit, 'P' player start */
     const char *rows[MAP_H];
     uint8_t     guard_count;

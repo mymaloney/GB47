@@ -21,6 +21,47 @@ stealth with social stealth (disguises, dialogue) and combat.
 - **Disguises:** take a uniform from a body; each guard is hostile,
   an enforcer, or blind to what you're wearing, which sets its vision cone
 - 6 levels, each checked solvable by an automated solver
+- **Level editor** with in-editor playtesting and a built-in solver
+
+## Level editor
+
+![The level editor](docs/editor.png)
+
+```bash
+make editor
+```
+
+This needs only `gcc` and Python 3 (no extra packages). It builds the game
+rules into `build/libgame.so`, starts a local server, and opens
+`http://127.0.0.1:8047` in your browser. Stop it with Ctrl+C.
+
+- **Paint** walls, floor and exits, and place the player start (keys `1`-`4`).
+- **Guards** (`5`): click to add one (max 4), click to select, drag to
+  move. **Route** (`6`): click to add waypoints. Corners are inserted for
+  you, so legs stay straight. Drag a point to move it; right-click removes
+  it. **Close loop** adds the corner needed to walk back to the start.
+- Per guard: facing, uniform, and attitude to each disguise.
+- Per level: name, design notes, and starting stones/bottles.
+- **Cones preview:** shows every guard's starting cone as seen by a player
+  in your own clothes, the GUARD uniform, or the OFFICER uniform.
+- **Problems** are listed live, in plain language: missing start, a route
+  through a wall, a name too long for the HUD, and so on.
+- **Solve** finds the shortest solution and reports which mechanics the
+  level actually needs (e.g. "Needs a disguise", "Optional: items").
+  **Watch solution** replays it.
+- **Playtest** (or press `P`) plays the level with the real rules from
+  `src/game.c` and the same screen as the ROM. Keyboard: arrows = D-pad,
+  `Z` = A, `X` = B, `Shift` = SELECT, `Enter` = START, `Esc` = back to
+  editing.
+- **Undo/redo** (Ctrl+Z / Ctrl+Shift+Z) for every edit. Level list: add,
+  copy, reorder, delete.
+- **Save** (Ctrl+S) writes `levels/levels.json` and regenerates
+  `src/levels.c`; it refuses while any level has problems. **Build ROM**
+  runs `make` and shows the output.
+
+Levels live in `levels/levels.json` (format documented at the top of
+`tools/gen_levels.py`). You can also edit it by hand; `make` regenerates
+`src/levels.c` when the JSON changes.
 
 ### Controls
 
@@ -157,10 +198,14 @@ throws multiply the number of possibilities.
 | Path | What it is |
 |---|---|
 | `src/game.c`, `game.h` | All game rules: turns, patrols, vision, undo. No hardware access, so it also compiles on a PC. |
-| `src/levels.c` | Level data as ASCII maps, guard waypoints, uniforms and attitudes, and starting items. |
+| `levels/levels.json` | **Level data** (source of truth): maps, guard routes, uniforms and attitudes, starting items. |
+| `src/levels.c`, `levels.h` | Generated from the JSON by `tools/gen_levels.py`. Don't edit. |
+| `tools/editor/` | Level editor: `server.py` (local server), `game_lib.py` (Python bridge to the C rules), and the page. |
+| `tools/solver.c` | Breadth-first solver, shared by the tests and the editor. |
 | `src/main.c` | Game Boy side: input, drawing the map/sprites/HUD. Only reads `GameState`. |
 | `tools/gen_tiles.py` | Turns ASCII pixel art into `src/tiles.c`/`tiles.h`. Run `make tiles` after editing the art. |
-| `tests/test_game.c` | Unit tests and the level solver. |
+| `tests/test_game.c` | Unit tests, plus solver checks for every level. |
+| `tests/test_editor.py` | Checks the editor's bridge and that `src/levels.c` matches the JSON (`make test-editor`). |
 
 Keep rules in `game.c` and presentation in `main.c`. That split is what
 makes undo, the solver, and PC testing possible.
@@ -169,8 +214,8 @@ makes undo, the solver, and PC testing possible.
 
 1. ~~Grid movement, patrolling guard, vision, detection, undo~~
 2. ~~Distraction throwing~~, ~~takedowns and bodies~~, ~~disguises~~
-3. **Write more levels and find out what makes them fun**
-4. Load levels exported from [Tiled](https://www.mapeditor.org/) instead of ASCII
+3. ~~Level editor~~
+4. **Write more levels and find out what makes them fun**
 5. Dialogue: talking costs a turn and changes a guard's state (sends them away, distracts them)
 6. Title screen, save data (battery SRAM), music (hUGETracker)
 

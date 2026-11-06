@@ -125,8 +125,11 @@ static void draw_hud(void)
     if (ui_mode == UI_AIM) {
         put_text(put_text(0, "THROW ") , item_defs[inv_item].name);
     } else {
-        row_buf[0] = FONT_BASE + level_idx + 1;
-        put_text(2, levels[level_idx].name);
+        /* level number (1-99), a space, then the name (max 12 chars) */
+        uint8_t n = level_idx + 1, x = 0;
+        if (n >= 10) row_buf[x++] = FONT_BASE + n / 10;
+        row_buf[x++] = FONT_BASE + n % 10;
+        put_text(x + 1, levels[level_idx].name);
     }
     row_buf[16] = char_tile('T');
     put_number3(17, state.turn);
