@@ -16,17 +16,20 @@ stealth with social stealth (disguises, dialogue) and combat.
 - Getting caught, reaching the exit, 32 turns of undo, restart
 - **Distractions:** open the inventory, pick a throwable, and throw it to
   lure guards away
-- 4 levels, each checked solvable by an automated solver
+- **Takedowns and bodies:** grab a guard from an adjacent tile, then drag or
+  push the body out of sight
+- 5 levels, each checked solvable by an automated solver
 
 ### Controls
 
 | Button | Action |
 |---|---|
-| D-pad | Move one tile (spends a turn) |
+| D-pad | Move one tile (spends a turn); you can walk over bodies |
 | A | Wait one turn / next level after escaping |
-| B | Undo |
+| B | Take down an adjacent guard (when the HUD shows `B:TAKEDOWN`) |
+| Hold B + D-pad | Drag a body behind you, or push one in front of you |
 | SELECT | Open inventory |
-| START | Restart level |
+| START | Tap: undo. Hold about a second: restart level |
 
 In the inventory, UP/DOWN chooses an item and A starts aiming. While
 aiming, dots mark every square you can hit; move the cursor with the
@@ -51,14 +54,38 @@ D-pad and press A to throw. B goes back, SELECT cancels.
 Range and noise are set per item in `item_defs` in `src/game.c`. The stone
 and bottle are identical for now.
 
+### Takedowns and bodies
+
+![Takedown, dragging the body out of sight, walking over it](docs/takedown.png)
+
+- Standing next to a guard (up, down, left or right) shows `B:TAKEDOWN`.
+  If the guard could see you, you'd already be caught, so in practice this
+  means from behind or from the side.
+- A takedown locks you and the guard in place for **3 turns** (the press
+  plus 2 more). Those turns play out automatically so you can watch the
+  other guards keep moving. During them the guard can't see, hear or move.
+- Afterwards the guard is a **body**. If any guard sees a body, or sees a
+  takedown in progress, the alarm goes up and the level is lost.
+- Hold B and press a direction next to a body:
+  - toward the body: **push** it one tile ahead (blocked by walls, guards
+    and other bodies);
+  - any other direction: **drag** it into the tile you just left.
+- Without B held you walk straight over bodies, so they never block a
+  corridor. You can't start a drag while standing on a body.
+- Undo rewinds a whole takedown in one step.
+
+Takedown length is `TAKEDOWN_TURNS` in `src/game.h`.
+
 ### Turn order
 
-1. Player moves, waits, or throws.
+1. Player moves, waits, throws, drags/pushes a body, or starts a takedown.
 2. If standing on the exit, the player escapes.
-3. If any guard sees the player, they're caught.
+3. If any guard sees the player, they're caught; if a guard sees a body or
+   a takedown in progress, the alarm goes up.
 4. If something was thrown, guards in earshot turn to look (instead of acting).
-5. Every other guard acts: patrols, walks to a noise, or walks back.
-6. If a guard walks into the player, or now sees them, they're caught.
+5. Every other standing guard acts: patrols, walks to a noise, or walks back.
+6. Step 3's checks again; a guard walking into the player also catches them.
+7. A takedown in progress counts down; when it ends, the guard is a body.
 
 ## Building
 
@@ -86,11 +113,14 @@ make test
 ```
 
 This compiles the game rules with `gcc`, runs unit tests, and runs a
-breadth-first solver on every level. The solver tries moves, waits and
-every legal throw. It prints each level's shortest solution (`S7,5` means
-"stone at (7,5)", `B` is a bottle) and fails if any level is unsolvable.
-It also fails if a level that gives you items can be beaten without
-them. **Run it after every level edit.** It takes a few seconds because
+breadth-first solver on every level. The solver tries every action: moves, waits,
+throws, takedowns and drags. It prints each level's shortest solution
+(`U R D L W` moves/wait, lowercase `u r d l` drag/push that way,
+`TAKEDOWN`, and `S7,5` means "stone at (7,5)", `B` is a bottle) and fails
+if any level is unsolvable. A table in `tests/test_game.c` lists what each
+level teaches (level 4 needs items; level 5 needs a takedown and moving
+the body). The solver re-runs with that mechanic switched off and fails if
+the level can still be beaten. **Run it after every level edit.** It takes a few seconds because
 throws multiply the number of possibilities.
 
 ## Code layout
@@ -109,13 +139,12 @@ makes undo, the solver, and PC testing possible.
 ## Roadmap
 
 1. ~~Grid movement, patrolling guard, vision, detection, undo~~
-2. ~~Distraction throwing~~
+2. ~~Distraction throwing~~, ~~takedowns and bodies~~
 3. **Write more levels and find out what makes them fun**
 4. Load levels exported from [Tiled](https://www.mapeditor.org/) instead of ASCII
-5. Takedowns: attack a guard from behind; bodies are evidence other guards can discover
-6. Disguises: uniforms grant access to zones; some NPCs see through them
-7. Dialogue: talking costs a turn and changes a guard's state (sends them away, distracts them)
-8. Title screen, save data (battery SRAM), music (hUGETracker)
+5. Disguises: uniforms grant access to zones; some NPCs see through them
+6. Dialogue: talking costs a turn and changes a guard's state (sends them away, distracts them)
+7. Title screen, save data (battery SRAM), music (hUGETracker)
 
 Introduce each new mechanic with its own teaching level, and let the
 solver keep every level honest.

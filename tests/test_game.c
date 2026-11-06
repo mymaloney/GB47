@@ -195,6 +195,104 @@ static void test_patroller_resumes_route(void)
     CHECK(s.guards[0].x == 2, "and walks on");
 }
 
+/* Open room for takedown tests. Guard 0 faces left (approach from the
+ * right). Guard 1 looks down over x 14-16, rows 3-5. */
+static const LevelDef td_level = {
+    "TD",
+    {
+        "####################",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#..................#",
+        "#.................E#",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+        "####################",
+    },
+    2,
+    {
+        { DIR_LEFT, 1, { {5, 3} } },
+        { DIR_DOWN, 1, { {15, 1} } },
+    },
+    { 0, 0 },
+};
+
+static void test_takedown(void)
+{
+    GameState s;
+    game_load(&td_level, &s);
+    s.px = 8; s.py = 3;
+    CHECK(game_takedown_target(&s) == 0xFF, "nobody adjacent");
+    CHECK(game_step(&s, ACT_TAKEDOWN) == 0, "takedown with nobody near");
+    s.px = 6;
+    CHECK(game_takedown_target(&s) == 0, "guard 0 adjacent");
+    CHECK(game_step(&s, ACT_TAKEDOWN) == 1, "takedown starts");
+    CHECK(s.guards[0].mode == GUARD_SUBDUED, "target subdued");
+    CHECK(game_step(&s, ACT_LEFT) == 0, "player locked during takedown");
+    CHECK(game_step(&s, ACT_DRAG + DIR_LEFT) == 0, "no dragging either");
+    CHECK(game_takedown_target(&s) == 0xFF, "no second takedown");
+    CHECK(game_step(&s, ACT_WAIT) == 1, "wait 2");
+    CHECK(s.guards[0].mode == GUARD_SUBDUED, "still struggling");
+    CHECK(game_step(&s, ACT_WAIT) == 1, "wait 3");
+    CHECK(s.guards[0].mode == GUARD_BODY && s.takedown_left == 0,
+          "after TAKEDOWN_TURNS it is a body");
+    CHECK(s.turn == TAKEDOWN_TURNS && s.status == STATUS_PLAYING, "unseen");
+    CHECK(game_takedown_target(&s) == 0xFF, "bodies can't be taken down");
+
+    /* walk over the body */
+    CHECK(game_step(&s, ACT_LEFT) == 1 && s.px == 5, "step onto body");
+    CHECK(game_step(&s, ACT_DRAG + DIR_LEFT) == 0, "no drag while on a body");
+    CHECK(game_step(&s, ACT_LEFT) == 1 && s.px == 4, "step off body");
+
+    /* drag: body at (5,3) is behind us when moving left */
+    CHECK(game_body_adjacent(&s), "body next to player");
+    CHECK(game_step(&s, ACT_DRAG + DIR_LEFT) == 1, "drag");
+    CHECK(s.px == 3 && s.guards[0].x == 4 && s.guards[0].y == 3, "body follows");
+    /* drag sideways: body moves into the tile we leave */
+    CHECK(game_step(&s, ACT_DRAG + DIR_UP) == 1, "drag sideways");
+    CHECK(s.px == 3 && s.py == 2 && s.guards[0].x == 3 && s.guards[0].y == 3,
+          "body takes our old tile");
+    /* push: body straight ahead moves one further */
+    CHECK(game_step(&s, ACT_DRAG + DIR_DOWN) == 1, "push");
+    CHECK(s.py == 3 && s.guards[0].y == 4, "body pushed down");
+    CHECK(game_step(&s, ACT_DRAG + DIR_DOWN) == 1, "push again");
+    CHECK(game_step(&s, ACT_DRAG + DIR_DOWN) == 0, "can't push into wall");
+    CHECK(game_step(&s, ACT_DOWN) == 1 && s.py == 5, "but can walk onto it");
+
+    /* nothing to drag */
+    s.px = 10; s.py = 2;
+    CHECK(game_step(&s, ACT_DRAG + DIR_LEFT) == 0, "drag with no body");
+}
+
+static void test_body_alarm(void)
+{
+    GameState s;
+    game_load(&td_level, &s);
+    /* turn guard 0 into a body, then push it into guard 1's view */
+    s.guards[0].mode = GUARD_BODY;
+    s.guards[0].x = 12; s.guards[0].y = 4;
+    s.px = 11; s.py = 4;
+    CHECK(game_step(&s, ACT_DRAG + DIR_RIGHT) == 1, "push");
+    CHECK(s.guards[0].x == 13 && s.status == STATUS_PLAYING, "(13,4) unseen");
+    CHECK(game_step(&s, ACT_DRAG + DIR_RIGHT) == 1, "push into view");
+    CHECK(s.status == STATUS_ALARM, "guard sees body: alarm");
+
+    /* a takedown in plain view of another guard also raises the alarm */
+    game_load(&td_level, &s);
+    s.guards[0].x = 14; s.guards[0].y = 5; s.guards[0].facing = DIR_RIGHT;
+    s.px = 13; s.py = 5;
+    CHECK(game_step(&s, ACT_TAKEDOWN) == 1, "takedown");
+    CHECK(s.status == STATUS_ALARM, "guard 1 saw the struggle");
+}
+
 /* Validate level data: row lengths, waypoints on floor and axis aligned. */
 static void test_level_data(void)
 {
@@ -240,6 +338,12 @@ typedef struct {
     uint8_t   tx, ty;
 } Node;
 
+/* Mechanics the solver may use; switch off to prove a level needs one. */
+#define USE_TAKEDOWN 1
+#define USE_DRAG     2
+#define USE_ALL      3
+static int solver_use = USE_ALL;
+
 static Node *nodes;
 static int  *table;        /* open addressing: node index + 1, 0 = empty */
 
@@ -265,7 +369,8 @@ static int visit(const GameState *s, int count)
 }
 
 /* Shortest solution length, 0 if unsolvable, -1 if the search was too big.
- * Writes the moves into out: U R D L W, and e.g. S8,6 for "stone at (8,6)". */
+ * Writes the moves into out: U R D L W, u r d l = drag/push that way,
+ * TAKEDOWN, and e.g. S8,6 for "stone at (8,6)". */
 static int solve(const LevelDef *lv, char *out, int outlen)
 {
     int head = 0, tail = 1, found = -1;
@@ -284,9 +389,14 @@ static int solve(const LevelDef *lv, char *out, int outlen)
         int a, item, dx, dy;
         /* candidate actions: 5 moves/wait, then throws near the player */
         int    ncand = 0;
-        uint8_t cand_code[5 + ITEM_TYPES * 13 * 13], cand_x[5 + ITEM_TYPES * 13 * 13],
-                cand_y[5 + ITEM_TYPES * 13 * 13];
-        for (a = 0; a <= ACT_WAIT; a++) cand_code[ncand++] = (uint8_t)a;
+        uint8_t cand_code[ACT_COUNT + ITEM_TYPES * 13 * 13],
+                cand_x[ACT_COUNT + ITEM_TYPES * 13 * 13],
+                cand_y[ACT_COUNT + ITEM_TYPES * 13 * 13];
+        for (a = 0; a < ACT_COUNT; a++) {
+            if (a >= ACT_DRAG && a < ACT_DRAG + 4 && !(solver_use & USE_DRAG)) continue;
+            if (a == ACT_TAKEDOWN && !(solver_use & USE_TAKEDOWN)) continue;
+            cand_code[ncand++] = (uint8_t)a;
+        }
         for (item = 0; item < ITEM_TYPES; item++) {
             if (!cs->items[item]) continue;
             for (dy = -6; dy <= 6; dy++)
@@ -309,7 +419,7 @@ static int solve(const LevelDef *lv, char *out, int outlen)
             } else if (!game_step(&n, code)) {
                 continue;
             }
-            if (n.status == STATUS_CAUGHT) continue;
+            if (n.status == STATUS_CAUGHT || n.status == STATUS_ALARM) continue;
             n.turn = 0;
             if (tail >= MAX_STATES) return -1;
             if (!visit(&n, tail)) continue;
@@ -335,6 +445,10 @@ static int solve(const LevelDef *lv, char *out, int outlen)
             if (nd->action & 0x80)
                 pos += snprintf(out + pos, outlen - pos, " %c%d,%d ",
                                 item_defs[nd->action & 0x7F].name[0], nd->tx, nd->ty);
+            else if (nd->action >= ACT_DRAG && nd->action < ACT_DRAG + 4)
+                pos += snprintf(out + pos, outlen - pos, "%c", "urdl"[nd->action - ACT_DRAG]);
+            else if (nd->action == ACT_TAKEDOWN)
+                pos += snprintf(out + pos, outlen - pos, " TAKEDOWN ");
             else
                 pos += snprintf(out + pos, outlen - pos, "%c", "URDLW"[nd->action]);
             if (pos >= outlen) break;
@@ -357,19 +471,32 @@ static void test_solvable(void)
     }
 }
 
-/* Levels that hand out items should actually need them. */
-static void test_items_needed(void)
+/* Each level must actually need the mechanics it teaches: with that
+ * mechanic switched off, the solver must fail. */
+static const struct {
+    int  level;        /* 1-based */
+    int  without;      /* USE_* bits to switch off, or 0 to remove items */
+    const char *what;
+} required[] = {
+    { 4, 0,            "items" },
+    { 5, USE_TAKEDOWN, "a takedown" },
+    { 5, USE_DRAG,     "dragging the body" },
+};
+
+static void test_mechanics_needed(void)
 {
-    int l, i;
+    unsigned r;
+    int i;
     char sol[1024];
-    for (l = 0; l < LEVEL_COUNT; l++) {
-        LevelDef copy = levels[l];
-        int any = 0;
-        for (i = 0; i < ITEM_TYPES; i++) { any |= copy.items[i]; copy.items[i] = 0; }
-        if (!any) continue;
+    for (r = 0; r < sizeof required / sizeof required[0]; r++) {
+        LevelDef copy = levels[required[r].level - 1];
+        if (required[r].without == 0)
+            for (i = 0; i < ITEM_TYPES; i++) copy.items[i] = 0;
+        solver_use = USE_ALL & ~required[r].without;
         CHECK(solve(&copy, sol, sizeof sol) == 0,
-              "level %d (%s) can be beaten without items: %s", l + 1,
-              levels[l].name, sol);
+              "level %d (%s) can be beaten without %s: %s",
+              required[r].level, copy.name, required[r].what, sol);
+        solver_use = USE_ALL;
     }
 }
 
@@ -383,10 +510,12 @@ int main(void)
     test_throw_lures_one_guard();
     test_throw_two_hearers();
     test_patroller_resumes_route();
+    test_takedown();
+    test_body_alarm();
     test_level_data();
     if (failures == 0) {
         test_solvable();
-        test_items_needed();
+        test_mechanics_needed();
     }
 
     if (failures) {

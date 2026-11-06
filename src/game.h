@@ -20,6 +20,7 @@
 #define MAX_WAYPOINTS 6
 #define VISION_RANGE  4   /* how many tiles ahead a guard can see */
 #define UNDO_DEPTH    32  /* turns of undo history kept in RAM */
+#define TAKEDOWN_TURNS 3  /* turns the player and target are locked */
 
 /* Directions. Order matters: sprite tiles are laid out in this order. */
 #define DIR_UP    0
@@ -28,11 +29,14 @@
 #define DIR_LEFT  3
 
 /* Player actions fed into game_step(). */
-#define ACT_UP    DIR_UP
-#define ACT_RIGHT DIR_RIGHT
-#define ACT_DOWN  DIR_DOWN
-#define ACT_LEFT  DIR_LEFT
-#define ACT_WAIT  4
+#define ACT_UP        DIR_UP
+#define ACT_RIGHT     DIR_RIGHT
+#define ACT_DOWN      DIR_DOWN
+#define ACT_LEFT      DIR_LEFT
+#define ACT_WAIT      4
+#define ACT_DRAG      5   /* ACT_DRAG + dir: move while pushing/dragging */
+#define ACT_TAKEDOWN  9   /* grab an adjacent guard */
+#define ACT_COUNT     10
 
 /* Throwables. Stats live in item_defs[] (game.c), so items can differ
  * later (a louder bottle, a coin that rolls...). */
@@ -52,6 +56,11 @@ extern const ItemDef item_defs[ITEM_TYPES];
 #define GUARD_PATROL      0  /* following its route (or standing post) */
 #define GUARD_INVESTIGATE 1  /* walking to a noise */
 #define GUARD_RETURN      2  /* walking back to where it left its route */
+#define GUARD_SUBDUED     3  /* being taken down; frozen, blind, deaf */
+#define GUARD_BODY        4  /* out cold; x,y is where the body lies */
+
+/* Guards in these modes see, hear and move. */
+#define GUARD_ACTIVE(g) ((g)->mode <= GUARD_RETURN)
 
 /* Map cells. */
 #define CELL_FLOOR 0
@@ -62,6 +71,7 @@ extern const ItemDef item_defs[ITEM_TYPES];
 #define STATUS_PLAYING 0
 #define STATUS_CAUGHT  1
 #define STATUS_WON     2
+#define STATUS_ALARM   3   /* a guard saw a body or a takedown */
 
 typedef struct {
     uint8_t x, y;
@@ -101,15 +111,35 @@ typedef struct {
     uint8_t  guard_count;
     uint16_t turn;
     uint8_t  items[ITEM_TYPES];   /* in the state so undo restores them */
+    uint8_t  takedown_left;       /* turns left in a takedown, 0 = none */
+    uint8_t  takedown_guard;      /* who is being taken down */
     Guard    guards[MAX_GUARDS];
 } GameState;
 
 /* Load a level: builds the static map and initialises *s. */
 void game_load(const LevelDef *lvl, GameState *s);
 
-/* Apply one player action. Returns 1 if a turn was spent (state changed),
- * 0 if the action was illegal (e.g. walking into a wall) and nothing moved. */
+/* Apply one player action (ACT_*). Returns 1 if a turn was spent, 0 if the
+ * action was illegal (e.g. walking into a wall) and nothing changed.
+ *
+ *   Moves walk over bodies freely.
+ *   ACT_DRAG + dir: if a body lies in that direction, push it one tile
+ *     ahead; otherwise drag an adjacent body into the tile you leave.
+ *   ACT_TAKEDOWN: grab an adjacent standing guard. For TAKEDOWN_TURNS
+ *     turns (this one included) the player and target are locked and only
+ *     ACT_WAIT is legal; then the guard becomes a body.
+ *
+ * A guard that sees a body (or a takedown in progress) raises the alarm. */
 uint8_t game_step(GameState *s, uint8_t action);
+
+/* Index of the guard a takedown would grab, or 0xFF if none. */
+uint8_t game_takedown_target(const GameState *s);
+
+/* 1 if ACT_DRAG + dir is legal right now. */
+uint8_t game_can_drag(const GameState *s, uint8_t dir);
+
+/* 1 if a body lies on a tile next to the player. */
+uint8_t game_body_adjacent(const GameState *s);
 
 /* Is (x, y) a legal target for throwing this item right now?
  * Needs the item in inventory, floor (not wall) at the target, within the

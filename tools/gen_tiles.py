@@ -171,6 +171,11 @@ def guard(eye_row):
         ".##..##.",
     ]
 
+def rotate_ccw(rows):
+    """Rotate 8x8 art 90 degrees counter-clockwise (top edge -> left edge)."""
+    return ["".join(rows[c][7 - r] for c in range(8)) for r in range(8)]
+
+
 SPRITES = [
     ("SPR_PLAYER", [
         "...##...",
@@ -186,6 +191,8 @@ SPRITES = [
     ("SPR_GUARD_RIGHT", guard(".:::#:#.")),
     ("SPR_GUARD_DOWN",  guard(".:#::#:.")),
     ("SPR_GUARD_LEFT",  guard(".#:#:::.")),
+    ("SPR_GUARD_SUBDUED", guard(".:x::x:.")),   # dazed, mid-takedown
+    ("SPR_BODY", rotate_ccw(guard(".:-::-:.".replace("-", "x")))),  # lying down
     ("SPR_CURSOR", [      # aiming at a valid target
         "##....##",
         "#......#",

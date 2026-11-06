@@ -3,11 +3,12 @@
  * All the rules live in game.c; this file only reads GameState.
  *
  * Controls (playing):
- *   D-pad   move one tile (spends a turn)
- *   A       wait one turn            (after escaping: next level)
- *   B       undo
- *   SELECT  open inventory
- *   START   restart level
+ *   D-pad        move one tile (spends a turn); you can walk over bodies
+ *   A            wait one turn            (after escaping: next level)
+ *   B            take down an adjacent guard (when prompted)
+ *   B + D-pad    hold B to drag a body behind you, or push one ahead
+ *   SELECT       open inventory
+ *   START        tap: undo    hold: restart level
  *
  * Inventory:  UP/DOWN choose, A aim, B/SELECT close
  * Aiming:     D-pad move cursor, A throw (spends a turn), B back, SELECT cancel
@@ -35,6 +36,9 @@
 /* Inventory window: edge, title, one row per item type, hint line */
 #define WIN_ROWS (3 + ITEM_TYPES)
 #define WIN_Y    (144 - WIN_ROWS * 8)
+
+#define RESTART_HOLD   45   /* frames START must be held to restart */
+#define TAKEDOWN_PAUSE 24   /* frames shown per automatic takedown turn */
 
 static GameState   state;
 static GameState   before;   /* snapshot taken before each turn, for undo */
@@ -130,11 +134,14 @@ static void draw_hud(void)
     /* Row 2: what the player can do right now */
     clear_row_buf();
     if (hud_msg)                         put_text(0, hud_msg);
-    else if (state.status == STATUS_CAUGHT) put_text(0, "SPOTTED!   B:UNDO");
+    else if (state.status == STATUS_CAUGHT) put_text(0, "SPOTTED! START:UNDO");
+    else if (state.status == STATUS_ALARM)  put_text(0, "BODY SEEN START:UNDO");
     else if (state.status == STATUS_WON)    put_text(0, "ESCAPED!   A:NEXT");
     else if (ui_mode == UI_AIM)          put_text(0, "A:THROW B:BACK");
-    else if (has_items())                put_text(0, "B:UNDO SELECT:ITEMS");
-    else                                 put_text(0, "A:WAIT B:UNDO");
+    else if (game_takedown_target(&state) != 0xFF) put_text(0, "B:TAKEDOWN");
+    else if (game_body_adjacent(&state)) put_text(0, "HOLD B:DRAG");
+    else if (has_items())                put_text(0, "SEL:ITEMS START:UNDO");
+    else                                 put_text(0, "A:WAIT START:UNDO");
     set_bkg_tiles(0, HUD_Y + 1, MAP_W, 1, row_buf);
     hud_msg = 0;   /* messages last until the next HUD redraw */
 }
@@ -194,7 +201,9 @@ static void draw_sprites(void)
         uint8_t noise = SPRITE_NOISE + i;
         if (i < state.guard_count) {
             const Guard *g = &state.guards[i];
-            set_sprite_tile(spr, SPR_GUARD_UP + g->facing);
+            if (g->mode == GUARD_BODY)         set_sprite_tile(spr, SPR_BODY);
+            else if (g->mode == GUARD_SUBDUED) set_sprite_tile(spr, SPR_GUARD_SUBDUED);
+            else                               set_sprite_tile(spr, SPR_GUARD_UP + g->facing);
             move_sprite(spr, SPR_X(g->x), SPR_Y(g->y));
             /* mark the spot this guard is heading to investigate */
             if (g->mode == GUARD_INVESTIGATE) {
@@ -296,20 +305,60 @@ static void load_level(uint8_t idx)
 /* Input per mode                                                      */
 /* ------------------------------------------------------------------ */
 
-static void input_play(uint8_t pressed)
+/* Run one turn; push undo and redraw if it happened. */
+static uint8_t do_action(uint8_t action)
 {
-    uint8_t action;
+    /* SDCC can't initialise a struct from another struct in its
+     * declaration ("needs curly braces"), so assign separately. */
+    before = state;
+    if (!game_step(&state, action)) return 0;
+    undo_push(&before);
+    redraw();
+    return 1;
+}
 
-    if (pressed & J_B) {
-        if (undo_pop(&state)) redraw();
+/* Wait a number of frames, making a guard mid-takedown struggle. */
+static void struggle_frames(uint8_t frames)
+{
+    uint8_t f, spr = SPRITE_GUARD + state.takedown_guard;
+    uint8_t facing = state.guards[state.takedown_guard].facing;
+    for (f = 0; f < frames; f++) {
+        vsync();
+        set_sprite_tile(spr, (f & 4) ? SPR_GUARD_SUBDUED : SPR_GUARD_UP + facing);
+    }
+}
+
+/* Start a takedown, then play out its locked turns automatically so the
+ * player can watch the other guards move. Undo rewinds the whole thing. */
+static void do_takedown(void)
+{
+    hud_msg = "TAKEDOWN...";
+    if (!do_action(ACT_TAKEDOWN)) {
+        hud_msg = 0;
         return;
     }
+    while (state.takedown_left && state.status == STATUS_PLAYING) {
+        struggle_frames(TAKEDOWN_PAUSE);
+        game_step(&state, ACT_WAIT);
+        if (state.takedown_left) hud_msg = "TAKEDOWN...";
+        redraw();
+    }
+}
+
+static void input_play(uint8_t pressed, uint8_t keys)
+{
+    uint8_t dir;
 
     if (state.status == STATUS_WON) {
         if (pressed & J_A) load_level((level_idx + 1) % LEVEL_COUNT);
         return;
     }
-    if (state.status != STATUS_PLAYING) return;
+    if (state.status != STATUS_PLAYING) return;   /* START to undo */
+
+    if (pressed & J_B) {
+        if (game_takedown_target(&state) != 0xFF) do_takedown();
+        return;   /* otherwise B only matters while held (dragging) */
+    }
 
     if (pressed & J_SELECT) {
         if (has_items()) {
@@ -321,20 +370,20 @@ static void input_play(uint8_t pressed)
         return;
     }
 
-    if      (pressed & J_UP)    action = ACT_UP;
-    else if (pressed & J_DOWN)  action = ACT_DOWN;
-    else if (pressed & J_LEFT)  action = ACT_LEFT;
-    else if (pressed & J_RIGHT) action = ACT_RIGHT;
-    else if (pressed & J_A)     action = ACT_WAIT;
+    if (pressed & J_A) {
+        do_action(ACT_WAIT);
+        return;
+    }
+
+    if      (pressed & J_UP)    dir = DIR_UP;
+    else if (pressed & J_DOWN)  dir = DIR_DOWN;
+    else if (pressed & J_LEFT)  dir = DIR_LEFT;
+    else if (pressed & J_RIGHT) dir = DIR_RIGHT;
     else return;
 
-    /* SDCC can't initialise a struct from another struct in its
-     * declaration ("needs curly braces"), so assign separately. */
-    before = state;
-    if (game_step(&state, action)) {
-        undo_push(&before);
-        redraw();
-    }
+    /* Holding B next to a body drags/pushes it; otherwise a normal step. */
+    if ((keys & J_B) && game_body_adjacent(&state)) do_action(ACT_DRAG + dir);
+    else                                             do_action(dir);
 }
 
 static void input_inventory(uint8_t pressed)
@@ -371,7 +420,7 @@ static void input_aim(uint8_t pressed)
         return;
     }
     if (pressed & J_A) {
-        before = state;
+        before = state;   /* separate assignment: see do_action() */
         if (game_throw(&state, inv_item, aim_x, aim_y)) {
             undo_push(&before);
             ui_mode = UI_PLAY;
@@ -401,9 +450,33 @@ static void input_aim(uint8_t pressed)
 /* Main loop                                                           */
 /* ------------------------------------------------------------------ */
 
+/* START: tap to undo (while playing), hold to restart the level. */
+static void handle_start(uint8_t keys, uint8_t released)
+{
+    static uint8_t held;
+
+    if (keys & J_START) {
+        if (held < 255) held++;
+        if (held == 15) {
+            hud_msg = "HOLD TO RESTART";
+            draw_hud();
+        }
+        if (held == RESTART_HOLD) load_level(level_idx);
+        return;
+    }
+    if (released & J_START) {
+        if (held < 15) {                    /* a tap: undo */
+            if (ui_mode == UI_PLAY && undo_pop(&state)) redraw();
+        } else if (held < RESTART_HOLD) {   /* let go early: cancel */
+            draw_hud();
+        }
+    }
+    held = 0;
+}
+
 void main(void)
 {
-    uint8_t keys, prev = 0, pressed;
+    uint8_t keys, prev = 0, pressed, released;
 
     DISPLAY_OFF;
     BGP_REG  = 0xE4;   /* 11 10 01 00: index 0 = white ... 3 = black */
@@ -418,18 +491,17 @@ void main(void)
 
     for (;;) {
         vsync();
-        keys    = joypad();
-        pressed = keys & ~prev;    /* only react to new presses */
-        prev    = keys;
-        if (!pressed) continue;
+        keys     = joypad();
+        pressed  = keys & ~prev;    /* only react to new presses */
+        released = prev & ~keys;
+        prev     = keys;
 
-        if (pressed & J_START) {
-            load_level(level_idx);
-            continue;
-        }
+        handle_start(keys, released);
+        pressed &= ~J_START;
+        if (!pressed) continue;
 
         if      (ui_mode == UI_INVENTORY) input_inventory(pressed);
         else if (ui_mode == UI_AIM)       input_aim(pressed);
-        else                              input_play(pressed);
+        else                              input_play(pressed, keys);
     }
 }

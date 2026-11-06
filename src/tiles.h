@@ -28,10 +28,12 @@
 #define SPR_GUARD_RIGHT 2
 #define SPR_GUARD_DOWN 3
 #define SPR_GUARD_LEFT 4
-#define SPR_CURSOR 5
-#define SPR_CURSOR_BAD 6
-#define SPR_NOISE 7
-#define SPRITE_TILE_COUNT 8
+#define SPR_GUARD_SUBDUED 5
+#define SPR_BODY 6
+#define SPR_CURSOR 7
+#define SPR_CURSOR_BAD 8
+#define SPR_NOISE 9
+#define SPRITE_TILE_COUNT 10
 
 extern const uint8_t bkg_tile_data[];
 extern const uint8_t sprite_tile_data[];

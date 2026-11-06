@@ -2,15 +2,18 @@
  * game.c - Turn rules for the stealth puzzle prototype.
  *
  * One turn:
- *   1. The player acts: move one tile, wait, or throw an item.
+ *   1. The player acts: move, wait, throw, drag/push a body, or take down
+ *      an adjacent guard (which locks the player for TAKEDOWN_TURNS).
  *   2. Standing on the exit wins immediately.
- *   3. If a guard can see the player now, the player is caught.
+ *   3. If a guard can see the player now, the player is caught; if it can
+ *      see a body or a takedown in progress, the alarm goes up.
  *   4. If something was thrown, every guard within earshot spends this turn
  *      turning to look at it. The one with the shortest walk to it will go
  *      and investigate on the following turns.
  *   5. Every other guard acts (in guard order): patrol, investigate a noise,
  *      or walk back to where it left its route.
- *   6. If a guard walks into the player or can see them now, they're caught.
+ *   6. Step 3's checks again.
+ *   7. A takedown in progress counts down; at zero the guard is a body.
  *
  * Kept free of hardware calls so it compiles with both SDCC (GBDK) and gcc.
  */
@@ -153,11 +156,13 @@ void game_compute_vision(const GameState *s, uint8_t vis[MAP_H][MAP_W])
 
     for (i = 0; i < s->guard_count; i++) {
         const Guard *g  = &s->guards[i];
-        int8_t       fx = dir_dx[g->facing];
-        int8_t       fy = dir_dy[g->facing];
+        int8_t       fx, fy, lx, ly;
+        if (!GUARD_ACTIVE(g)) continue;
+        fx = dir_dx[g->facing];
+        fy = dir_dy[g->facing];
         /* the "side" axis is the forward axis rotated 90 degrees */
-        int8_t       lx = -fy;
-        int8_t       ly = fx;
+        lx = -fy;
+        ly = fx;
 
         for (fwd = 1; fwd <= VISION_RANGE; fwd++) {
             for (side = -1; side <= 1; side++) {
@@ -175,7 +180,22 @@ static uint8_t player_spotted(const GameState *s)
 {
     uint8_t i;
     for (i = 0; i < s->guard_count; i++)
-        if (game_guard_sees(&s->guards[i], s->px, s->py)) return 1;
+        if (GUARD_ACTIVE(&s->guards[i]) &&
+            game_guard_sees(&s->guards[i], s->px, s->py)) return 1;
+    return 0;
+}
+
+/* Does any active guard see a body or a guard being taken down? */
+static uint8_t body_spotted(const GameState *s)
+{
+    uint8_t i, j;
+    for (j = 0; j < s->guard_count; j++) {
+        const Guard *b = &s->guards[j];
+        if (GUARD_ACTIVE(b)) continue;
+        for (i = 0; i < s->guard_count; i++)
+            if (GUARD_ACTIVE(&s->guards[i]) &&
+                game_guard_sees(&s->guards[i], b->x, b->y)) return 1;
+    }
     return 0;
 }
 
@@ -224,14 +244,26 @@ static void distances_to(uint8_t x, uint8_t y)
 /* Guards                                                              */
 /* ------------------------------------------------------------------ */
 
+/* A standing guard (anything but a body) on this tile? */
 static uint8_t guard_at(const GameState *s, uint8_t x, uint8_t y, uint8_t skip)
 {
     uint8_t i;
     for (i = 0; i < s->guard_count; i++) {
-        if (i == skip) continue;
+        if (i == skip || s->guards[i].mode == GUARD_BODY) continue;
         if (s->guards[i].x == x && s->guards[i].y == y) return 1;
     }
     return 0;
+}
+
+/* Index of a body on this tile, or 0xFF. Bodies never block walking. */
+static uint8_t body_at(const GameState *s, uint8_t x, uint8_t y)
+{
+    uint8_t i;
+    for (i = 0; i < s->guard_count; i++) {
+        if (s->guards[i].mode != GUARD_BODY) continue;
+        if (s->guards[i].x == x && s->guards[i].y == y) return i;
+    }
+    return 0xFF;
 }
 
 /* Direction from (x,y) toward p. Horizontal first, then vertical.
@@ -380,6 +412,7 @@ static uint8_t react_to_noise(GameState *s, uint8_t x, uint8_t y, uint8_t radius
 
     for (i = 0; i < s->guard_count; i++) {
         g = &s->guards[i];
+        if (!GUARD_ACTIVE(g)) continue;
         if (game_distance(g->x, g->y, x, y) > radius) continue;
         heard |= (uint8_t)(1 << i);
         if (g->x != x || g->y != y) g->facing = dir_look(g->x, g->y, x, y);
@@ -407,6 +440,20 @@ static uint8_t react_to_noise(GameState *s, uint8_t x, uint8_t y, uint8_t radius
 /* Turn                                                                */
 /* ------------------------------------------------------------------ */
 
+/* Caught or alarm? Sets status and returns 1 if the level is lost. */
+static uint8_t check_detection(GameState *s)
+{
+    if (player_spotted(s)) {
+        s->status = STATUS_CAUGHT;
+        return 1;
+    }
+    if (body_spotted(s)) {
+        s->status = STATUS_ALARM;
+        return 1;
+    }
+    return 0;
+}
+
 /* Everything after the player's action. noise = 0 means nothing thrown. */
 static void finish_turn(GameState *s, uint8_t noise, uint8_t nx, uint8_t ny)
 {
@@ -418,35 +465,134 @@ static void finish_turn(GameState *s, uint8_t noise, uint8_t nx, uint8_t ny)
         s->status = STATUS_WON;
         return;
     }
-    if (player_spotted(s)) {
-        s->status = STATUS_CAUGHT;
-        return;
-    }
+    if (check_detection(s)) return;
 
     if (noise) heard = react_to_noise(s, nx, ny, noise);
 
     for (i = 0; i < s->guard_count; i++) {
         if (heard & (1 << i)) continue;
+        if (!GUARD_ACTIVE(&s->guards[i])) continue;
         if (guard_act(s, i)) {
             s->status = STATUS_CAUGHT;
             return;
         }
     }
 
-    if (player_spotted(s)) s->status = STATUS_CAUGHT;
+    if (check_detection(s)) return;
+
+    if (s->takedown_left) {
+        s->takedown_left--;
+        if (s->takedown_left == 0) {
+            Guard *g = &s->guards[s->takedown_guard];
+            g->mode = GUARD_BODY;
+            g->tx = g->ty = g->hx = g->hy = 0;
+            s->takedown_guard = 0;
+        }
+    }
 }
+
+/* ------------------------------------------------------------------ */
+/* Takedowns and bodies                                                */
+/* ------------------------------------------------------------------ */
+
+uint8_t game_takedown_target(const GameState *s)
+{
+    uint8_t i;
+    if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
+    for (i = 0; i < s->guard_count; i++) {
+        const Guard *g = &s->guards[i];
+        if (!GUARD_ACTIVE(g)) continue;
+        if (game_distance(g->x, g->y, s->px, s->py) == 1) return i;
+    }
+    return 0xFF;
+}
+
+uint8_t game_body_adjacent(const GameState *s)
+{
+    uint8_t d;
+    for (d = 0; d < 4; d++)
+        if (body_at(s, s->px + dir_dx[d], s->py + dir_dy[d]) != 0xFF) return 1;
+    return 0;
+}
+
+/* Can something (player or pushed body) be moved onto this tile? */
+static uint8_t tile_free(const GameState *s, uint8_t x, uint8_t y)
+{
+    return game_cell(x, y) != CELL_WALL && !guard_at(s, x, y, 0xFF);
+}
+
+/* Work out a drag/push in direction dir. Returns the body index (0xFF if
+ * illegal) and sets *bx,*by to where the body ends up. */
+static uint8_t plan_drag(const GameState *s, uint8_t dir, uint8_t *bx, uint8_t *by)
+{
+    uint8_t nx = s->px + dir_dx[dir];
+    uint8_t ny = s->py + dir_dy[dir];
+    uint8_t b, d;
+
+    if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
+
+    /* push: body straight ahead moves one further */
+    b = body_at(s, nx, ny);
+    if (b != 0xFF) {
+        *bx = nx + dir_dx[dir];
+        *by = ny + dir_dy[dir];
+        if (!tile_free(s, *bx, *by) || body_at(s, *bx, *by) != 0xFF) return 0xFF;
+        return b;
+    }
+
+    /* drag: an adjacent body follows into the tile we leave. Prefer the
+     * one directly behind, then up/right/down/left. Not while standing on
+     * a body (the two would end up stacked). */
+    if (!tile_free(s, nx, ny)) return 0xFF;
+    if (body_at(s, s->px, s->py) != 0xFF) return 0xFF;
+    b = body_at(s, s->px - dir_dx[dir], s->py - dir_dy[dir]);
+    for (d = 0; b == 0xFF && d < 4; d++)
+        b = body_at(s, s->px + dir_dx[d], s->py + dir_dy[d]);
+    if (b == 0xFF) return 0xFF;
+    *bx = s->px;
+    *by = s->py;
+    return b;
+}
+
+uint8_t game_can_drag(const GameState *s, uint8_t dir)
+{
+    uint8_t bx, by;
+    return plan_drag(s, dir, &bx, &by) != 0xFF;
+}
+
+/* ------------------------------------------------------------------ */
+/* Player actions                                                      */
+/* ------------------------------------------------------------------ */
 
 uint8_t game_step(GameState *s, uint8_t action)
 {
+    uint8_t nx, ny, b, bx, by;
+
     if (s->status != STATUS_PLAYING) return 0;
+    if (s->takedown_left && action != ACT_WAIT) return 0;  /* locked */
 
     if (action < 4) {
-        uint8_t nx = s->px + dir_dx[action];
-        uint8_t ny = s->py + dir_dy[action];
-        if (game_cell(nx, ny) == CELL_WALL) return 0;
-        if (guard_at(s, nx, ny, 0xFF)) return 0;  /* TODO: takedowns */
+        nx = s->px + dir_dx[action];
+        ny = s->py + dir_dy[action];
+        if (!tile_free(s, nx, ny)) return 0;   /* walls and standing guards */
         s->px = nx;
         s->py = ny;
+    } else if (action >= ACT_DRAG && action < ACT_DRAG + 4) {
+        uint8_t dir = action - ACT_DRAG;
+        b = plan_drag(s, dir, &bx, &by);
+        if (b == 0xFF) return 0;
+        s->px += dir_dx[dir];
+        s->py += dir_dy[dir];
+        s->guards[b].x = bx;
+        s->guards[b].y = by;
+    } else if (action == ACT_TAKEDOWN) {
+        b = game_takedown_target(s);
+        if (b == 0xFF) return 0;
+        s->guards[b].mode  = GUARD_SUBDUED;
+        s->takedown_guard  = b;
+        s->takedown_left   = TAKEDOWN_TURNS;
+    } else if (action != ACT_WAIT) {
+        return 0;
     }
 
     finish_turn(s, 0, 0, 0);
@@ -466,7 +612,7 @@ uint8_t game_can_throw(const GameState *s, uint8_t item, uint8_t x, uint8_t y)
 
 uint8_t game_throw(GameState *s, uint8_t item, uint8_t x, uint8_t y)
 {
-    if (s->status != STATUS_PLAYING) return 0;
+    if (s->status != STATUS_PLAYING || s->takedown_left) return 0;
     if (!game_can_throw(s, item, x, y)) return 0;
 
     s->items[item]--;
