@@ -10,20 +10,28 @@
 #define TILE_EXIT 3
 #define TILE_SEEN 4
 #define TILE_EXIT_SEEN 5
+#define TILE_AIM 6
+#define TILE_AIM_SEEN 7
+#define TILE_WIN_EDGE 8
 
-#define FONT_BASE   6   /* '0'-'9', then 'A'-'Z' */
-#define FONT_COLON  42
-#define FONT_BANG   43
-#define FONT_DASH   44
-#define FONT_PERIOD 45
-#define BKG_TILE_COUNT 46
+#define FONT_BASE   9   /* '0'-'9', then 'A'-'Z' */
+#define FONT_COLON  45
+#define FONT_BANG   46
+#define FONT_DASH   47
+#define FONT_PERIOD 48
+#define FONT_GT     49
+#define FONT_QMARK  50
+#define BKG_TILE_COUNT 51
 
 #define SPR_PLAYER 0
 #define SPR_GUARD_UP 1
 #define SPR_GUARD_RIGHT 2
 #define SPR_GUARD_DOWN 3
 #define SPR_GUARD_LEFT 4
-#define SPRITE_TILE_COUNT 5
+#define SPR_CURSOR 5
+#define SPR_CURSOR_BAD 6
+#define SPR_NOISE 7
+#define SPRITE_TILE_COUNT 8
 
 extern const uint8_t bkg_tile_data[];
 extern const uint8_t sprite_tile_data[];

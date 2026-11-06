@@ -47,8 +47,12 @@ static const LevelDef test_level = {
         "####################",
         "####################",
     },
-    1,
-    { { DIR_LEFT, 1, { {10, 3} } } },  /* sentry looking left at the wall */
+    2,
+    {
+        { DIR_LEFT, 1, { {10, 3} } },  /* sentry looking left at the wall */
+        { DIR_UP,   1, { {15, 5} } },  /* sentry looking up */
+    },
+    { 2, 0 },
 };
 
 static void test_movement(void)
@@ -106,6 +110,91 @@ static void test_patrol(void)
     CHECK(s.guards[0].x == 2 && s.guards[0].facing == DIR_RIGHT, "guard moved");
 }
 
+static void test_throw_targeting(void)
+{
+    GameState s;
+    game_load(&test_level, &s);
+    s.px = 3; s.py = 1;
+    CHECK(game_can_throw(&s, ITEM_STONE, 9, 1), "6 steps away is in range");
+    CHECK(!game_can_throw(&s, ITEM_STONE, 10, 1), "7 steps is out of range");
+    CHECK(game_can_throw(&s, ITEM_STONE, 5, 5), "diagonal-ish, 6 steps");
+    CHECK(!game_can_throw(&s, ITEM_STONE, 3, 1), "not your own tile");
+    CHECK(!game_can_throw(&s, ITEM_STONE, 3, 0), "not into a wall");
+    CHECK(!game_can_throw(&s, ITEM_BOTTLE, 4, 1), "no bottles in inventory");
+    s.px = 4; s.py = 3;
+    CHECK(!game_can_throw(&s, ITEM_STONE, 8, 3), "wall at (6,3) blocks throw");
+    CHECK(game_can_throw(&s, ITEM_STONE, 5, 3), "adjacent tile is fine");
+    s.status = STATUS_CAUGHT;
+    CHECK(game_throw(&s, ITEM_STONE, 5, 3) == 0, "no throwing after caught");
+}
+
+static void test_throw_lures_one_guard(void)
+{
+    GameState s, before;
+    int i;
+    game_load(&test_level, &s);
+    s.px = 3; s.py = 1;
+    undo_clear();
+    before = s;
+    undo_push(&s);
+
+    /* only guard 0 at (10,3) is within 6 of (9,1); guard 1 is 10 away */
+    CHECK(game_throw(&s, ITEM_STONE, 9, 1) == 1, "throw spends a turn");
+    CHECK(s.turn == 1 && s.items[ITEM_STONE] == 1, "stone used up");
+    CHECK(s.guards[0].x == 10 && s.guards[0].y == 3, "noise turn: no step");
+    CHECK(s.guards[0].facing == DIR_UP, "turns toward noise (major axis)");
+    CHECK(s.guards[0].mode == GUARD_INVESTIGATE, "closest guard investigates");
+    CHECK(s.guards[1].mode == GUARD_PATROL && s.guards[1].facing == DIR_UP,
+          "guard out of earshot unaffected");
+
+    /* walk path (10,3)->(10,2)->(10,1)->(9,1) */
+    for (i = 0; i < 3; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 9 && s.guards[0].y == 1, "reached the noise");
+    CHECK(s.status == STATUS_PLAYING, "player 6 tiles away is unseen");
+    for (i = 0; i < 3; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 10 && s.guards[0].y == 3, "walked back to post");
+    CHECK(s.guards[0].mode == GUARD_PATROL, "back on routine");
+    CHECK(s.guards[0].facing == DIR_LEFT, "sentry faces its post again");
+
+    while (undo_pop(&s)) {}
+    CHECK(memcmp(&s, &before, sizeof s) == 0, "undo returns the stone");
+}
+
+static void test_throw_two_hearers(void)
+{
+    GameState s;
+    game_load(&test_level, &s);
+    s.px = 9; s.py = 1;
+    /* (13,3): guard 0 walks 3, guard 1 walks 4 -> both hear, guard 0 goes */
+    CHECK(game_throw(&s, ITEM_STONE, 13, 3) == 1, "throw");
+    CHECK(s.guards[0].mode == GUARD_INVESTIGATE, "nearest walker goes");
+    CHECK(s.guards[0].facing == DIR_RIGHT, "guard 0 looks right");
+    CHECK(s.guards[1].mode == GUARD_PATROL, "other guard stays");
+    CHECK(s.guards[1].facing == DIR_LEFT, "but turns to look (tie: horizontal)");
+    game_step(&s, ACT_WAIT);
+    CHECK(s.guards[1].facing == DIR_UP, "next turn it returns to routine");
+    CHECK(s.guards[0].x == 11, "guard 0 heads to the noise");
+}
+
+static void test_patroller_resumes_route(void)
+{
+    GameState s;
+    game_load(&levels[0], &s);
+    s.items[ITEM_STONE] = 1;
+    /* guard at (1,5) walking right toward (18,5); lure it to the door */
+    CHECK(game_can_throw(&s, ITEM_STONE, 3, 4), "door in range");
+    game_throw(&s, ITEM_STONE, 3, 4);
+    CHECK(s.guards[0].mode == GUARD_INVESTIGATE, "patroller investigates");
+    while (s.guards[0].mode != GUARD_PATROL && s.turn < 50)
+        game_step(&s, ACT_WAIT);
+    CHECK(s.status == STATUS_PLAYING, "player in the room stays hidden");
+    CHECK(s.guards[0].x == 1 && s.guards[0].y == 5, "returned to where it left");
+    CHECK(s.guards[0].facing == DIR_RIGHT && s.guards[0].next_wp == 1,
+          "continues its patrol");
+    game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 2, "and walks on");
+}
+
 /* Validate level data: row lengths, waypoints on floor and axis aligned. */
 static void test_level_data(void)
 {
@@ -139,77 +228,148 @@ static void test_level_data(void)
     }
 }
 
-/* ---- Breadth-first solver ---- */
+/* ---- Breadth-first solver (moves, waits and throws) ---- */
 
-#define MAX_STATES 200000
+#define MAX_STATES (1 << 20)
+#define HASH_SIZE  (1 << 22)
 
 typedef struct {
     GameState s;
     int       parent;
-    uint8_t   action;
+    uint8_t   action;      /* ACT_* or 0x80 | item for a throw */
+    uint8_t   tx, ty;
 } Node;
 
-static int same_state(const GameState *a, const GameState *b)
+static Node *nodes;
+static int  *table;        /* open addressing: node index + 1, 0 = empty */
+
+static uint32_t hash_state(const GameState *s)
 {
-    /* ignore the turn counter so we don't revisit equivalent states */
-    GameState x = *a, y = *b;
-    x.turn = y.turn = 0;
-    return memcmp(&x, &y, sizeof x) == 0;
+    const uint8_t *p = (const uint8_t *)s;
+    uint32_t h = 2166136261u;
+    size_t i;
+    for (i = 0; i < sizeof *s; i++) h = (h ^ p[i]) * 16777619u;
+    return h;
 }
 
+/* Returns 1 if newly added. Turn counter is ignored (zeroed). */
+static int visit(const GameState *s, int count)
+{
+    uint32_t h = hash_state(s) & (HASH_SIZE - 1);
+    while (table[h]) {
+        if (memcmp(&nodes[table[h] - 1].s, s, sizeof *s) == 0) return 0;
+        h = (h + 1) & (HASH_SIZE - 1);
+    }
+    table[h] = count + 1;
+    return 1;
+}
+
+/* Shortest solution length, 0 if unsolvable, -1 if the search was too big.
+ * Writes the moves into out: U R D L W, and e.g. S8,6 for "stone at (8,6)". */
 static int solve(const LevelDef *lv, char *out, int outlen)
 {
-    static Node nodes[MAX_STATES];
-    static const char names[] = "URDLW";
-    int head = 0, tail = 0, i, j;
+    int head = 0, tail = 1, found = -1;
 
-    memset(nodes, 0, sizeof nodes);
+    if (!nodes) nodes = malloc(sizeof(Node) * MAX_STATES);
+    if (!table) table = malloc(sizeof(int) * HASH_SIZE);
+    memset(table, 0, sizeof(int) * HASH_SIZE);
+
     game_load(lv, &nodes[0].s);
     nodes[0].parent = -1;
-    tail = 1;
+    visit(&nodes[0].s, 0);
 
-    while (head < tail) {
+    while (head < tail && found < 0) {
         int cur = head++;
-        for (uint8_t a = 0; a <= ACT_WAIT; a++) {
-            GameState n = nodes[cur].s;
-            if (!game_step(&n, a)) continue;
+        const GameState *cs = &nodes[cur].s;
+        int a, item, dx, dy;
+        /* candidate actions: 5 moves/wait, then throws near the player */
+        int    ncand = 0;
+        uint8_t cand_code[5 + ITEM_TYPES * 13 * 13], cand_x[5 + ITEM_TYPES * 13 * 13],
+                cand_y[5 + ITEM_TYPES * 13 * 13];
+        for (a = 0; a <= ACT_WAIT; a++) cand_code[ncand++] = (uint8_t)a;
+        for (item = 0; item < ITEM_TYPES; item++) {
+            if (!cs->items[item]) continue;
+            for (dy = -6; dy <= 6; dy++)
+                for (dx = -6; dx <= 6; dx++) {
+                    int x = cs->px + dx, y = cs->py + dy;
+                    if (x < 0 || y < 0 || x >= MAP_W || y >= MAP_H) continue;
+                    if (!game_can_throw(cs, (uint8_t)item, (uint8_t)x, (uint8_t)y)) continue;
+                    cand_code[ncand] = (uint8_t)(0x80 | item);
+                    cand_x[ncand] = (uint8_t)x;
+                    cand_y[ncand] = (uint8_t)y;
+                    ncand++;
+                }
+        }
+
+        for (a = 0; a < ncand && found < 0; a++) {
+            GameState n = *cs;
+            uint8_t code = cand_code[a];
+            if (code & 0x80) {
+                if (!game_throw(&n, code & 0x7F, cand_x[a], cand_y[a])) continue;
+            } else if (!game_step(&n, code)) {
+                continue;
+            }
             if (n.status == STATUS_CAUGHT) continue;
-            for (j = 0; j < tail; j++)
-                if (same_state(&nodes[j].s, &n)) break;
-            if (j < tail) continue;
+            n.turn = 0;
             if (tail >= MAX_STATES) return -1;
+            if (!visit(&n, tail)) continue;
             nodes[tail].s = n;
             nodes[tail].parent = cur;
-            nodes[tail].action = a;
-            if (n.status == STATUS_WON) {
-                int len = 0, k = tail;
-                while (nodes[k].parent >= 0) { len++; k = nodes[k].parent; }
-                if (len < outlen) {
-                    out[len] = 0;
-                    k = tail;
-                    for (i = len - 1; i >= 0; i--) {
-                        out[i] = names[nodes[k].action];
-                        k = nodes[k].parent;
-                    }
-                }
-                return len;
-            }
+            nodes[tail].action = code;
+            nodes[tail].tx = (code & 0x80) ? cand_x[a] : 0;
+            nodes[tail].ty = (code & 0x80) ? cand_y[a] : 0;
+            if (n.status == STATUS_WON) found = tail;
             tail++;
         }
     }
-    return 0;  /* unsolvable */
+    if (getenv("SOLVER_STATS"))
+        fprintf(stderr, "  [%s: %d states]\n", lv->name, tail);
+    if (found < 0) return 0;
+
+    {
+        int path[1024], len = 0, k, pos = 0;
+        for (k = found; nodes[k].parent >= 0; k = nodes[k].parent) path[len++] = k;
+        out[0] = 0;
+        for (k = len - 1; k >= 0; k--) {
+            const Node *nd = &nodes[path[k]];
+            if (nd->action & 0x80)
+                pos += snprintf(out + pos, outlen - pos, " %c%d,%d ",
+                                item_defs[nd->action & 0x7F].name[0], nd->tx, nd->ty);
+            else
+                pos += snprintf(out + pos, outlen - pos, "%c", "URDLW"[nd->action]);
+            if (pos >= outlen) break;
+        }
+        return len;
+    }
 }
 
 static void test_solvable(void)
 {
     int l;
-    char sol[512];
+    char sol[1024];
     for (l = 0; l < LEVEL_COUNT; l++) {
         int len = solve(&levels[l], sol, sizeof sol);
-        CHECK(len > 0, "level %d (%s) is not solvable", l + 1, levels[l].name);
+        CHECK(len > 0, "level %d (%s) is not solvable (%d)", l + 1,
+              levels[l].name, len);
         if (len > 0)
             printf("level %d %-12s solved in %3d turns: %s\n",
                    l + 1, levels[l].name, len, sol);
+    }
+}
+
+/* Levels that hand out items should actually need them. */
+static void test_items_needed(void)
+{
+    int l, i;
+    char sol[1024];
+    for (l = 0; l < LEVEL_COUNT; l++) {
+        LevelDef copy = levels[l];
+        int any = 0;
+        for (i = 0; i < ITEM_TYPES; i++) { any |= copy.items[i]; copy.items[i] = 0; }
+        if (!any) continue;
+        CHECK(solve(&copy, sol, sizeof sol) == 0,
+              "level %d (%s) can be beaten without items: %s", l + 1,
+              levels[l].name, sol);
     }
 }
 
@@ -219,8 +379,15 @@ int main(void)
     test_vision();
     test_caught_and_undo();
     test_patrol();
+    test_throw_targeting();
+    test_throw_lures_one_guard();
+    test_throw_two_hearers();
+    test_patroller_resumes_route();
     test_level_data();
-    if (failures == 0) test_solvable();
+    if (failures == 0) {
+        test_solvable();
+        test_items_needed();
+    }
 
     if (failures) {
         printf("%d check(s) failed\n", failures);

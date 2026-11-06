@@ -6,6 +6,8 @@
  * must be a straight line (same row or same column as the previous point).
  * A guard with a single waypoint is a stationary sentry.
  *
+ * Items: { stones, bottles } the player starts with.
+ *
  * Each row must be exactly 20 characters. tests/test_game.c checks that
  * every level is well formed and solvable.
  *
@@ -39,6 +41,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { DIR_RIGHT, 2, { {1, 5}, {18, 5} } },
         },
+        { 0, 0 },
     },
 
     /* 2: Two patrols crossing a hall. Use the pillars as cover. */
@@ -67,6 +70,7 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_DOWN, 3, { {7, 4},  {7, 13}, {7, 1} } },
             { DIR_UP,   3, { {11, 10}, {11, 1}, {11, 13} } },
         },
+        { 0, 0 },
     },
 
     /* 3: A sentry watches the door; wait for the patrol to pass. */
@@ -95,5 +99,35 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_LEFT, 1, { {14, 10} } },
             { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} } },
         },
+        { 0, 0 },
+    },
+
+    /* 4: The sentry never leaves the door... unless it hears something.
+     * SELECT opens the inventory; throw to lure it out, then slip past. */
+    {
+        "LURE",
+        {
+            "####################",
+            "#..................#",
+            "#..................#",
+            "#..................#",
+            "#..........#########",
+            "#..........#.......#",
+            "#P................E#",
+            "#..........#.......#",
+            "#..........#########",
+            "#..................#",
+            "#..................#",
+            "#..................#",
+            "####################",
+            "####################",
+            "####################",
+            "####################",
+        },
+        1,
+        {
+            { DIR_LEFT, 1, { {12, 6} } },
+        },
+        { 1, 1 },   /* one stone, one bottle */
     },
 };

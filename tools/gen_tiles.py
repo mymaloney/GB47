@@ -77,6 +77,36 @@ BKG = [
         "#::::::#",
         "########",
     ]),
+    ("TILE_AIM", [        # floor you can throw to (shown while aiming)
+        "........",
+        "........",
+        "........",
+        "...xx...",
+        "...xx...",
+        "........",
+        "........",
+        "........",
+    ]),
+    ("TILE_AIM_SEEN", [   # throwable AND inside a vision cone
+        "::::::::",
+        ":x:::x::",
+        "::::::::",
+        ":::##:::",
+        ":::##:::",
+        "::x:::x:",
+        "::::::::",
+        "::::::::",
+    ]),
+    ("TILE_WIN_EDGE", [   # top border of the inventory window
+        "........",
+        "........",
+        "########",
+        "xxxxxxxx",
+        "........",
+        "........",
+        "........",
+        "........",
+    ]),
 ]
 
 # 5x7 font, placed at column 1 of each 8x8 tile.
@@ -121,8 +151,10 @@ FONT = {
     "!": ["..#..", "..#..", "..#..", "..#..", "..#..", ".....", "..#.."],
     "-": [".....", ".....", ".....", ".###.", ".....", ".....", "....."],
     ".": [".....", ".....", ".....", ".....", ".....", ".##..", ".##.."],
+    ">": [".#...", "..#..", "...#.", "....#", "...#.", "..#..", ".#..."],
+    "?": [".###.", "#...#", "....#", "...#.", "..#..", ".....", "..#.."],
 }
-FONT_ORDER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:!-."
+FONT_ORDER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:!-.>?"
 
 # ------------------------------------------------------------------- sprites
 # Guards differ only by where the eyes are, so facing reads at a glance
@@ -154,6 +186,36 @@ SPRITES = [
     ("SPR_GUARD_RIGHT", guard(".:::#:#.")),
     ("SPR_GUARD_DOWN",  guard(".:#::#:.")),
     ("SPR_GUARD_LEFT",  guard(".#:#:::.")),
+    ("SPR_CURSOR", [      # aiming at a valid target
+        "##....##",
+        "#......#",
+        "........",
+        "...##...",
+        "...##...",
+        "........",
+        "#......#",
+        "##....##",
+    ]),
+    ("SPR_CURSOR_BAD", [  # aiming somewhere you can't throw
+        "#......#",
+        ".#....#.",
+        "..#..#..",
+        "...##...",
+        "...##...",
+        "..#..#..",
+        ".#....#.",
+        "#......#",
+    ]),
+    ("SPR_NOISE", [       # where a thrown item landed / guard is headed
+        "........",
+        "..#..#..",
+        ".#....#.",
+        "#..xx..#",
+        "#..xx..#",
+        ".#....#.",
+        "..#..#..",
+        "........",
+    ]),
 ]
 
 
@@ -201,6 +263,8 @@ def main():
           f"#define FONT_BANG   {font_base + FONT_ORDER.index('!')}",
           f"#define FONT_DASH   {font_base + FONT_ORDER.index('-')}",
           f"#define FONT_PERIOD {font_base + FONT_ORDER.index('.')}",
+          f"#define FONT_GT     {font_base + FONT_ORDER.index('>')}",
+          f"#define FONT_QMARK  {font_base + FONT_ORDER.index('?')}",
           f"#define BKG_TILE_COUNT {len(bkg)}", ""]
     for i, (n, _) in enumerate(SPRITES):
         h.append(f"#define {n} {i}")

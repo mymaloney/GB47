@@ -3,7 +3,7 @@
 
 #include "game.h"
 
-#define LEVEL_COUNT 3
+#define LEVEL_COUNT 4
 extern const LevelDef levels[LEVEL_COUNT];
 
 #endif

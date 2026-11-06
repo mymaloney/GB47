@@ -34,6 +34,25 @@
 #define ACT_LEFT  DIR_LEFT
 #define ACT_WAIT  4
 
+/* Throwables. Stats live in item_defs[] (game.c), so items can differ
+ * later (a louder bottle, a coin that rolls...). */
+#define ITEM_TYPES  2
+#define ITEM_STONE  0
+#define ITEM_BOTTLE 1
+
+typedef struct {
+    const char *name;        /* max 8 chars for the inventory window */
+    uint8_t     range;       /* max throw distance (grid steps) */
+    uint8_t     noise;       /* guards within this many steps hear it */
+} ItemDef;
+
+extern const ItemDef item_defs[ITEM_TYPES];
+
+/* What a guard is doing. */
+#define GUARD_PATROL      0  /* following its route (or standing post) */
+#define GUARD_INVESTIGATE 1  /* walking to a noise */
+#define GUARD_RETURN      2  /* walking back to where it left its route */
+
 /* Map cells. */
 #define CELL_FLOOR 0
 #define CELL_WALL  1
@@ -62,6 +81,7 @@ typedef struct {
     const char *rows[MAP_H];
     uint8_t     guard_count;
     GuardDef    guards[MAX_GUARDS];
+    uint8_t     items[ITEM_TYPES]; /* starting inventory, by item type */
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */
@@ -70,6 +90,9 @@ typedef struct {
     uint8_t x, y;
     uint8_t facing;
     uint8_t next_wp;         /* index of the waypoint it is walking toward */
+    uint8_t mode;            /* GUARD_PATROL / _INVESTIGATE / _RETURN */
+    uint8_t tx, ty;          /* noise being investigated */
+    uint8_t hx, hy;          /* where it left its route ("home") */
 } Guard;
 
 typedef struct {
@@ -77,6 +100,7 @@ typedef struct {
     uint8_t  status;
     uint8_t  guard_count;
     uint16_t turn;
+    uint8_t  items[ITEM_TYPES];   /* in the state so undo restores them */
     Guard    guards[MAX_GUARDS];
 } GameState;
 
@@ -86,6 +110,19 @@ void game_load(const LevelDef *lvl, GameState *s);
 /* Apply one player action. Returns 1 if a turn was spent (state changed),
  * 0 if the action was illegal (e.g. walking into a wall) and nothing moved. */
 uint8_t game_step(GameState *s, uint8_t action);
+
+/* Is (x, y) a legal target for throwing this item right now?
+ * Needs the item in inventory, floor (not wall) at the target, within the
+ * item's range in grid steps, not the player's own tile, and a clear line. */
+uint8_t game_can_throw(const GameState *s, uint8_t item, uint8_t x, uint8_t y);
+
+/* Throw an item (spends a turn). Every guard within the item's noise range
+ * turns to look this turn; the one with the shortest walk goes to the spot,
+ * then returns to its route. Returns 0 (nothing happens) if illegal. */
+uint8_t game_throw(GameState *s, uint8_t item, uint8_t x, uint8_t y);
+
+/* Grid-step (Manhattan) distance. */
+uint8_t game_distance(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1);
 
 /* Map queries for the current level. */
 uint8_t game_cell(uint8_t x, uint8_t y);
