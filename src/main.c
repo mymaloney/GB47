@@ -19,6 +19,7 @@
 #define HUD_Y 16   /* HUD occupies rows 16 and 17 */
 
 static GameState state;
+static GameState before;   /* snapshot taken before each turn, for undo */
 static uint8_t   level_idx;
 static uint8_t   vision[MAP_H][MAP_W];
 static uint8_t   row_buf[MAP_W];
@@ -188,12 +189,12 @@ void main(void)
         else if (pressed & J_A)     action = ACT_WAIT;
         else continue;
 
-        {
-            GameState before = state;
-            if (game_step(&state, action)) {
-                undo_push(&before);
-                redraw();
-            }
+        /* SDCC can't initialise a struct from another struct in its
+         * declaration ("needs curly braces"), so assign separately. */
+        before = state;
+        if (game_step(&state, action)) {
+            undo_push(&before);
+            redraw();
         }
     }
 }
