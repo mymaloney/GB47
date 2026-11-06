@@ -1,0 +1,30 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      GBDK_VERSION: 4.3.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test game rules and solve levels
+        run: make test
+
+      - name: Install GBDK-2020
+        run: |
+          curl -sSL -o gbdk.tar.gz \
+            "https://github.com/gbdk-2020/gbdk-2020/releases/download/${GBDK_VERSION}/gbdk-linux64.tar.gz"
+          tar xzf gbdk.tar.gz -C "$HOME"
+
+      - name: Build ROM
+        run: make GBDK_HOME="$HOME/gbdk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: stealth-rom
+          path: build/stealth.gb
