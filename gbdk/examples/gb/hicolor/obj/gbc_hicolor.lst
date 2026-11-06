@@ -1,0 +1,434 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module gbc_hicolor
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl _hicolor_palette_isr
+                                     11 	.globl _set_bkg_tiles
+                                     12 	.globl _set_bkg_data
+                                     13 	.globl _set_interrupts
+                                     14 	.globl _add_LCD
+                                     15 	.globl _remove_LCD
+                                     16 	.globl _hicolor_start
+                                     17 ;--------------------------------------------------------
+                                     18 ; special function registers
+                                     19 ;--------------------------------------------------------
+                                     20 	.area _HRAM
+                                     21 ;--------------------------------------------------------
+                                     22 ; ram data
+                                     23 ;--------------------------------------------------------
+                                     24 	.area _DATA
+    00000000                         25 _SP_SAVE:
+    00000000                         26 	.ds 2
+    00000002                         27 _STAT_SAVE:
+    00000002                         28 	.ds 1
+    00000003                         29 _p_hicolor_palettes:
+    00000003                         30 	.ds 2
+    00000005                         31 _hicolor_palettes_bank:
+    00000005                         32 	.ds 1
+    00000006                         33 _hicolor_last_scanline:
+    00000006                         34 	.ds 1
+                                     35 ;--------------------------------------------------------
+                                     36 ; ram data
+                                     37 ;--------------------------------------------------------
+                                     38 	.area _INITIALIZED
+                                     39 ;--------------------------------------------------------
+                                     40 ; absolute external ram data
+                                     41 ;--------------------------------------------------------
+                                     42 	.area _DABS (ABS)
+                                     43 ;--------------------------------------------------------
+                                     44 ; global & static initialisations
+                                     45 ;--------------------------------------------------------
+                                     46 	.area _HOME
+                                     47 	.area _GSINIT
+                                     48 	.area _GSFINAL
+                                     49 	.area _GSINIT
+                                     50 ;--------------------------------------------------------
+                                     51 ; Home
+                                     52 ;--------------------------------------------------------
+                                     53 	.area _HOME
+                                     54 ;src/gbc_hicolor.c:20: void hicolor_palette_isr(void) NONBANKED {
+                                     55 ;	---------------------------------
+                                     56 ; Function hicolor_palette_isr
+                                     57 ; ---------------------------------
+    00000000                         58 _hicolor_palette_isr::
+                                     59 ;src/gbc_hicolor.c:116: __endasm;
+    00000000 F0r00            [12]   60 	ldh	a, (__current_bank) ; switch ROM bank
+    00000002 F5               [16]   61 	push	af
+    00000003 FAr05r00         [16]   62 	ld	a, (_hicolor_palettes_bank)
+    00000006 B7               [ 4]   63 	or	a
+    00000007 28 05            [12]   64 	jr	z, 3$
+    00000009 E0r00            [12]   65 	ldh	(__current_bank), a
+    0000000B EAr00r00         [16]   66 	ld	(_rROMB0), a
+    0000000E                         67 3$:
+    0000000E 08r00r00         [20]   68 	ld	(_SP_SAVE), sp ; save SP
+    00000011 21r03r00         [12]   69 	ld	hl, #_p_hicolor_palettes ; load address of picture palettes buffer
+    00000014 2A               [ 8]   70 	ld	a, (hl+)
+    00000015 56               [ 8]   71 	ld	d, (hl)
+    00000016 5F               [ 4]   72 	ld	e, a
+    00000017 F0r00            [12]   73 	ldh	a, (_SCY_REG)
+    00000019 CB 37            [ 8]   74 	swap	a
+    0000001B 6F               [ 4]   75 	ld	l, a
+    0000001C E6 0F            [ 8]   76 	and	#0x0f
+    0000001E 67               [ 4]   77 	ld	h, a
+    0000001F 3E F0            [ 8]   78 	ld	a, #0xf0
+    00000021 A5               [ 4]   79 	and	l
+    00000022 6F               [ 4]   80 	ld	l, a
+    00000023 29               [ 8]   81 	add	hl, hl
+    00000024 19               [ 8]   82 	add	hl, de ; offset address by SCY * (4 * 4 * 2)
+    00000025 F9               [ 8]   83 	ld	sp, hl
+    00000026 07               [ 4]   84 	rlca	; compensate odd/even line
+    00000027 E6 20            [ 8]   85 	and	#0x20 ; if odd then start from 4-th palette; offset == 32
+    00000029 F6 80            [ 8]   86 	or	#0b10000000 ; set auto-increment
+    0000002B 21r00r00         [12]   87 	ld	hl, #_BCPS_REG
+    0000002E 22               [ 8]   88 	ld	(hl+), a ; HL now points to BCPD
+    0000002F 0E 20            [ 8]   89 	ld	c, #(8 * 4) ; read and set the the colors that come from previous lines
+    00000031                         90 2$:
+    00000031 D1               [12]   91 	pop	de
+    00000032 73               [ 8]   92 	ld	(hl), e
+    00000033 72               [ 8]   93 	ld	(hl), d
+    00000034 0D               [ 4]   94 	dec	c
+    00000035 20 FA            [12]   95 	jr	nz, 2$
+    00000037                         96 0$:
+    00000037 F0r00            [12]   97 	ldh	a, (_STAT_REG)
+    00000039 E6 02            [ 8]   98 	and	#0b00000010
+    0000003B 28 FA            [12]   99 	jr	z, 0$ ; wait for mode 3
+    0000003D F0r00            [12]  100 	ldh	a, (_STAT_REG)
+    0000003F EAr02r00         [16]  101 	ld	(_STAT_SAVE), a
+    00000042 3E 08            [ 8]  102 	ld	a, #0b00001000
+    00000044 E0r00            [12]  103 	ldh	(_STAT_REG), a
+    00000046 AF               [ 4]  104 	xor	a
+    00000047 E0r00            [12]  105 	ldh	(_IF_REG), a
+    00000049                        106 1$:
+    00000049 C1               [12]  107 	pop	bc ; preload the first two colors
+    0000004A D1               [12]  108 	pop	de
+    0000004B AF               [ 4]  109 	xor	a
+    0000004C E0r00            [12]  110 	ldh	(_IF_REG), a
+    0000004E 76               [ 4]  111 	halt	; wait for mode 0
+    0000004F 71               [ 8]  112 	ld	(hl), c ; set the first two colors
+    00000050 70               [ 8]  113 	ld	(hl), b
+    00000051 73               [ 8]  114 	ld	(hl), e
+    00000052 72               [ 8]  115 	ld	(hl), d
+                                    116 	.rept	(4*4)-2 ; read and set four palettes except the two previously set colors
+                                    117 	pop	de
+                                    118 	ld	(hl), e
+                                    119 	ld	(hl), d
+                                    120 	.endm
+    00000053 D1               [12]    1 	pop	de
+    00000054 73               [ 8]    2 	ld	(hl), e
+    00000055 72               [ 8]    3 	ld	(hl), d
+    00000056 D1               [12]    1 	pop	de
+    00000057 73               [ 8]    2 	ld	(hl), e
+    00000058 72               [ 8]    3 	ld	(hl), d
+    00000059 D1               [12]    1 	pop	de
+    0000005A 73               [ 8]    2 	ld	(hl), e
+    0000005B 72               [ 8]    3 	ld	(hl), d
+    0000005C D1               [12]    1 	pop	de
+    0000005D 73               [ 8]    2 	ld	(hl), e
+    0000005E 72               [ 8]    3 	ld	(hl), d
+    0000005F D1               [12]    1 	pop	de
+    00000060 73               [ 8]    2 	ld	(hl), e
+    00000061 72               [ 8]    3 	ld	(hl), d
+    00000062 D1               [12]    1 	pop	de
+    00000063 73               [ 8]    2 	ld	(hl), e
+    00000064 72               [ 8]    3 	ld	(hl), d
+    00000065 D1               [12]    1 	pop	de
+    00000066 73               [ 8]    2 	ld	(hl), e
+    00000067 72               [ 8]    3 	ld	(hl), d
+    00000068 D1               [12]    1 	pop	de
+    00000069 73               [ 8]    2 	ld	(hl), e
+    0000006A 72               [ 8]    3 	ld	(hl), d
+    0000006B D1               [12]    1 	pop	de
+    0000006C 73               [ 8]    2 	ld	(hl), e
+    0000006D 72               [ 8]    3 	ld	(hl), d
+    0000006E D1               [12]    1 	pop	de
+    0000006F 73               [ 8]    2 	ld	(hl), e
+    00000070 72               [ 8]    3 	ld	(hl), d
+    00000071 D1               [12]    1 	pop	de
+    00000072 73               [ 8]    2 	ld	(hl), e
+    00000073 72               [ 8]    3 	ld	(hl), d
+    00000074 D1               [12]    1 	pop	de
+    00000075 73               [ 8]    2 	ld	(hl), e
+    00000076 72               [ 8]    3 	ld	(hl), d
+    00000077 D1               [12]    1 	pop	de
+    00000078 73               [ 8]    2 	ld	(hl), e
+    00000079 72               [ 8]    3 	ld	(hl), d
+    0000007A D1               [12]    1 	pop	de
+    0000007B 73               [ 8]    2 	ld	(hl), e
+    0000007C 72               [ 8]    3 	ld	(hl), d
+    0000007D FAr06r00         [16]  121 	ld	a, (_hicolor_last_scanline)
+    00000080 4F               [ 4]  122 	ld	c, a
+    00000081 F0r00            [12]  123 	ldh	a, (_LY_REG)
+    00000083 B9               [ 4]  124 	cp	c
+    00000084 38 C3            [12]  125 	jr	c, 1$ ; load the next 4 palettes
+    00000086 FAr02r00         [16]  126 	ld	a, (_STAT_SAVE)
+    00000089 E0r00            [12]  127 	ldh	(_STAT_REG), a
+    0000008B AF               [ 4]  128 	xor	a
+    0000008C E0r00            [12]  129 	ldh	(_IF_REG), a
+    0000008E 31r00r00         [12]  130 	ld	sp, #_SP_SAVE
+    00000091 E1               [12]  131 	pop	hl
+    00000092 F9               [ 8]  132 	ld	sp, hl ; restore SP
+    00000093 F1               [12]  133 	pop	af
+    00000094 E0r00            [12]  134 	ldh	(__current_bank), a
+    00000096 EAr00r00         [16]  135 	ld	(_rROMB0), a
+    00000099 C9               [16]  136 	ret
+                                    137 ;src/gbc_hicolor.c:117: }
+    0000009A C9               [16]  138 	ret
+                                    139 ;src/gbc_hicolor.c:125: void hicolor_start(const hicolor_data * p_hicolor, uint8_t hicolor_bank) NONBANKED {
+                                    140 ;	---------------------------------
+                                    141 ; Function hicolor_start
+                                    142 ; ---------------------------------
+    0000009B                        143 _hicolor_start::
+    0000009B E8 F7            [16]  144 	add	sp, #-9
+    0000009D 4B               [ 4]  145 	ld	c, e
+    0000009E 42               [ 4]  146 	ld	b, d
+    0000009F 5F               [ 4]  147 	ld	e, a
+                                    148 ;src/gbc_hicolor.c:129: }
+    000000A0 F3               [ 4]  149 	di
+                                    150 ;src/gbc_hicolor.c:128: remove_LCD(hicolor_palette_isr);
+    000000A1 C5               [16]  151 	push	bc
+    000000A2 D5               [16]  152 	push	de
+    000000A3 11r00r00         [12]  153 	ld	de, #_hicolor_palette_isr
+    000000A6 CDr00r00         [24]  154 	call	_remove_LCD
+    000000A9 D1               [12]  155 	pop	de
+    000000AA C1               [12]  156 	pop	bc
+    000000AB FB               [ 4]  157 	ei
+                                    158 ;src/gbc_hicolor.c:131: if (!p_hicolor) return;
+    000000AC 78               [ 4]  159 	ld	a, b
+    000000AD B1               [ 4]  160 	or	a, c
+    000000AE CArC3r01         [16]  161 	jp	Z, 00107$
+                                    162 ;src/gbc_hicolor.c:132: hicolor_palettes_bank = hicolor_bank;
+    000000B1 21r05r00         [12]  163 	ld	hl, #_hicolor_palettes_bank
+    000000B4 73               [ 8]  164 	ld	(hl), e
+                                    165 ;src/gbc_hicolor.c:134: uint8_t bank_save = CURRENT_BANK;
+    000000B5 F0r00            [12]  166 	ldh	a, (__current_bank + 0)
+    000000B7 F8 02            [12]  167 	ldhl	sp,	#2
+    000000B9 77               [ 8]  168 	ld	(hl), a
+                                    169 ;src/gbc_hicolor.c:135: if (hicolor_bank) SWITCH_ROM(hicolor_bank);
+    000000BA 7B               [ 4]  170 	ld	a, e
+    000000BB B7               [ 4]  171 	or	a, a
+    000000BC 28 07            [12]  172 	jr	Z, 00104$
+    000000BE 7B               [ 4]  173 	ld	a, e
+    000000BF E0r00            [12]  174 	ldh	(__current_bank + 0), a
+    000000C1 21r00r00         [12]  175 	ld	hl, #_rROMB0
+    000000C4 73               [ 8]  176 	ld	(hl), e
+    000000C5                        177 00104$:
+                                    178 ;src/gbc_hicolor.c:138: p_hicolor_palettes = p_hicolor->p_palette;
+    000000C5 21 09 00         [12]  179 	ld	hl, #0x0009
+    000000C8 09               [ 8]  180 	add	hl, bc
+    000000C9 5D               [ 4]  181 	ld	e, l
+    000000CA 54               [ 4]  182 	ld	d, h
+    000000CB 1A               [ 8]  183 	ld	a, (de)
+    000000CC 21r03r00         [12]  184 	ld	hl, #_p_hicolor_palettes
+    000000CF 22               [ 8]  185 	ld	(hl+), a
+    000000D0 13               [ 8]  186 	inc	de
+    000000D1 1A               [ 8]  187 	ld	a, (de)
+    000000D2 77               [ 8]  188 	ld	(hl), a
+                                    189 ;src/gbc_hicolor.c:141: hicolor_last_scanline = (p_hicolor->height_in_tiles > DEVICE_SCREEN_HEIGHT) ? (DEVICE_SCREEN_PX_HEIGHT - 1) : ((p_hicolor->height_in_tiles << 3) - 1);
+    000000D3 21 02 00         [12]  190 	ld	hl, #0x0002
+    000000D6 09               [ 8]  191 	add	hl, bc
+    000000D7 E5               [16]  192 	push	hl
+    000000D8 7D               [ 4]  193 	ld	a, l
+    000000D9 F8 05            [12]  194 	ldhl	sp,	#5
+    000000DB 77               [ 8]  195 	ld	(hl), a
+    000000DC E1               [12]  196 	pop	hl
+    000000DD 7C               [ 4]  197 	ld	a, h
+    000000DE F8 04            [12]  198 	ldhl	sp,	#4
+    000000E0 32               [ 8]  199 	ld	(hl-), a
+    000000E1 2A               [ 8]  200 	ld	a, (hl+)
+    000000E2 5F               [ 4]  201 	ld	e, a
+    000000E3 56               [ 8]  202 	ld	d, (hl)
+    000000E4 1A               [ 8]  203 	ld	a, (de)
+    000000E5 FE 13            [ 8]  204 	cp	a, #0x13
+    000000E7 38 04            [12]  205 	jr	C, 00109$
+    000000E9 3E 8F            [ 8]  206 	ld	a, #0x8f
+    000000EB 18 04            [12]  207 	jr	00110$
+    000000ED                        208 00109$:
+    000000ED 87               [ 4]  209 	add	a, a
+    000000EE 87               [ 4]  210 	add	a, a
+    000000EF 87               [ 4]  211 	add	a, a
+    000000F0 3D               [ 4]  212 	dec	a
+    000000F1                        213 00110$:
+    000000F1 EAr06r00         [16]  214 	ld	(#_hicolor_last_scanline),a
+                                    215 ;src/gbc_hicolor.c:144: VBK_REG = VBK_BANK_0;
+    000000F4 AF               [ 4]  216 	xor	a, a
+    000000F5 E0r00            [12]  217 	ldh	(_VBK_REG + 0), a
+                                    218 ;src/gbc_hicolor.c:145: set_bkg_data(0u, MIN(p_hicolor->tile_count, 256), p_hicolor->p_tiles);
+    000000F7 21 03 00         [12]  219 	ld	hl, #0x0003
+    000000FA 09               [ 8]  220 	add	hl, bc
+    000000FB E5               [16]  221 	push	hl
+    000000FC 7D               [ 4]  222 	ld	a, l
+    000000FD F8 07            [12]  223 	ldhl	sp,	#7
+    000000FF 77               [ 8]  224 	ld	(hl), a
+    00000100 E1               [12]  225 	pop	hl
+    00000101 7C               [ 4]  226 	ld	a, h
+    00000102 F8 06            [12]  227 	ldhl	sp,	#6
+    00000104 32               [ 8]  228 	ld	(hl-), a
+    00000105 2A               [ 8]  229 	ld	a, (hl+)
+    00000106 5F               [ 4]  230 	ld	e, a
+    00000107 56               [ 8]  231 	ld	d, (hl)
+    00000108 1A               [ 8]  232 	ld	a, (de)
+    00000109 F8 00            [12]  233 	ldhl	sp,	#0
+    0000010B 22               [ 8]  234 	ld	(hl+), a
+    0000010C 13               [ 8]  235 	inc	de
+    0000010D 1A               [ 8]  236 	ld	a, (de)
+    0000010E 77               [ 8]  237 	ld	(hl), a
+    0000010F F8 07            [12]  238 	ldhl	sp,	#7
+    00000111 79               [ 4]  239 	ld	a, c
+    00000112 22               [ 8]  240 	ld	(hl+), a
+    00000113 78               [ 4]  241 	ld	a, b
+    00000114 32               [ 8]  242 	ld	(hl-), a
+    00000115 2A               [ 8]  243 	ld	a, (hl+)
+    00000116 5F               [ 4]  244 	ld	e, a
+    00000117 56               [ 8]  245 	ld	d, (hl)
+    00000118 1A               [ 8]  246 	ld	a, (de)
+    00000119 6F               [ 4]  247 	ld	l, a
+    0000011A 13               [ 8]  248 	inc	de
+    0000011B 1A               [ 8]  249 	ld	a, (de)
+    0000011C D6 01            [ 8]  250 	sub	a, #0x01
+    0000011E 30 03            [12]  251 	jr	NC, 00111$
+    00000120 7D               [ 4]  252 	ld	a, l
+    00000121 18 01            [12]  253 	jr	00112$
+    00000123                        254 00111$:
+    00000123 AF               [ 4]  255 	xor	a, a
+    00000124                        256 00112$:
+    00000124 D1               [12]  257 	pop	de
+    00000125 D5               [16]  258 	push	de
+    00000126 D5               [16]  259 	push	de
+    00000127 67               [ 4]  260 	ld	h, a
+    00000128 2E 00            [ 8]  261 	ld	l, #0x00
+    0000012A E5               [16]  262 	push	hl
+    0000012B CDr00r00         [24]  263 	call	_set_bkg_data
+    0000012E E8 04            [16]  264 	add	sp, #4
+                                    265 ;src/gbc_hicolor.c:146: set_bkg_tiles(0u, 0u, DEVICE_SCREEN_WIDTH, p_hicolor->height_in_tiles, p_hicolor->p_map);
+    00000130 21 05 00         [12]  266 	ld	hl, #0x0005
+    00000133 09               [ 8]  267 	add	hl, bc
+    00000134 5D               [ 4]  268 	ld	e, l
+    00000135 54               [ 4]  269 	ld	d, h
+    00000136 1A               [ 8]  270 	ld	a, (de)
+    00000137 F8 00            [12]  271 	ldhl	sp,	#0
+    00000139 22               [ 8]  272 	ld	(hl+), a
+    0000013A 13               [ 8]  273 	inc	de
+    0000013B 1A               [ 8]  274 	ld	a, (de)
+    0000013C 77               [ 8]  275 	ld	(hl), a
+    0000013D F8 03            [12]  276 	ldhl	sp,#3
+    0000013F 2A               [ 8]  277 	ld	a, (hl+)
+    00000140 5F               [ 4]  278 	ld	e, a
+    00000141 56               [ 8]  279 	ld	d, (hl)
+    00000142 1A               [ 8]  280 	ld	a, (de)
+    00000143 D1               [12]  281 	pop	de
+    00000144 D5               [16]  282 	push	de
+    00000145 D5               [16]  283 	push	de
+    00000146 67               [ 4]  284 	ld	h, a
+    00000147 2E 14            [ 8]  285 	ld	l, #0x14
+    00000149 E5               [16]  286 	push	hl
+    0000014A AF               [ 4]  287 	xor	a, a
+    0000014B 0F               [ 4]  288 	rrca
+    0000014C F5               [16]  289 	push	af
+    0000014D CDr00r00         [24]  290 	call	_set_bkg_tiles
+    00000150 E8 06            [16]  291 	add	sp, #6
+                                    292 ;src/gbc_hicolor.c:149: VBK_REG = VBK_BANK_1;
+    00000152 3E 01            [ 8]  293 	ld	a, #0x01
+    00000154 E0r00            [12]  294 	ldh	(_VBK_REG + 0), a
+                                    295 ;src/gbc_hicolor.c:150: if (p_hicolor->tile_count > 256) set_bkg_data(0u, (p_hicolor->tile_count - 256), p_hicolor->p_tiles + (256 * 16));
+    00000156 F8 07            [12]  296 	ldhl	sp,#7
+    00000158 2A               [ 8]  297 	ld	a, (hl+)
+    00000159 5F               [ 4]  298 	ld	e, a
+    0000015A 3A               [ 8]  299 	ld	a, (hl-)
+    0000015B 57               [ 4]  300 	ld	d, a
+    0000015C 1A               [ 8]  301 	ld	a, (de)
+    0000015D 22               [ 8]  302 	ld	(hl+), a
+    0000015E 13               [ 8]  303 	inc	de
+    0000015F 1A               [ 8]  304 	ld	a, (de)
+    00000160 32               [ 8]  305 	ld	(hl-), a
+    00000161 2A               [ 8]  306 	ld	a, (hl+)
+    00000162 5F               [ 4]  307 	ld	e, a
+    00000163 56               [ 8]  308 	ld	d, (hl)
+    00000164 AF               [ 4]  309 	xor	a, a
+    00000165 BB               [ 4]  310 	cp	a, e
+    00000166 3E 01            [ 8]  311 	ld	a, #0x01
+    00000168 9A               [ 4]  312 	sbc	a, d
+    00000169 30 1B            [12]  313 	jr	NC, 00106$
+    0000016B 2B               [ 8]  314 	dec	hl
+    0000016C 2B               [ 8]  315 	dec	hl
+    0000016D 2B               [ 8]  316 	dec	hl
+    0000016E 2A               [ 8]  317 	ld	a, (hl+)
+    0000016F 5F               [ 4]  318 	ld	e, a
+    00000170 56               [ 8]  319 	ld	d, (hl)
+    00000171 1A               [ 8]  320 	ld	a, (de)
+    00000172 6F               [ 4]  321 	ld	l, a
+    00000173 13               [ 8]  322 	inc	de
+    00000174 1A               [ 8]  323 	ld	a, (de)
+    00000175 5D               [ 4]  324 	ld	e, l
+    00000176 C6 10            [ 8]  325 	add	a, #0x10
+    00000178 57               [ 4]  326 	ld	d, a
+    00000179 F8 07            [12]  327 	ldhl	sp,	#7
+    0000017B 7E               [ 8]  328 	ld	a, (hl)
+    0000017C D5               [16]  329 	push	de
+    0000017D 67               [ 4]  330 	ld	h, a
+    0000017E 2E 00            [ 8]  331 	ld	l, #0x00
+    00000180 E5               [16]  332 	push	hl
+    00000181 CDr00r00         [24]  333 	call	_set_bkg_data
+    00000184 E8 04            [16]  334 	add	sp, #4
+    00000186                        335 00106$:
+                                    336 ;src/gbc_hicolor.c:151: set_bkg_tiles(0, 0, DEVICE_SCREEN_WIDTH, p_hicolor->height_in_tiles, p_hicolor->p_attribute_map);
+    00000186 21 07 00         [12]  337 	ld	hl, #0x0007
+    00000189 09               [ 8]  338 	add	hl, bc
+    0000018A 2A               [ 8]  339 	ld	a, (hl+)
+    0000018B 4F               [ 4]  340 	ld	c, a
+    0000018C 46               [ 8]  341 	ld	b, (hl)
+    0000018D F8 03            [12]  342 	ldhl	sp,#3
+    0000018F 2A               [ 8]  343 	ld	a, (hl+)
+    00000190 5F               [ 4]  344 	ld	e, a
+    00000191 56               [ 8]  345 	ld	d, (hl)
+    00000192 1A               [ 8]  346 	ld	a, (de)
+    00000193 C5               [16]  347 	push	bc
+    00000194 67               [ 4]  348 	ld	h, a
+    00000195 2E 14            [ 8]  349 	ld	l, #0x14
+    00000197 E5               [16]  350 	push	hl
+    00000198 AF               [ 4]  351 	xor	a, a
+    00000199 0F               [ 4]  352 	rrca
+    0000019A F5               [16]  353 	push	af
+    0000019B CDr00r00         [24]  354 	call	_set_bkg_tiles
+    0000019E E8 06            [16]  355 	add	sp, #6
+                                    356 ;src/gbc_hicolor.c:152: VBK_REG = VBK_BANK_0;
+    000001A0 AF               [ 4]  357 	xor	a, a
+    000001A1 E0r00            [12]  358 	ldh	(_VBK_REG + 0), a
+                                    359 ;src/gbc_hicolor.c:154: SWITCH_ROM(bank_save);
+    000001A3 F8 02            [12]  360 	ldhl	sp,	#2
+    000001A5 7E               [ 8]  361 	ld	a, (hl)
+    000001A6 E0r00            [12]  362 	ldh	(__current_bank + 0), a
+    000001A8 7E               [ 8]  363 	ld	a, (hl)
+    000001A9 EAr00r00         [16]  364 	ld	(#_rROMB0),a
+                                    365 ;src/gbc_hicolor.c:162: }
+    000001AC F3               [ 4]  366 	di
+                                    367 ;src/gbc_hicolor.c:158: LYC_REG = 152;
+    000001AD 3E 98            [ 8]  368 	ld	a, #0x98
+    000001AF E0r00            [12]  369 	ldh	(_LYC_REG + 0), a
+                                    370 ;src/gbc_hicolor.c:159: STAT_REG = STATF_LYC;
+    000001B1 3E 40            [ 8]  371 	ld	a, #0x40
+    000001B3 E0r00            [12]  372 	ldh	(_STAT_REG + 0), a
+                                    373 ;src/gbc_hicolor.c:161: add_LCD(hicolor_palette_isr);
+    000001B5 11r00r00         [12]  374 	ld	de, #_hicolor_palette_isr
+    000001B8 CDr00r00         [24]  375 	call	_add_LCD
+    000001BB FB               [ 4]  376 	ei
+                                    377 ;src/gbc_hicolor.c:163: set_interrupts(IE_REG | LCD_IFLAG);
+    000001BC F0r00            [12]  378 	ldh	a, (_IE_REG + 0)
+    000001BE CB CF            [ 8]  379 	set	1, a
+    000001C0 CDr00r00         [24]  380 	call	_set_interrupts
+    000001C3                        381 00107$:
+                                    382 ;src/gbc_hicolor.c:164: }
+    000001C3 E8 09            [16]  383 	add	sp, #9
+    000001C5 C9               [16]  384 	ret
+                                    385 	.area _HOME
+                                    386 ;--------------------------------------------------------
+                                    387 ; code
+                                    388 ;--------------------------------------------------------
+                                    389 	.area _CODE
+                                    390 	.area _CODE
+                                    391 	.area _INITIALIZER
+                                    392 	.area _CABS (ABS)

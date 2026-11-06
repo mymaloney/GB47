@@ -1,0 +1,163 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module mbc3_rtc
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl __current_ram_bank
+                                     11 	.globl _RTC_VALUE_REG
+                                     12 	.globl _RTC_LATCH_REG
+                                     13 	.globl _RTC_SELECT_REG
+                                     14 	.globl _RTC_GET
+                                     15 	.globl _RTC_SET
+                                     16 	.globl _RTC_START
+                                     17 ;--------------------------------------------------------
+                                     18 ; special function registers
+                                     19 ;--------------------------------------------------------
+                                     20 	.area _HRAM
+                                     21 ;--------------------------------------------------------
+                                     22 ; ram data
+                                     23 ;--------------------------------------------------------
+                                     24 	.area _DATA
+                         00004000    25 _RTC_SELECT_REG	=	0x4000
+                         00006000    26 _RTC_LATCH_REG	=	0x6000
+                         0000A000    27 _RTC_VALUE_REG	=	0xa000
+    00000000                         28 __current_ram_bank::
+    00000000                         29 	.ds 1
+                                     30 ;--------------------------------------------------------
+                                     31 ; ram data
+                                     32 ;--------------------------------------------------------
+                                     33 	.area _INITIALIZED
+                                     34 ;--------------------------------------------------------
+                                     35 ; absolute external ram data
+                                     36 ;--------------------------------------------------------
+                                     37 	.area _DABS (ABS)
+                                     38 ;--------------------------------------------------------
+                                     39 ; global & static initialisations
+                                     40 ;--------------------------------------------------------
+                                     41 	.area _HOME
+                                     42 	.area _GSINIT
+                                     43 	.area _GSFINAL
+                                     44 	.area _GSINIT
+                                     45 ;--------------------------------------------------------
+                                     46 ; Home
+                                     47 ;--------------------------------------------------------
+                                     48 	.area _HOME
+                                     49 	.area _HOME
+                                     50 ;--------------------------------------------------------
+                                     51 ; code
+                                     52 ;--------------------------------------------------------
+                                     53 	.area _CODE
+                                     54 ;src/mbc3_rtc.c:7: uint16_t RTC_GET(const rtc_dateparts_e part) {
+                                     55 ;	---------------------------------
+                                     56 ; Function RTC_GET
+                                     57 ; ---------------------------------
+    00000000                         58 _RTC_GET::
+    00000000 5F               [ 4]   59 	ld	e, a
+                                     60 ;src/mbc3_rtc.h:27: inline void SWITCH_RAM_BANK(uint8_t bank, uint8_t mask) { SWITCH_RAM(_current_ram_bank = ((_current_ram_bank & ~mask) | (bank & mask))); }
+    00000001 21r00r00         [12]   61 	ld	hl, #__current_ram_bank
+    00000004 7E               [ 8]   62 	ld	a, (hl)
+    00000005 E6 F0            [ 8]   63 	and	a, #0xf0
+    00000007 4F               [ 4]   64 	ld	c, a
+    00000008 7B               [ 4]   65 	ld	a, e
+    00000009 E6 0F            [ 8]   66 	and	a, #0x0f
+    0000000B B1               [ 4]   67 	or	a, c
+    0000000C 77               [ 8]   68 	ld	(hl), a
+    0000000D EAr00r00         [16]   69 	ld	(#_rRAMB),a
+                                     70 ;src/mbc3_rtc.c:10: v = RTC_VALUE_REG;
+    00000010 FAr00r00         [16]   71 	ld	a, (_RTC_VALUE_REG)
+    00000013 4F               [ 4]   72 	ld	c, a
+    00000014 06 00            [ 8]   73 	ld	b, #0x00
+                                     74 ;src/mbc3_rtc.c:11: if (part == RTC_VALUE_DAY) {
+    00000016 7B               [ 4]   75 	ld	a, e
+    00000017 D6 0B            [ 8]   76 	sub	a, #0x0b
+    00000019 C0               [20]   77 	ret	NZ
+                                     78 ;src/mbc3_rtc.h:27: inline void SWITCH_RAM_BANK(uint8_t bank, uint8_t mask) { SWITCH_RAM(_current_ram_bank = ((_current_ram_bank & ~mask) | (bank & mask))); }
+    0000001A 21r00r00         [12]   79 	ld	hl, #__current_ram_bank
+    0000001D 7E               [ 8]   80 	ld	a, (hl)
+    0000001E E6 F0            [ 8]   81 	and	a, #0xf0
+    00000020 F6 0C            [ 8]   82 	or	a, #0x0c
+    00000022 77               [ 8]   83 	ld	(hl), a
+    00000023 EAr00r00         [16]   84 	ld	(#_rRAMB),a
+                                     85 ;src/mbc3_rtc.c:13: if (RTC_VALUE_REG & 0x01) v |= 0x0100u;
+    00000026 FAr00r00         [16]   86 	ld	a, (_RTC_VALUE_REG)
+    00000029 0F               [ 4]   87 	rrca
+    0000002A D0               [20]   88 	ret	NC
+    0000002B 06 01            [ 8]   89 	ld	b, #0x01
+                                     90 ;src/mbc3_rtc.c:15: return v;
+                                     91 ;src/mbc3_rtc.c:16: }
+    0000002D C9               [16]   92 	ret
+                                     93 ;src/mbc3_rtc.c:18: void RTC_SET(const rtc_dateparts_e part, const uint16_t v) {
+                                     94 ;	---------------------------------
+                                     95 ; Function RTC_SET
+                                     96 ; ---------------------------------
+    0000002E                         97 _RTC_SET::
+    0000002E 4F               [ 4]   98 	ld	c, a
+                                     99 ;src/mbc3_rtc.h:27: inline void SWITCH_RAM_BANK(uint8_t bank, uint8_t mask) { SWITCH_RAM(_current_ram_bank = ((_current_ram_bank & ~mask) | (bank & mask))); }
+    0000002F 21r00r00         [12]  100 	ld	hl, #__current_ram_bank
+    00000032 7E               [ 8]  101 	ld	a, (hl)
+    00000033 E6 F0            [ 8]  102 	and	a, #0xf0
+    00000035 47               [ 4]  103 	ld	b, a
+    00000036 79               [ 4]  104 	ld	a, c
+    00000037 E6 0F            [ 8]  105 	and	a, #0x0f
+    00000039 B0               [ 4]  106 	or	a, b
+    0000003A 77               [ 8]  107 	ld	(hl), a
+    0000003B EAr00r00         [16]  108 	ld	(#_rRAMB),a
+                                    109 ;src/mbc3_rtc.c:20: RTC_VALUE_REG = v;
+    0000003E 21r00r00         [12]  110 	ld	hl, #_RTC_VALUE_REG
+    00000041 73               [ 8]  111 	ld	(hl), e
+                                    112 ;src/mbc3_rtc.c:21: if (part == RTC_VALUE_DAY) {
+    00000042 79               [ 4]  113 	ld	a, c
+    00000043 D6 0B            [ 8]  114 	sub	a, #0x0b
+    00000045 C0               [20]  115 	ret	NZ
+                                    116 ;src/mbc3_rtc.h:27: inline void SWITCH_RAM_BANK(uint8_t bank, uint8_t mask) { SWITCH_RAM(_current_ram_bank = ((_current_ram_bank & ~mask) | (bank & mask))); }
+    00000046 21r00r00         [12]  117 	ld	hl, #__current_ram_bank
+    00000049 7E               [ 8]  118 	ld	a, (hl)
+    0000004A E6 F0            [ 8]  119 	and	a, #0xf0
+    0000004C F6 0C            [ 8]  120 	or	a, #0x0c
+    0000004E 77               [ 8]  121 	ld	(hl), a
+    0000004F EAr00r00         [16]  122 	ld	(#_rRAMB),a
+                                    123 ;src/mbc3_rtc.c:23: RTC_VALUE_REG = (RTC_VALUE_REG & 0x0e) | (uint8_t)((v >> 8) & 0x01);
+    00000052 FAr00r00         [16]  124 	ld	a, (_RTC_VALUE_REG)
+    00000055 E6 0E            [ 8]  125 	and	a, #0x0e
+    00000057 4F               [ 4]  126 	ld	c, a
+    00000058 7A               [ 4]  127 	ld	a, d
+    00000059 E6 01            [ 8]  128 	and	a, #0x01
+    0000005B B1               [ 4]  129 	or	a, c
+    0000005C EAr00r00         [16]  130 	ld	(#_RTC_VALUE_REG),a
+                                    131 ;src/mbc3_rtc.c:25: }
+    0000005F C9               [16]  132 	ret
+                                    133 ;src/mbc3_rtc.c:27: void RTC_START(const uint8_t start) {
+                                    134 ;	---------------------------------
+                                    135 ; Function RTC_START
+                                    136 ; ---------------------------------
+    00000060                        137 _RTC_START::
+    00000060 4F               [ 4]  138 	ld	c, a
+    00000061 21r00r00         [12]  139 	ld	hl, #__current_ram_bank
+    00000064 7E               [ 8]  140 	ld	a, (hl)
+    00000065 E6 F0            [ 8]  141 	and	a, #0xf0
+    00000067 F6 0C            [ 8]  142 	or	a, #0x0c
+    00000069 77               [ 8]  143 	ld	(hl), a
+    0000006A EAr00r00         [16]  144 	ld	(#_rRAMB),a
+                                    145 ;src/mbc3_rtc.c:29: if (start) RTC_VALUE_REG &= ~RTC_TIMER_STOP; else RTC_VALUE_REG |= RTC_TIMER_STOP;
+    0000006D 79               [ 4]  146 	ld	a, c
+    0000006E B7               [ 4]  147 	or	a, a
+    0000006F 28 08            [12]  148 	jr	Z, 00102$
+    00000071 21r00r00         [12]  149 	ld	hl, #_RTC_VALUE_REG
+    00000074 7E               [ 8]  150 	ld	a, (hl)
+    00000075 E6 BF            [ 8]  151 	and	a, #0xbf
+    00000077 77               [ 8]  152 	ld	(hl), a
+    00000078 C9               [16]  153 	ret
+    00000079                        154 00102$:
+    00000079 21r00r00         [12]  155 	ld	hl, #_RTC_VALUE_REG
+    0000007C 7E               [ 8]  156 	ld	a, (hl)
+    0000007D F6 40            [ 8]  157 	or	a, #0x40
+    0000007F 77               [ 8]  158 	ld	(hl), a
+                                    159 ;src/mbc3_rtc.c:30: }
+    00000080 C9               [16]  160 	ret
+                                    161 	.area _CODE
+                                    162 	.area _INITIALIZER
+                                    163 	.area _CABS (ABS)

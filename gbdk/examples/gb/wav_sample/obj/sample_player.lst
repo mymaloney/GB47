@@ -1,0 +1,188 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module sample_player
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl _play_length
+                                     11 	.globl _play_sample
+                                     12 	.globl _play_bank
+                                     13 	.globl _play_isr
+                                     14 	.globl _set_sample
+                                     15 ;--------------------------------------------------------
+                                     16 ; special function registers
+                                     17 ;--------------------------------------------------------
+                                     18 	.area _HRAM
+                                     19 ;--------------------------------------------------------
+                                     20 ; ram data
+                                     21 ;--------------------------------------------------------
+                                     22 	.area _DATA
+                                     23 ;--------------------------------------------------------
+                                     24 ; ram data
+                                     25 ;--------------------------------------------------------
+                                     26 	.area _INITIALIZED
+    00000000                         27 _play_bank::
+    00000000                         28 	.ds 1
+    00000001                         29 _play_sample::
+    00000001                         30 	.ds 2
+    00000003                         31 _play_length::
+    00000003                         32 	.ds 2
+                                     33 ;--------------------------------------------------------
+                                     34 ; absolute external ram data
+                                     35 ;--------------------------------------------------------
+                                     36 	.area _DABS (ABS)
+                                     37 ;--------------------------------------------------------
+                                     38 ; global & static initialisations
+                                     39 ;--------------------------------------------------------
+                                     40 	.area _HOME
+                                     41 	.area _GSINIT
+                                     42 	.area _GSFINAL
+                                     43 	.area _GSINIT
+                                     44 ;--------------------------------------------------------
+                                     45 ; Home
+                                     46 ;--------------------------------------------------------
+                                     47 	.area _HOME
+                                     48 ;src/sample_player.c:7: void play_isr(void) __nonbanked __naked {
+                                     49 ;	---------------------------------
+                                     50 ; Function play_isr
+                                     51 ; ---------------------------------
+    00000000                         52 _play_isr::
+                                     53 ;src/sample_player.c:68: __endasm;
+    00000000 21r03r00         [12]   54 	ld	hl, #_play_length ; something left to play?
+    00000003 2A               [ 8]   55 	ld	a, (hl+)
+    00000004 B6               [ 8]   56 	or	(hl)
+    00000005 C8               [20]   57 	ret	z
+    00000006 21r01r00         [12]   58 	ld	hl, #_play_sample
+    00000009 2A               [ 8]   59 	ld	a, (hl+)
+    0000000A 66               [ 8]   60 	ld	h, (hl)
+    0000000B 6F               [ 4]   61 	ld	l, a ; HL = current position inside the sample
+                                     62 ;	load new waveform
+    0000000C FAr00r00         [16]   63 	ld	a, (#__current_bank) ; save bank and switch
+    0000000F 5F               [ 4]   64 	ld	e, a
+    00000010 FAr00r00         [16]   65 	ld	a, (#_play_bank)
+    00000013 EAr00r00         [16]   66 	ld	(_rROMB0), a
+    00000016 F0r00            [12]   67 	ldh	a, (_NR51_REG)
+    00000018 4F               [ 4]   68 	ld	c, a
+    00000019 E6 BB            [ 8]   69 	and	#0b10111011
+    0000001B E0r00            [12]   70 	ldh	(_NR51_REG), a
+    0000001D AF               [ 4]   71 	xor	a
+    0000001E E0r00            [12]   72 	ldh	(_NR30_REG), a
+                                     73 	.irp	ofs,0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+                                     74 	ld	a, (hl+)
+                                     75 	ldh	(__AUD3WAVERAM+ofs), a
+                                     76 	.endm
+    00000020 2A               [ 8]    1 	ld	a, (hl+)
+    00000021 E0r00            [12]    2 	ldh	(__AUD3WAVERAM+0), a
+    00000023 2A               [ 8]    1 	ld	a, (hl+)
+    00000024 E0r01            [12]    2 	ldh	(__AUD3WAVERAM+1), a
+    00000026 2A               [ 8]    1 	ld	a, (hl+)
+    00000027 E0r02            [12]    2 	ldh	(__AUD3WAVERAM+2), a
+    00000029 2A               [ 8]    1 	ld	a, (hl+)
+    0000002A E0r03            [12]    2 	ldh	(__AUD3WAVERAM+3), a
+    0000002C 2A               [ 8]    1 	ld	a, (hl+)
+    0000002D E0r04            [12]    2 	ldh	(__AUD3WAVERAM+4), a
+    0000002F 2A               [ 8]    1 	ld	a, (hl+)
+    00000030 E0r05            [12]    2 	ldh	(__AUD3WAVERAM+5), a
+    00000032 2A               [ 8]    1 	ld	a, (hl+)
+    00000033 E0r06            [12]    2 	ldh	(__AUD3WAVERAM+6), a
+    00000035 2A               [ 8]    1 	ld	a, (hl+)
+    00000036 E0r07            [12]    2 	ldh	(__AUD3WAVERAM+7), a
+    00000038 2A               [ 8]    1 	ld	a, (hl+)
+    00000039 E0r08            [12]    2 	ldh	(__AUD3WAVERAM+8), a
+    0000003B 2A               [ 8]    1 	ld	a, (hl+)
+    0000003C E0r09            [12]    2 	ldh	(__AUD3WAVERAM+9), a
+    0000003E 2A               [ 8]    1 	ld	a, (hl+)
+    0000003F E0r0A            [12]    2 	ldh	(__AUD3WAVERAM+10), a
+    00000041 2A               [ 8]    1 	ld	a, (hl+)
+    00000042 E0r0B            [12]    2 	ldh	(__AUD3WAVERAM+11), a
+    00000044 2A               [ 8]    1 	ld	a, (hl+)
+    00000045 E0r0C            [12]    2 	ldh	(__AUD3WAVERAM+12), a
+    00000047 2A               [ 8]    1 	ld	a, (hl+)
+    00000048 E0r0D            [12]    2 	ldh	(__AUD3WAVERAM+13), a
+    0000004A 2A               [ 8]    1 	ld	a, (hl+)
+    0000004B E0r0E            [12]    2 	ldh	(__AUD3WAVERAM+14), a
+    0000004D 2A               [ 8]    1 	ld	a, (hl+)
+    0000004E E0r0F            [12]    2 	ldh	(__AUD3WAVERAM+15), a
+    00000050 3E 80            [ 8]   77 	ld	a, #0x80
+    00000052 E0r00            [12]   78 	ldh	(_NR30_REG), a
+    00000054 3E FE            [ 8]   79 	ld	a, #0xFE ; length of wave
+    00000056 E0r00            [12]   80 	ldh	(_NR31_REG), a
+    00000058 3E 20            [ 8]   81 	ld	a, #0x20 ; volume
+    0000005A E0r00            [12]   82 	ldh	(_NR32_REG), a
+    0000005C AF               [ 4]   83 	xor	a ; low freq bits are zero
+    0000005D E0r00            [12]   84 	ldh	(_NR33_REG), a
+    0000005F 3E C7            [ 8]   85 	ld	a, #0xC7 ; start; no loop; high freq bits are 111
+    00000061 E0r00            [12]   86 	ldh	(_NR34_REG), a
+    00000063 79               [ 4]   87 	ld	a, c
+    00000064 E0r00            [12]   88 	ldh	(_NR51_REG), a
+    00000066 7B               [ 4]   89 	ld	a, e ; restore bank
+    00000067 EAr00r00         [16]   90 	ld	(_rROMB0), a
+    0000006A 7D               [ 4]   91 	ld	a, l ; save current position
+    0000006B EAr01r00         [16]   92 	ld	(#_play_sample), a
+    0000006E 7C               [ 4]   93 	ld	a, h
+    0000006F EAr02r00         [16]   94 	ld	(#_play_sample+1), a
+    00000072 21r03r00         [12]   95 	ld	hl, #_play_length ; decrement length variable
+    00000075 7E               [ 8]   96 	ld	a, (hl)
+    00000076 D6 01            [ 8]   97 	sub	#1
+    00000078 22               [ 8]   98 	ld	(hl+), a
+    00000079 7E               [ 8]   99 	ld	a, (hl)
+    0000007A DE 00            [ 8]  100 	sbc	#0
+    0000007C 77               [ 8]  101 	ld	(hl), a
+    0000007D C9               [16]  102 	ret
+                                    103 ;src/sample_player.c:69: }
+                                    104 ;src/sample_player.c:71: void set_sample(UINT8 bank, const UINT8 * sample, UINT16 length) __critical {
+                                    105 ;	---------------------------------
+                                    106 ; Function set_sample
+                                    107 ; ---------------------------------
+    0000007E                        108 _set_sample::
+    0000007E F3               [ 4]  109 	di
+    0000007F EAr00r00         [16]  110 	ld	(#_play_bank),a
+    00000082 21r01r00         [12]  111 	ld	hl, #_play_sample
+    00000085 7B               [ 4]  112 	ld	a, e
+    00000086 22               [ 8]  113 	ld	(hl+), a
+    00000087 72               [ 8]  114 	ld	(hl), d
+                                    115 ;src/sample_player.c:72: play_bank = bank, play_sample = sample, play_length = length >> 4;
+    00000088 F8 02            [12]  116 	ldhl	sp,	#2
+    0000008A 7E               [ 8]  117 	ld	a, (hl)
+    0000008B EAr03r00         [16]  118 	ld	(#_play_length),a
+    0000008E F8 03            [12]  119 	ldhl	sp,	#3
+    00000090 7E               [ 8]  120 	ld	a, (hl)
+    00000091 21r04r00         [12]  121 	ld	hl, #_play_length + 1
+    00000094 77               [ 8]  122 	ld	(hl), a
+    00000095 CB 3E            [16]  123 	srl	(hl)
+    00000097 2B               [ 8]  124 	dec	hl
+    00000098 CB 1E            [16]  125 	rr	(hl)
+    0000009A 23               [ 8]  126 	inc	hl
+    0000009B CB 3E            [16]  127 	srl	(hl)
+    0000009D 2B               [ 8]  128 	dec	hl
+    0000009E CB 1E            [16]  129 	rr	(hl)
+    000000A0 23               [ 8]  130 	inc	hl
+    000000A1 CB 3E            [16]  131 	srl	(hl)
+    000000A3 2B               [ 8]  132 	dec	hl
+    000000A4 CB 1E            [16]  133 	rr	(hl)
+    000000A6 23               [ 8]  134 	inc	hl
+    000000A7 CB 3E            [16]  135 	srl	(hl)
+    000000A9 2B               [ 8]  136 	dec	hl
+    000000AA CB 1E            [16]  137 	rr	(hl)
+                                    138 ;src/sample_player.c:73: }
+    000000AC FB               [ 4]  139 	ei
+    000000AD E1               [12]  140 	pop	hl
+    000000AE F1               [12]  141 	pop	af
+    000000AF E9               [ 4]  142 	jp	(hl)
+                                    143 	.area _HOME
+                                    144 ;--------------------------------------------------------
+                                    145 ; code
+                                    146 ;--------------------------------------------------------
+                                    147 	.area _CODE
+                                    148 	.area _CODE
+                                    149 	.area _INITIALIZER
+    00000000                        150 __xinit__play_bank:
+    00000000 01                     151 	.db #0x01	; 1
+    00000001                        152 __xinit__play_sample:
+    00000001 00 00                  153 	.dw #0x0000
+    00000003                        154 __xinit__play_length:
+    00000003 00 00                  155 	.dw #0x0000
+                                    156 	.area _CABS (ABS)

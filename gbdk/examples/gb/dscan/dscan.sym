@@ -1,0 +1,108 @@
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 1
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    .__.$$$.                                                    =   00002710 L
+    .__.ABS.                                                    =   00000000 G
+    .__.CPU.                                                    =   00000000 L
+    .__.H$L.                                                    =   00000000 L
+    _DIV_REG                                                        ******** GX
+    _LCDC_REG                                                       ******** GX
+    _VBK_REG                                                        ******** GX
+    __cpu                                                           ******** GX
+    __divuint                                                       ******** GX
+    __modsint                                                       ******** GX
+    __moduint                                                       ******** GX
+  0 __str_0                                                         0000124F R
+  0 __str_1                                                         00001253 R
+  0 __str_2                                                         00001256 R
+  0 __str_3                                                         0000125F R
+  0 __str_4                                                         00001268 R
+    _arand                                                          ******** GX
+  0 _bkg                                                            00000075 GR
+  0 _bkgCGB                                                         00000015 GR
+  0 _bkg_c                                                          000007DD GR
+  0 _bkg_m                                                          00000675 GR
+  0 _bkg_p                                                          000011C5 GR
+  0 _bombs                                                          000019D0 GR
+    _delay                                                          ******** GX
+    _display_off                                                    ******** GX
+  2 _ef                                                             0000005A GR
+  0 _enemys                                                         00001B21 GR
+  2 _ex                                                             00000064 GR
+  2 _ey                                                             0000006E GR
+  0 _fore                                                           000009C5 GR
+  0 _foreCGB                                                        00000945 GR
+  0 _hide_msg                                                       000013F9 GR
+  0 _init_enemy                                                     00001673 GR
+  0 _init_kirai                                                     0000170B GR
+  0 _init_player                                                    000015A6 GR
+  0 _init_score                                                     00001410 GR
+  0 _init_screen                                                    00001427 GR
+  0 _init_tama                                                      000015E3 GR
+    _initarand                                                      ******** GX
+    _joypad                                                         ******** GX
+  2 _k_left                                                         0000009F GR
+  2 _k_right                                                        0000009E GR
+  2 _kf                                                             00000078 GR
+  0 _kirai                                                          0000297A GR
+  2 _kx                                                             00000084 GR
+  2 _ky                                                             00000090 GR
+  0 _main                                                           00002B46 GR
+  0 _make_rnd                                                       000012E7 GR
+  0 _msg_1up                                                        00001245 GR
+  0 _msg_gover                                                      00001249 GR
+  0 _msg_lv                                                         00001247 GR
+  0 _msg_pause                                                      0000124B GR
+  0 _msg_start                                                      0000124D GR
+  2 _msg_tile                                                       00000000 GR
+  0 _obj_p                                                          00001205 GR
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 2
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+  2 _pf                                                             00000040 GR
+  2 _pl                                                             00000043 GR
+  0 _player                                                         00001768 GR
+  2 _pp                                                             00000042 GR
+  2 _ps                                                             00000046 GR
+  2 _pw                                                             00000044 GR
+  2 _px                                                             00000041 GR
+  2 _rnd_enemy                                                      0000009C GR
+  2 _rnd_kirai                                                      0000009D GR
+  0 _set_bkg_attr                                                   00001271 GR
+    _set_bkg_data                                                   ******** GX
+    _set_bkg_palette                                                ******** GX
+    _set_bkg_tiles                                                  ******** GX
+  0 _set_level                                                      00001373 GR
+  0 _set_sprite_attrb                                               00000000 GR
+    _set_sprite_data                                                ******** GX
+    _set_sprite_palette                                             ******** GX
+    _shadow_OAM                                                     ******** GX
+  0 _show_gover                                                     000013C6 GR
+  0 _show_level                                                     00001397 GR
+  0 _show_pause                                                     000013E2 GR
+  0 _show_score                                                     000012F5 GR
+  2 _tf                                                             00000048 GR
+  2 _tx                                                             0000004E GR
+  2 _ty                                                             00000054 GR
+    _waitpadup                                                      ******** GX
+
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 3
+Hexadecimal [32-Bits]
+
+Area Table
+
+   0 _CODE                                      size     2B93   flags    0
+   1 _HRAM                                      size        0   flags    0
+   2 _DATA                                      size       A0   flags    0
+   3 _INITIALIZED                               size        0   flags    0
+   4 _DABS                                      size        0   flags    8
+   5 _HOME                                      size        0   flags    0
+   6 _GSINIT                                    size        0   flags    0
+   7 _GSFINAL                                   size        0   flags    0
+   8 _INITIALIZER                               size        0   flags    0
+   9 _CABS                                      size        0   flags    8
+

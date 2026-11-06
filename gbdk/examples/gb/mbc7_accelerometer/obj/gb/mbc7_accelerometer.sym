@@ -1,0 +1,52 @@
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 1
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    .__.$$$.                                                    =   00002710 L
+    .__.ABS.                                                    =   00000000 G
+    .__.CPU.                                                    =   00000000 L
+    .__.H$L.                                                    =   00000000 L
+  8 __xinit__accel_origin_set                                       00000000 R
+  8 __xinit__accel_x_origin                                         00000001 R
+  8 __xinit__accel_x_relative                                       00000005 R
+  8 __xinit__accel_y_origin                                         00000003 R
+  8 __xinit__accel_y_relative                                       00000007 R
+  3 _accel_origin_set                                               00000000 GR
+  2 _accel_x                                                        00000000 GR
+  3 _accel_x_origin                                                 00000001 GR
+  3 _accel_x_relative                                               00000005 GR
+  2 _accel_y                                                        00000002 GR
+  3 _accel_y_origin                                                 00000003 GR
+  3 _accel_y_relative                                               00000007 GR
+    _delay                                                          ******** GX
+  0 _mbc7_accel_init                                                00000027 GR
+  0 _mbc7_accel_read                                                00000000 GR
+  0 _mbc7_accel_setorigin                                           0000003A GR
+  0 _mbc7_accel_update                                              00000058 GR
+    _rMBC7_ACCEL_X_HI                                               ******** GX
+    _rMBC7_ACCEL_X_LO                                               ******** GX
+    _rMBC7_ACCEL_Y_HI                                               ******** GX
+    _rMBC7_ACCEL_Y_LO                                               ******** GX
+    _rMBC7_LATCH_1                                                  ******** GX
+    _rMBC7_LATCH_2                                                  ******** GX
+    _rMBC7_SRAM_ENABLE_1                                            ******** GX
+    _rMBC7_SRAM_ENABLE_2                                            ******** GX
+
+
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 2
+Hexadecimal [32-Bits]
+
+Area Table
+
+   0 _CODE                                      size       98   flags    0
+   1 _HRAM                                      size        0   flags    0
+   2 _DATA                                      size        4   flags    0
+   3 _INITIALIZED                               size        9   flags    0
+   4 _DABS                                      size        0   flags    8
+   5 _HOME                                      size        0   flags    0
+   6 _GSINIT                                    size        0   flags    0
+   7 _GSFINAL                                   size        0   flags    0
+   8 _INITIALIZER                               size        9   flags    0
+   9 _CABS                                      size        0   flags    8
+

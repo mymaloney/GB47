@@ -1,0 +1,31 @@
+XL4
+H A areas 4 global symbols
+M hram
+S .__.ABS. Def00000000
+S _my_hram_variable Ref00000000
+S _printf Ref00000000
+A _CODE size 2A flags 0 addr 0
+S _main Def00000000
+A _HRAM size 0 flags 0 addr 0
+A _DATA size 0 flags 0 addr 0
+A _INITIALIZED size 0 flags 0 addr 0
+A _DABS size 0 flags 8 addr 0
+A _HOME size 0 flags 0 addr 0
+A _GSINIT size 0 flags 0 addr 0
+A _GSFINAL size 0 flags 0 addr 0
+A _INITIALIZER size 0 flags 0 addr 0
+A _CABS size 0 flags 8 addr 0
+T 00 00 00 00
+R 00 00 00 00
+T 00 00 00 00 3E 05 E0 00 00 00 00 11 00 00 D5 F0
+R 00 00 00 00 0B 07 01 00 02 0C 01 00
+T 09 00 00 00 00 00 00 00 F5 33 11 16 00 D5 CD
+R 00 00 00 00 0B 04 01 00 00 0B 00 00
+T 11 00 00 00 00 00 E8 05 C9
+R 00 00 00 00 02 04 02 00
+T 16 00 00 00
+R 00 00 00 00
+T 16 00 00 00 76 61 6C 75 65 20 69 73 3A 20 25 68
+R 00 00 00 00
+T 22 00 00 00 64 20 61 74 20 25 78 00
+R 00 00 00 00

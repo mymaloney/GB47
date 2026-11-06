@@ -1,0 +1,409 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module main
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl _main
+                                     11 	.globl _LCD_ISR
+                                     12 	.globl _hblank_copy_vram
+                                     13 	.globl _fill_bkg_rect
+                                     14 	.globl _set_bkg_tile_xy
+                                     15 	.globl _set_vram_byte
+                                     16 	.globl _display_off
+                                     17 	.globl _vsync
+                                     18 	.globl _set_interrupts
+                                     19 	.globl _joypad
+                                     20 	.globl _add_LCD
+                                     21 	.globl _animation_counter
+                                     22 	.globl _animation_speed
+                                     23 	.globl _animation_direction
+                                     24 	.globl _animation
+                                     25 	.globl _joy
+                                     26 	.globl _current_frame
+                                     27 	.globl _old_joy
+                                     28 ;--------------------------------------------------------
+                                     29 ; special function registers
+                                     30 ;--------------------------------------------------------
+                                     31 	.area _HRAM
+                                     32 ;--------------------------------------------------------
+                                     33 ; ram data
+                                     34 ;--------------------------------------------------------
+                                     35 	.area _DATA
+    00000000                         36 _LCD_ISR_odd_even_frame_10000_141:
+    00000000                         37 	.ds 1
+    00000001                         38 _old_joy::
+    00000001                         39 	.ds 1
+                                     40 ;--------------------------------------------------------
+                                     41 ; ram data
+                                     42 ;--------------------------------------------------------
+                                     43 	.area _INITIALIZED
+    00000000                         44 _current_frame::
+    00000000                         45 	.ds 2
+    00000002                         46 _joy::
+    00000002                         47 	.ds 1
+    00000003                         48 _animation::
+    00000003                         49 	.ds 1
+    00000004                         50 _animation_direction::
+    00000004                         51 	.ds 1
+    00000005                         52 _animation_speed::
+    00000005                         53 	.ds 1
+    00000006                         54 _animation_counter::
+    00000006                         55 	.ds 1
+                                     56 ;--------------------------------------------------------
+                                     57 ; absolute external ram data
+                                     58 ;--------------------------------------------------------
+                                     59 	.area _DABS (ABS)
+                                     60 ;--------------------------------------------------------
+                                     61 ; global & static initialisations
+                                     62 ;--------------------------------------------------------
+                                     63 	.area _HOME
+                                     64 	.area _GSINIT
+                                     65 	.area _GSFINAL
+                                     66 	.area _GSINIT
+                                     67 ;src/main.c:16: static bool odd_even_frame = false;
+    00000000 AF               [ 4]   68 	xor	a, a
+    00000001 21r00r00         [12]   69 	ld	hl, #_LCD_ISR_odd_even_frame_10000_141
+    00000004 77               [ 8]   70 	ld	(hl), a
+                                     71 ;--------------------------------------------------------
+                                     72 ; Home
+                                     73 ;--------------------------------------------------------
+                                     74 	.area _HOME
+                                     75 	.area _HOME
+                                     76 ;--------------------------------------------------------
+                                     77 ; code
+                                     78 ;--------------------------------------------------------
+                                     79 	.area _CODE
+                                     80 ;src/main.c:15: void LCD_ISR(void) {
+                                     81 ;	---------------------------------
+                                     82 ; Function LCD_ISR
+                                     83 ; ---------------------------------
+    00000000                         84 _LCD_ISR::
+    00000000 3B               [ 8]   85 	dec	sp
+                                     86 ;src/main.c:17: uint8_t _save = CURRENT_BANK;
+    00000001 F0r00            [12]   87 	ldh	a, (__current_bank + 0)
+    00000003 F8 00            [12]   88 	ldhl	sp,	#0
+    00000005 77               [ 8]   89 	ld	(hl), a
+                                     90 ;src/main.c:18: SWITCH_ROM(current_frame->bank);
+    00000006 FAr00r00         [16]   91 	ld	a, (_current_frame)
+    00000009 21r01r00         [12]   92 	ld	hl, #_current_frame + 1
+    0000000C 46               [ 8]   93 	ld	b, (hl)
+    0000000D 4F               [ 4]   94 	ld	c, a
+    0000000E 03               [ 8]   95 	inc	bc
+    0000000F 03               [ 8]   96 	inc	bc
+    00000010 0A               [ 8]   97 	ld	a, (bc)
+    00000011 E0r00            [12]   98 	ldh	(__current_bank + 0), a
+    00000013 0A               [ 8]   99 	ld	a, (bc)
+    00000014 EAr00r00         [16]  100 	ld	(#_rROMB0),a
+                                    101 ;src/main.c:20: if (odd_even_frame = !odd_even_frame) {
+    00000017 FAr00r00         [16]  102 	ld	a, (#_LCD_ISR_odd_even_frame_10000_141)
+    0000001A EE 01            [ 8]  103 	xor	a, #0x01
+    0000001C 6F               [ 4]  104 	ld	l, a
+    0000001D EAr00r00         [16]  105 	ld	(_LCD_ISR_odd_even_frame_10000_141), a
+    00000020 CB 45            [ 8]  106 	bit	0, l
+    00000022 28 20            [12]  107 	jr	Z, 00102$
+                                    108 ;src/main.c:21: LCDC_REG &= ~LCDCF_BG8000;
+    00000024 F0r00            [12]  109 	ldh	a, (_LCDC_REG + 0)
+    00000026 E6 EF            [ 8]  110 	and	a, #0xef
+    00000028 E0r00            [12]  111 	ldh	(_LCDC_REG + 0), a
+                                    112 ;src/main.c:22: hblank_copy_destination = _VRAM8000;
+    0000002A 21r00r00         [12]  113 	ld	hl, #_hblank_copy_destination
+    0000002D 3Er00            [ 8]  114 	ld	a, #<(__VRAM8000)
+    0000002F 22               [ 8]  115 	ld	(hl+), a
+    00000030 36s00            [12]  116 	ld	(hl), #>(__VRAM8000)
+                                    117 ;src/main.c:23: hblank_copy_vram(current_frame->tiles, MAP_WIDTH * MAP_HEIGHT);
+    00000032 21r00r00         [12]  118 	ld	hl, #_current_frame
+    00000035 2A               [ 8]  119 	ld	a,	(hl+)
+    00000036 66               [ 8]  120 	ld	h, (hl)
+    00000037 6F               [ 4]  121 	ld	l, a
+    00000038 2A               [ 8]  122 	ld	a, (hl+)
+    00000039 4F               [ 4]  123 	ld	c, a
+    0000003A 46               [ 8]  124 	ld	b, (hl)
+    0000003B 3E 7E            [ 8]  125 	ld	a, #0x7e
+    0000003D 59               [ 4]  126 	ld	e, c
+    0000003E 50               [ 4]  127 	ld	d, b
+    0000003F CDr00r00         [24]  128 	call	_hblank_copy_vram
+    00000042 18 1E            [12]  129 	jr	00103$
+    00000044                        130 00102$:
+                                    131 ;src/main.c:25: LCDC_REG |= LCDCF_BG8000;
+    00000044 F0r00            [12]  132 	ldh	a, (_LCDC_REG + 0)
+    00000046 F6 10            [ 8]  133 	or	a, #0x10
+    00000048 E0r00            [12]  134 	ldh	(_LCDC_REG + 0), a
+                                    135 ;src/main.c:26: hblank_copy_destination = _VRAM9000;
+    0000004A 21r00r00         [12]  136 	ld	hl, #_hblank_copy_destination
+    0000004D 3Er00            [ 8]  137 	ld	a, #<(__VRAM9000)
+    0000004F 22               [ 8]  138 	ld	(hl+), a
+    00000050 36s00            [12]  139 	ld	(hl), #>(__VRAM9000)
+                                    140 ;src/main.c:27: hblank_copy_vram(current_frame->tiles, MAP_WIDTH * MAP_HEIGHT);
+    00000052 21r00r00         [12]  141 	ld	hl, #_current_frame
+    00000055 2A               [ 8]  142 	ld	a,	(hl+)
+    00000056 66               [ 8]  143 	ld	h, (hl)
+    00000057 6F               [ 4]  144 	ld	l, a
+    00000058 2A               [ 8]  145 	ld	a, (hl+)
+    00000059 4F               [ 4]  146 	ld	c, a
+    0000005A 46               [ 8]  147 	ld	b, (hl)
+    0000005B 3E 7E            [ 8]  148 	ld	a, #0x7e
+    0000005D 59               [ 4]  149 	ld	e, c
+    0000005E 50               [ 4]  150 	ld	d, b
+    0000005F CDr00r00         [24]  151 	call	_hblank_copy_vram
+    00000062                        152 00103$:
+                                    153 ;src/main.c:29: SWITCH_ROM(_save);
+    00000062 F8 00            [12]  154 	ldhl	sp,	#0
+    00000064 7E               [ 8]  155 	ld	a, (hl)
+    00000065 E0r00            [12]  156 	ldh	(__current_bank + 0), a
+    00000067 7E               [ 8]  157 	ld	a, (hl)
+    00000068 EAr00r00         [16]  158 	ld	(#_rROMB0),a
+                                    159 ;src/main.c:30: }
+    0000006B 33               [ 8]  160 	inc	sp
+    0000006C C9               [16]  161 	ret
+                                    162 ;src/main.c:44: void main(void) {
+                                    163 ;	---------------------------------
+                                    164 ; Function main
+                                    165 ; ---------------------------------
+    0000006D                        166 _main::
+                                    167 ;src/main.c:45: DISPLAY_OFF;
+    0000006D CDr00r00         [24]  168 	call	_display_off
+                                    169 ;src/main.c:50: }
+    00000070 F3               [ 4]  170 	di
+                                    171 ;src/main.c:48: LYC_REG = 0, STAT_REG |= STATF_LYC;
+    00000071 AF               [ 4]  172 	xor	a, a
+    00000072 E0r00            [12]  173 	ldh	(_LYC_REG + 0), a
+    00000074 F0r00            [12]  174 	ldh	a, (_STAT_REG + 0)
+    00000076 F6 40            [ 8]  175 	or	a, #0x40
+    00000078 E0r00            [12]  176 	ldh	(_STAT_REG + 0), a
+                                    177 ;src/main.c:49: add_LCD(LCD_ISR);
+    0000007A 11r00r00         [12]  178 	ld	de, #_LCD_ISR
+    0000007D CDr00r00         [24]  179 	call	_add_LCD
+    00000080 FB               [ 4]  180 	ei
+                                    181 ;src/main.c:51: set_interrupts(IE_REG | LCD_IFLAG);
+    00000081 F0r00            [12]  182 	ldh	a, (_IE_REG + 0)
+    00000083 CB CF            [ 8]  183 	set	1, a
+    00000085 CDr00r00         [24]  184 	call	_set_interrupts
+                                    185 ;src/main.c:54: BGP_REG = DMG_PALETTE(DMG_WHITE, DMG_LITE_GRAY, DMG_DARK_GRAY, DMG_BLACK);
+    00000088 3E E4            [ 8]  186 	ld	a, #0xe4
+    0000008A E0r00            [12]  187 	ldh	(_BGP_REG + 0), a
+                                    188 ;src/main.c:57: fill_bkg_rect(0, 0, 32, 32, 0);
+    0000008C AF               [ 4]  189 	xor	a, a
+    0000008D 67               [ 4]  190 	ld	h, a
+    0000008E 2E 20            [ 8]  191 	ld	l, #0x20
+    00000090 E5               [16]  192 	push	hl
+    00000091 3E 20            [ 8]  193 	ld	a, #0x20
+    00000093 F5               [16]  194 	push	af
+    00000094 33               [ 8]  195 	inc	sp
+    00000095 AF               [ 4]  196 	xor	a, a
+    00000096 0F               [ 4]  197 	rrca
+    00000097 F5               [16]  198 	push	af
+    00000098 CDr00r00         [24]  199 	call	_fill_bkg_rect
+    0000009B E8 05            [16]  200 	add	sp, #5
+                                    201 ;src/main.c:58: uint8_t v = 0;
+                                    202 ;src/main.c:59: for (uint8_t y = POSITION_Y; y != POSITION_Y + MAP_HEIGHT; y++) {
+    0000009D 01 00 04         [12]  203 	ld	bc, #0x400
+    000000A0                        204 00141$:
+    000000A0 78               [ 4]  205 	ld	a, b
+    000000A1 D6 0D            [ 8]  206 	sub	a, #0x0d
+    000000A3 28 25            [12]  207 	jr	Z, 00102$
+                                    208 ;src/main.c:60: uint8_t * addr = set_bkg_tile_xy(POSITION_X, y, v++);
+    000000A5 79               [ 4]  209 	ld	a, c
+    000000A6 0C               [ 4]  210 	inc	c
+    000000A7 C5               [16]  211 	push	bc
+    000000A8 F5               [16]  212 	push	af
+    000000A9 33               [ 8]  213 	inc	sp
+    000000AA 58               [ 4]  214 	ld	e, b
+    000000AB 3E 03            [ 8]  215 	ld	a, #0x03
+    000000AD CDr00r00         [24]  216 	call	_set_bkg_tile_xy
+    000000B0 59               [ 4]  217 	ld	e, c
+    000000B1 50               [ 4]  218 	ld	d, b
+    000000B2 C1               [12]  219 	pop	bc
+                                    220 ;src/main.c:61: for (uint8_t x = 0; x != MAP_WIDTH - 1; x++) set_vram_byte(++addr, v++);
+    000000B3 2E 00            [ 8]  221 	ld	l, #0x00
+    000000B5                        222 00138$:
+    000000B5 7D               [ 4]  223 	ld	a, l
+    000000B6 D6 0D            [ 8]  224 	sub	a, #0x0d
+    000000B8 28 0D            [12]  225 	jr	Z, 00162$
+    000000BA 79               [ 4]  226 	ld	a, c
+    000000BB 0C               [ 4]  227 	inc	c
+    000000BC 13               [ 8]  228 	inc	de
+    000000BD E5               [16]  229 	push	hl
+    000000BE D5               [16]  230 	push	de
+    000000BF CDr00r00         [24]  231 	call	_set_vram_byte
+    000000C2 D1               [12]  232 	pop	de
+    000000C3 E1               [12]  233 	pop	hl
+    000000C4 2C               [ 4]  234 	inc	l
+    000000C5 18 EE            [12]  235 	jr	00138$
+    000000C7                        236 00162$:
+                                    237 ;src/main.c:59: for (uint8_t y = POSITION_Y; y != POSITION_Y + MAP_HEIGHT; y++) {
+    000000C7 04               [ 4]  238 	inc	b
+    000000C8 18 D6            [12]  239 	jr	00141$
+    000000CA                        240 00102$:
+                                    241 ;src/main.c:64: SHOW_BKG;
+    000000CA F0r00            [12]  242 	ldh	a, (_LCDC_REG + 0)
+    000000CC F6 01            [ 8]  243 	or	a, #0x01
+    000000CE E0r00            [12]  244 	ldh	(_LCDC_REG + 0), a
+                                    245 ;src/main.c:65: DISPLAY_ON;
+    000000D0 F0r00            [12]  246 	ldh	a, (_LCDC_REG + 0)
+    000000D2 F6 80            [ 8]  247 	or	a, #0x80
+    000000D4 E0r00            [12]  248 	ldh	(_LCDC_REG + 0), a
+                                    249 ;src/main.c:67: bool step_animation = false;
+    000000D6 0E 00            [ 8]  250 	ld	c, #0x00
+                                    251 ;src/main.c:69: while (true) {
+    000000D8                        252 00131$:
+                                    253 ;src/main.c:70: vsync();
+    000000D8 CDr00r00         [24]  254 	call	_vsync
+                                    255 ;src/main.c:34: old_joy = joy, joy = joypad();
+    000000DB FAr02r00         [16]  256 	ld	a, (#_joy)
+    000000DE EAr01r00         [16]  257 	ld	(#_old_joy),a
+    000000E1 CDr00r00         [24]  258 	call	_joypad
+    000000E4 21r02r00         [12]  259 	ld	hl, #_joy
+    000000E7 77               [ 8]  260 	ld	(hl), a
+                                    261 ;src/main.c:73: if (joy & J_LEFT) {
+    000000E8 7E               [ 8]  262 	ld	a, (hl)
+    000000E9 CB 4F            [ 8]  263 	bit	1, a
+    000000EB 28 0B            [12]  264 	jr	Z, 00106$
+                                    265 ;src/main.c:74: animation = false;
+                                    266 ;src/main.c:75: animation_direction = false;
+    000000ED AF               [ 4]  267 	xor	a, a
+    000000EE EAr03r00         [16]  268 	ld	(#_animation), a
+    000000F1 EAr04r00         [16]  269 	ld	(#_animation_direction),a
+                                    270 ;src/main.c:76: step_animation = true;
+    000000F4 0E 01            [ 8]  271 	ld	c, #0x01
+    000000F6 18 0E            [12]  272 	jr	00107$
+    000000F8                        273 00106$:
+                                    274 ;src/main.c:77: } else if (joy & J_RIGHT) {
+    000000F8 0F               [ 4]  275 	rrca
+    000000F9 30 0B            [12]  276 	jr	NC, 00107$
+                                    277 ;src/main.c:78: animation = false;
+    000000FB AF               [ 4]  278 	xor	a, a
+    000000FC EAr03r00         [16]  279 	ld	(#_animation),a
+                                    280 ;src/main.c:79: animation_direction = true;
+    000000FF 21r04r00         [12]  281 	ld	hl, #_animation_direction
+    00000102 36 01            [12]  282 	ld	(hl), #0x01
+                                    283 ;src/main.c:80: step_animation = true;
+    00000104 0E 01            [ 8]  284 	ld	c, #0x01
+    00000106                        285 00107$:
+                                    286 ;src/main.c:37: return ((joy & ~old_joy) & key);
+    00000106 FAr01r00         [16]  287 	ld	a, (#_old_joy)
+    00000109 2F               [ 4]  288 	cpl
+    0000010A 21r02r00         [12]  289 	ld	hl, #_joy
+    0000010D A6               [ 8]  290 	and	a, (hl)
+    0000010E 47               [ 4]  291 	ld	b, a
+    0000010F CB 50            [ 8]  292 	bit	2, b
+    00000111 28 0A            [12]  293 	jr	Z, 00115$
+                                    294 ;src/main.c:83: if (KEY_PRESSED(J_UP)) {
+                                    295 ;src/main.c:84: if (animation_speed) animation_speed--;
+    00000113 21r05r00         [12]  296 	ld	hl, #_animation_speed
+    00000116 7E               [ 8]  297 	ld	a, (hl)
+    00000117 B7               [ 4]  298 	or	a, a
+    00000118 28 12            [12]  299 	jr	Z, 00116$
+    0000011A 35               [12]  300 	dec	(hl)
+    0000011B 18 0F            [12]  301 	jr	00116$
+    0000011D                        302 00115$:
+                                    303 ;src/main.c:37: return ((joy & ~old_joy) & key);
+    0000011D CB 58            [ 8]  304 	bit	3, b
+    0000011F 28 0B            [12]  305 	jr	Z, 00116$
+                                    306 ;src/main.c:85: } else if (KEY_PRESSED(J_DOWN)) {
+                                    307 ;src/main.c:86: if (++animation_speed > 10) animation_speed = 10;
+    00000121 21r05r00         [12]  308 	ld	hl, #_animation_speed
+    00000124 34               [12]  309 	inc	(hl)
+    00000125 3E 0A            [ 8]  310 	ld	a, #0x0a
+    00000127 96               [ 8]  311 	sub	a, (hl)
+    00000128 30 02            [12]  312 	jr	NC, 00116$
+    0000012A 36 0A            [12]  313 	ld	(hl), #0x0a
+    0000012C                        314 00116$:
+                                    315 ;src/main.c:37: return ((joy & ~old_joy) & key);
+    0000012C CB 78            [ 8]  316 	bit	7, b
+    0000012E 28 07            [12]  317 	jr	Z, 00118$
+                                    318 ;src/main.c:89: if (KEY_PRESSED(J_START)) animation  = !animation;
+    00000130 21r03r00         [12]  319 	ld	hl, #_animation
+    00000133 7E               [ 8]  320 	ld	a, (hl)
+    00000134 EE 01            [ 8]  321 	xor	a, #0x01
+    00000136 77               [ 8]  322 	ld	(hl), a
+    00000137                        323 00118$:
+                                    324 ;src/main.c:92: if ((step_animation) || ((animation) && (++animation_counter > animation_speed))) {
+    00000137 CB 41            [ 8]  325 	bit	0, c
+    00000139 20 14            [12]  326 	jr	NZ, 00126$
+    0000013B 21r03r00         [12]  327 	ld	hl, #_animation
+    0000013E CB 46            [12]  328 	bit	0, (hl)
+    00000140 28 96            [12]  329 	jr	Z, 00131$
+    00000142 21r06r00         [12]  330 	ld	hl, #_animation_counter
+    00000145 34               [12]  331 	inc	(hl)
+    00000146 FAr05r00         [16]  332 	ld	a, (#_animation_speed)
+    00000149 21r06r00         [12]  333 	ld	hl, #_animation_counter
+    0000014C 96               [ 8]  334 	sub	a, (hl)
+    0000014D 30 89            [12]  335 	jr	NC, 00131$
+    0000014F                        336 00126$:
+                                    337 ;src/main.c:93: animation_counter = 0;
+    0000014F AF               [ 4]  338 	xor	a, a
+    00000150 EAr06r00         [16]  339 	ld	(#_animation_counter),a
+                                    340 ;src/main.c:94: if (animation_direction) CRITICAL {
+    00000153 21r04r00         [12]  341 	ld	hl, #_animation_direction
+    00000156 CB 46            [12]  342 	bit	0, (hl)
+    00000158 28 22            [12]  343 	jr	Z, 00124$
+                                    344 ;src/main.c:96: } else CRITICAL {
+    0000015A F3               [ 4]  345 	di
+                                    346 ;src/main.c:95: if (++current_frame == (frames + ANIMATION_FRAME_COUNT)) current_frame = frames;
+    0000015B 21r00r00         [12]  347 	ld	hl, #_current_frame
+    0000015E 7E               [ 8]  348 	ld	a, (hl)
+    0000015F C6 03            [ 8]  349 	add	a, #0x03
+    00000161 22               [ 8]  350 	ld	(hl+), a
+    00000162 7E               [ 8]  351 	ld	a, (hl)
+    00000163 CE 00            [ 8]  352 	adc	a, #0x00
+    00000165 32               [ 8]  353 	ld	(hl-), a
+    00000166 7E               [ 8]  354 	ld	a, (hl)
+    00000167 D6rC0            [ 8]  355 	sub	a, #<((_frames + 192))
+    00000169 20 0E            [12]  356 	jr	NZ, 00120$
+    0000016B 23               [ 8]  357 	inc	hl
+    0000016C 7E               [ 8]  358 	ld	a, (hl)
+    0000016D D6s00            [ 8]  359 	sub	a, #>((_frames + 192))
+    0000016F 20 08            [12]  360 	jr	NZ, 00120$
+    00000171 21r00r00         [12]  361 	ld	hl, #_current_frame
+    00000174 36r00            [12]  362 	ld	(hl), #<(_frames)
+    00000176 23               [ 8]  363 	inc	hl
+    00000177 36s00            [12]  364 	ld	(hl), #>(_frames)
+    00000179                        365 00120$:
+    00000179 FB               [ 4]  366 	ei
+    0000017A 18 1B            [12]  367 	jr	00125$
+    0000017C                        368 00124$:
+                                    369 ;src/main.c:98: }
+    0000017C F3               [ 4]  370 	di
+                                    371 ;src/main.c:97: if (--current_frame < frames) current_frame = frames + (ANIMATION_FRAME_COUNT - 1);
+    0000017D 21r00r00         [12]  372 	ld	hl, #_current_frame
+    00000180 7E               [ 8]  373 	ld	a, (hl)
+    00000181 C6 FD            [ 8]  374 	add	a, #0xfd
+    00000183 22               [ 8]  375 	ld	(hl+), a
+    00000184 7E               [ 8]  376 	ld	a, (hl)
+    00000185 CE FF            [ 8]  377 	adc	a, #0xff
+    00000187 32               [ 8]  378 	ld	(hl-), a
+    00000188 2A               [ 8]  379 	ld	a, (hl+)
+    00000189 D6r00            [ 8]  380 	sub	a, #<(_frames)
+    0000018B 7E               [ 8]  381 	ld	a, (hl)
+    0000018C DEs00            [ 8]  382 	sbc	a, #>(_frames)
+    0000018E 30 06            [12]  383 	jr	NC, 00122$
+    00000190 2B               [ 8]  384 	dec	hl
+    00000191 36rBD            [12]  385 	ld	(hl), #<((_frames + 189))
+    00000193 23               [ 8]  386 	inc	hl
+    00000194 36s00            [12]  387 	ld	(hl), #>((_frames + 189))
+    00000196                        388 00122$:
+    00000196 FB               [ 4]  389 	ei
+    00000197                        390 00125$:
+                                    391 ;src/main.c:99: step_animation = false;
+    00000197 0E 00            [ 8]  392 	ld	c, #0x00
+                                    393 ;src/main.c:102: }
+    00000199 C3rD8r00         [16]  394 	jp	00131$
+                                    395 	.area _CODE
+                                    396 	.area _INITIALIZER
+    00000000                        397 __xinit__current_frame:
+    00000000r00r00                  398 	.dw _frames
+    00000002                        399 __xinit__joy:
+    00000002 00                     400 	.db #0x00	; 0
+    00000003                        401 __xinit__animation:
+    00000003 01                     402 	.db #0x01	;  1
+    00000004                        403 __xinit__animation_direction:
+    00000004 01                     404 	.db #0x01	;  1
+    00000005                        405 __xinit__animation_speed:
+    00000005 01                     406 	.db #0x01	; 1
+    00000006                        407 __xinit__animation_counter:
+    00000006 00                     408 	.db #0x00	; 0
+                                    409 	.area _CABS (ABS)

@@ -1,0 +1,54 @@
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 1
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    .__.$$$.                                                    =   00002710 L
+    .__.ABS.                                                    =   00000000 G
+    .__.CPU.                                                    =   00000000 L
+    .__.H$L.                                                    =   00000000 L
+    ___sdcc_call_hl                                                 ******** GX
+  0 ___str_0                                                        0000001C R
+  0 ___str_1                                                        000000AE R
+  0 ___str_2                                                        000000BF R
+  0 ___str_3                                                        000000C8 R
+  0 ___str_4                                                        000000D8 R
+  0 ___str_5                                                        000000EA R
+  0 ___str_6                                                        000000FC R
+  0 ___str_7                                                        00000110 R
+  8 __xinit__counter                                                00000000 R
+  8 __xinit__inc_hiram_var                                          00000004 R
+  8 __xinit__inc_ram_var                                            00000002 R
+  3 _counter                                                        00000000 GR
+    _hiram_buffer                                               =   0000FFA0 G
+    _hiramcpy                                                       ******** GX
+  0 _inc                                                            00000000 GR
+  0 _inc_end                                                        00000008 GR
+    _inc_hiram                                                      ******** GX
+  3 _inc_hiram_var                                                  00000004 GR
+    _inc_ram                                                        ******** GX
+  3 _inc_ram_var                                                    00000002 GR
+  0 _main                                                           0000002C GR
+    _memcpy                                                         ******** GX
+  0 _print_counter                                                  00000009 GR
+    _printf                                                         ******** GX
+    _puts                                                           ******** GX
+    _ram_buffer                                                 =   0000D000 G
+
+
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 2
+Hexadecimal [32-Bits]
+
+Area Table
+
+   0 _CODE                                      size      11B   flags    0
+   1 _HRAM                                      size        0   flags    0
+   2 _DATA                                      size        0   flags    0
+   3 _INITIALIZED                               size        6   flags    0
+   4 _DABS                                      size        0   flags    8
+   5 _HOME                                      size        0   flags    0
+   6 _GSINIT                                    size        0   flags    0
+   7 _GSFINAL                                   size        0   flags    0
+   8 _INITIALIZER                               size        6   flags    0
+   9 _CABS                                      size        0   flags    8
+

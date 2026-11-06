@@ -1,0 +1,348 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module main
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl _main
+                                     11 	.globl _vsync_no_halt
+                                     12 	.globl _mbc7_accel_update
+                                     13 	.globl _mbc7_accel_init
+                                     14 	.globl _gotoxy
+                                     15 	.globl _puts
+                                     16 	.globl _printf
+                                     17 	.globl _set_sprite_data
+                                     18 	.globl _joypad
+                                     19 	.globl _joy
+                                     20 	.globl _old_joy
+                                     21 	.globl _sprite_tile
+                                     22 ;--------------------------------------------------------
+                                     23 ; special function registers
+                                     24 ;--------------------------------------------------------
+                                     25 	.area _HRAM
+                                     26 ;--------------------------------------------------------
+                                     27 ; ram data
+                                     28 ;--------------------------------------------------------
+                                     29 	.area _DATA
+    00000000                         30 _old_joy::
+    00000000                         31 	.ds 1
+                                     32 ;--------------------------------------------------------
+                                     33 ; ram data
+                                     34 ;--------------------------------------------------------
+                                     35 	.area _INITIALIZED
+    00000000                         36 _joy::
+    00000000                         37 	.ds 1
+                                     38 ;--------------------------------------------------------
+                                     39 ; absolute external ram data
+                                     40 ;--------------------------------------------------------
+                                     41 	.area _DABS (ABS)
+                                     42 ;--------------------------------------------------------
+                                     43 ; global & static initialisations
+                                     44 ;--------------------------------------------------------
+                                     45 	.area _HOME
+                                     46 	.area _GSINIT
+                                     47 	.area _GSFINAL
+                                     48 	.area _GSINIT
+                                     49 ;--------------------------------------------------------
+                                     50 ; Home
+                                     51 ;--------------------------------------------------------
+                                     52 	.area _HOME
+                                     53 	.area _HOME
+                                     54 ;--------------------------------------------------------
+                                     55 ; code
+                                     56 ;--------------------------------------------------------
+                                     57 	.area _CODE
+                                     58 ;src/main.c:58: void main(void)
+                                     59 ;	---------------------------------
+                                     60 ; Function main
+                                     61 ; ---------------------------------
+    00000000                         62 _main::
+    00000000 E8 FA            [16]   63 	add	sp, #-6
+                                     64 ;src/main.c:60: bool do_set_origin = false;
+    00000002 F8 00            [12]   65 	ldhl	sp,	#0
+    00000004 36 00            [12]   66 	ld	(hl), #0x00
+                                     67 ;src/main.c:61: bool show_data     = false;
+    00000006 F8 05            [12]   68 	ldhl	sp,	#5
+    00000008 36 00            [12]   69 	ld	(hl), #0x00
+                                     70 ;src/main.c:63: HIDE_SPRITES;
+    0000000A F0r00            [12]   71 	ldh	a, (_LCDC_REG + 0)
+    0000000C E6 FD            [ 8]   72 	and	a, #0xfd
+    0000000E E0r00            [12]   73 	ldh	(_LCDC_REG + 0), a
+                                     74 ;src/main.c:65: set_sprite_data(SPR_TILE_0, 1u, sprite_tile);
+    00000010 11r64r01         [12]   75 	ld	de, #_sprite_tile
+    00000013 D5               [16]   76 	push	de
+    00000014 AF               [ 4]   77 	xor	a, a
+    00000015 3C               [ 4]   78 	inc	a
+    00000016 F5               [16]   79 	push	af
+    00000017 CDr00r00         [24]   80 	call	_set_sprite_data
+    0000001A E8 04            [16]   81 	add	sp, #4
+                                     82 ;c:\users\malon\downloads\gbdk-win64\gbdk\include\gb\gb.h:1887: shadow_OAM[nb].tile=tile;
+    0000001C 21r02r00         [12]   83 	ld	hl, #(_shadow_OAM + 2)
+    0000001F 36 00            [12]   84 	ld	(hl), #0x00
+                                     85 ;src/main.c:68: printf("-B to Center\n");
+    00000021 11r74r01         [12]   86 	ld	de, #___str_1
+    00000024 CDr00r00         [24]   87 	call	_puts
+                                     88 ;src/main.c:69: printf("-SELECT toggles info");
+    00000027 11r81r01         [12]   89 	ld	de, #___str_2
+    0000002A D5               [16]   90 	push	de
+    0000002B CDr00r00         [24]   91 	call	_printf
+    0000002E E1               [12]   92 	pop	hl
+                                     93 ;src/main.c:71: mbc7_accel_init();
+    0000002F CDr00r00         [24]   94 	call	_mbc7_accel_init
+                                     95 ;src/main.c:73: while(1) {
+    00000032                         96 00111$:
+                                     97 ;src/main.c:76: INPUT_UPDATE;
+    00000032 FAr00r00         [16]   98 	ld	a, (#_joy)
+    00000035 EAr00r00         [16]   99 	ld	(#_old_joy),a
+    00000038 CDr00r00         [24]  100 	call	_joypad
+    0000003B EAr00r00         [16]  101 	ld	(#_joy),a
+                                    102 ;src/main.c:77: switch (INPUT_BUTTONPRESS(J_B | J_SELECT)) {
+    0000003E FAr00r00         [16]  103 	ld	a, (#_old_joy)
+    00000041 F8 03            [12]  104 	ldhl	sp,	#3
+    00000043 22               [ 8]  105 	ld	(hl+), a
+    00000044 AF               [ 4]  106 	xor	a, a
+    00000045 32               [ 8]  107 	ld	(hl-), a
+    00000046 3A               [ 8]  108 	ld	a, (hl-)
+    00000047 2B               [ 8]  109 	dec	hl
+    00000048 2F               [ 4]  110 	cpl
+    00000049 22               [ 8]  111 	ld	(hl+), a
+    0000004A AF               [ 4]  112 	xor	a, a
+    0000004B 2F               [ 4]  113 	cpl
+    0000004C 77               [ 8]  114 	ld	(hl), a
+    0000004D FAr00r00         [16]  115 	ld	a, (#_joy)
+    00000050 F8 04            [12]  116 	ldhl	sp,	#4
+    00000052 77               [ 8]  117 	ld	(hl), a
+    00000053 3A               [ 8]  118 	ld	a, (hl-)
+    00000054 32               [ 8]  119 	ld	(hl-), a
+    00000055 2B               [ 8]  120 	dec	hl
+    00000056 7E               [ 8]  121 	ld	a, (hl)
+    00000057 F8 04            [12]  122 	ldhl	sp,	#4
+    00000059 32               [ 8]  123 	ld	(hl-), a
+    0000005A 2A               [ 8]  124 	ld	a, (hl+)
+    0000005B A6               [ 8]  125 	and	a, (hl)
+    0000005C E6 60            [ 8]  126 	and	a, #0x60
+    0000005E FE 20            [ 8]  127 	cp	a, #0x20
+    00000060 28 06            [12]  128 	jr	Z, 00101$
+    00000062 D6 40            [ 8]  129 	sub	a, #0x40
+    00000064 28 08            [12]  130 	jr	Z, 00102$
+    00000066 18 0C            [12]  131 	jr	00103$
+                                    132 ;src/main.c:78: case J_B: do_set_origin = true; break;
+    00000068                        133 00101$:
+    00000068 F8 00            [12]  134 	ldhl	sp,	#0
+    0000006A 36 01            [12]  135 	ld	(hl), #0x01
+    0000006C 18 06            [12]  136 	jr	00103$
+                                    137 ;src/main.c:79: case J_SELECT: show_data ^= true; break;
+    0000006E                        138 00102$:
+    0000006E F8 05            [12]  139 	ldhl	sp,	#5
+    00000070 7E               [ 8]  140 	ld	a, (hl)
+    00000071 EE 01            [ 8]  141 	xor	a, #0x01
+    00000073 77               [ 8]  142 	ld	(hl), a
+                                    143 ;src/main.c:80: }
+    00000074                        144 00103$:
+                                    145 ;src/main.c:82: mbc7_accel_update(do_set_origin);
+    00000074 F8 00            [12]  146 	ldhl	sp,	#0
+    00000076 7E               [ 8]  147 	ld	a, (hl)
+    00000077 CDr00r00         [24]  148 	call	_mbc7_accel_update
+                                    149 ;src/main.c:85: if (do_set_origin) {
+    0000007A F8 00            [12]  150 	ldhl	sp,	#0
+    0000007C CB 46            [12]  151 	bit	0, (hl)
+    0000007E 28 33            [12]  152 	jr	Z, 00105$
+                                    153 ;src/main.c:86: do_set_origin = false;
+    00000080 36 00            [12]  154 	ld	(hl), #0x00
+                                    155 ;src/main.c:88: gotoxy(0,3);
+    00000082 21 00 03         [12]  156 	ld	hl, #0x300
+    00000085 E5               [16]  157 	push	hl
+    00000086 CDr00r00         [24]  158 	call	_gotoxy
+    00000089 E1               [12]  159 	pop	hl
+                                    160 ;src/main.c:89: printf("origin x:%x\norigin y:%x", accel_x_origin, accel_y_origin);
+    0000008A FAr00r00         [16]  161 	ld	a, (_accel_y_origin)
+    0000008D 5F               [ 4]  162 	ld	e, a
+    0000008E 21r01r00         [12]  163 	ld	hl, #_accel_y_origin + 1
+    00000091 56               [ 8]  164 	ld	d, (hl)
+    00000092 D5               [16]  165 	push	de
+    00000093 FAr00r00         [16]  166 	ld	a, (_accel_x_origin)
+    00000096 5F               [ 4]  167 	ld	e, a
+    00000097 21r01r00         [12]  168 	ld	hl, #_accel_x_origin + 1
+    0000009A 56               [ 8]  169 	ld	d, (hl)
+    0000009B D5               [16]  170 	push	de
+    0000009C 11r96r01         [12]  171 	ld	de, #___str_3
+    0000009F D5               [16]  172 	push	de
+    000000A0 CDr00r00         [24]  173 	call	_printf
+    000000A3 E8 06            [16]  174 	add	sp, #6
+                                    175 ;src/main.c:90: SHOW_SPRITES;
+    000000A5 F0r00            [12]  176 	ldh	a, (_LCDC_REG + 0)
+    000000A7 F6 02            [ 8]  177 	or	a, #0x02
+    000000A9 E0r00            [12]  178 	ldh	(_LCDC_REG + 0), a
+                                    179 ;c:\users\malon\downloads\gbdk-win64\gbdk\include\gb\gb.h:1973: OAM_item_t * itm = &shadow_OAM[nb];
+    000000AB 21r00r00         [12]  180 	ld	hl, #_shadow_OAM
+                                    181 ;c:\users\malon\downloads\gbdk-win64\gbdk\include\gb\gb.h:1974: itm->y=y, itm->x=x;
+    000000AE 3E 54            [ 8]  182 	ld	a, #0x54
+    000000B0 22               [ 8]  183 	ld	(hl+), a
+    000000B1 36 54            [12]  184 	ld	(hl), #0x54
+                                    185 ;src/main.c:91: move_sprite(SPR_ID_CROSS, SCRN_CENTER_X, SCRN_CENTER_Y);
+    000000B3                        186 00105$:
+                                    187 ;src/main.c:95: if (accel_origin_set) {
+    000000B3 21r00r00         [12]  188 	ld	hl, #_accel_origin_set
+    000000B6 CB 46            [12]  189 	bit	0, (hl)
+    000000B8 CAr5Br01         [16]  190 	jp	Z, 00109$
+                                    191 ;src/main.c:98: scroll_sprite(SPR_ID_CROSS, accel_x_relative / ACCEL_DIVIDE_AMT, accel_y_relative / ACCEL_DIVIDE_AMT);
+    000000BB FAr00r00         [16]  192 	ld	a, (_accel_y_relative)
+    000000BE 4F               [ 4]  193 	ld	c, a
+    000000BF 21r01r00         [12]  194 	ld	hl, #_accel_y_relative + 1
+    000000C2 46               [ 8]  195 	ld	b, (hl)
+    000000C3 69               [ 4]  196 	ld	l, c
+    000000C4 60               [ 4]  197 	ld	h, b
+    000000C5 CB 78            [ 8]  198 	bit	7, b
+    000000C7 28 04            [12]  199 	jr	Z, 00118$
+    000000C9 21 07 00         [12]  200 	ld	hl, #0x0007
+    000000CC 09               [ 8]  201 	add	hl, bc
+    000000CD                        202 00118$:
+    000000CD 4D               [ 4]  203 	ld	c, l
+    000000CE CB 2C            [ 8]  204 	sra	h
+    000000D0 CB 19            [ 8]  205 	rr	c
+    000000D2 CB 2C            [ 8]  206 	sra	h
+    000000D4 CB 19            [ 8]  207 	rr	c
+    000000D6 CB 2C            [ 8]  208 	sra	h
+    000000D8 CB 19            [ 8]  209 	rr	c
+    000000DA FAr00r00         [16]  210 	ld	a, (#_accel_x_relative)
+    000000DD F8 01            [12]  211 	ldhl	sp,	#1
+    000000DF 77               [ 8]  212 	ld	(hl), a
+    000000E0 FAr01r00         [16]  213 	ld	a, (#_accel_x_relative + 1)
+    000000E3 F8 02            [12]  214 	ldhl	sp,	#2
+    000000E5 32               [ 8]  215 	ld	(hl-), a
+    000000E6 2A               [ 8]  216 	ld	a, (hl+)
+    000000E7 23               [ 8]  217 	inc	hl
+    000000E8 32               [ 8]  218 	ld	(hl-), a
+    000000E9 2A               [ 8]  219 	ld	a, (hl+)
+    000000EA 23               [ 8]  220 	inc	hl
+    000000EB 32               [ 8]  221 	ld	(hl-), a
+    000000EC 2B               [ 8]  222 	dec	hl
+    000000ED CB 7E            [12]  223 	bit	7, (hl)
+    000000EF 28 12            [12]  224 	jr	Z, 00119$
+    000000F1 2B               [ 8]  225 	dec	hl
+    000000F2 2A               [ 8]  226 	ld	a, (hl+)
+    000000F3 5F               [ 4]  227 	ld	e, a
+    000000F4 56               [ 8]  228 	ld	d, (hl)
+    000000F5 21 07 00         [12]  229 	ld	hl, #0x0007
+    000000F8 19               [ 8]  230 	add	hl, de
+    000000F9 E5               [16]  231 	push	hl
+    000000FA 7D               [ 4]  232 	ld	a, l
+    000000FB F8 05            [12]  233 	ldhl	sp,	#5
+    000000FD 77               [ 8]  234 	ld	(hl), a
+    000000FE E1               [12]  235 	pop	hl
+    000000FF 7C               [ 4]  236 	ld	a, h
+    00000100 F8 04            [12]  237 	ldhl	sp,	#4
+    00000102 77               [ 8]  238 	ld	(hl), a
+    00000103                        239 00119$:
+    00000103 F8 03            [12]  240 	ldhl	sp,#3
+    00000105 2A               [ 8]  241 	ld	a, (hl+)
+    00000106 5F               [ 4]  242 	ld	e, a
+    00000107 56               [ 8]  243 	ld	d, (hl)
+    00000108 CB 2A            [ 8]  244 	sra	d
+    0000010A CB 1B            [ 8]  245 	rr	e
+    0000010C CB 2A            [ 8]  246 	sra	d
+    0000010E CB 1B            [ 8]  247 	rr	e
+    00000110 CB 2A            [ 8]  248 	sra	d
+    00000112 CB 1B            [ 8]  249 	rr	e
+                                    250 ;c:\users\malon\downloads\gbdk-win64\gbdk\include\gb\gb.h:1989: OAM_item_t * itm = &shadow_OAM[nb];
+                                    251 ;c:\users\malon\downloads\gbdk-win64\gbdk\include\gb\gb.h:1990: itm->y+=y, itm->x+=x;
+    00000114 21r00r00         [12]  252 	ld	hl, #_shadow_OAM
+    00000117 7E               [ 8]  253 	ld	a, (hl)
+    00000118 81               [ 4]  254 	add	a, c
+    00000119 77               [ 8]  255 	ld	(hl), a
+    0000011A 21r01r00         [12]  256 	ld	hl, #_shadow_OAM + 1
+    0000011D 7E               [ 8]  257 	ld	a, (hl)
+    0000011E 83               [ 4]  258 	add	a, e
+    0000011F 77               [ 8]  259 	ld	(hl), a
+                                    260 ;src/main.c:100: if (show_data) {
+    00000120 F8 05            [12]  261 	ldhl	sp,	#5
+    00000122 CB 46            [12]  262 	bit	0, (hl)
+    00000124 28 35            [12]  263 	jr	Z, 00109$
+                                    264 ;src/main.c:101: gotoxy(0,6);
+    00000126 21 00 06         [12]  265 	ld	hl, #0x600
+    00000129 E5               [16]  266 	push	hl
+    0000012A CDr00r00         [24]  267 	call	_gotoxy
+    0000012D E1               [12]  268 	pop	hl
+                                    269 ;src/main.c:105: "%d   \n",
+    0000012E FAr00r00         [16]  270 	ld	a, (_accel_y_relative)
+    00000131 5F               [ 4]  271 	ld	e, a
+    00000132 21r01r00         [12]  272 	ld	hl, #_accel_y_relative + 1
+    00000135 56               [ 8]  273 	ld	d, (hl)
+    00000136 D5               [16]  274 	push	de
+    00000137 FAr00r00         [16]  275 	ld	a, (_accel_x_relative)
+    0000013A 5F               [ 4]  276 	ld	e, a
+    0000013B 21r01r00         [12]  277 	ld	hl, #_accel_x_relative + 1
+    0000013E 56               [ 8]  278 	ld	d, (hl)
+    0000013F D5               [16]  279 	push	de
+    00000140 FAr00r00         [16]  280 	ld	a, (_accel_y)
+    00000143 5F               [ 4]  281 	ld	e, a
+    00000144 21r01r00         [12]  282 	ld	hl, #_accel_y + 1
+    00000147 56               [ 8]  283 	ld	d, (hl)
+    00000148 D5               [16]  284 	push	de
+    00000149 FAr00r00         [16]  285 	ld	a, (_accel_x)
+    0000014C 5F               [ 4]  286 	ld	e, a
+    0000014D 21r01r00         [12]  287 	ld	hl, #_accel_x + 1
+    00000150 56               [ 8]  288 	ld	d, (hl)
+    00000151 D5               [16]  289 	push	de
+    00000152 11rAEr01         [12]  290 	ld	de, #___str_4
+    00000155 D5               [16]  291 	push	de
+    00000156 CDr00r00         [24]  292 	call	_printf
+    00000159 E8 0A            [16]  293 	add	sp, #10
+    0000015B                        294 00109$:
+                                    295 ;src/main.c:114: vsync_no_halt();
+    0000015B CDr00r00         [24]  296 	call	_vsync_no_halt
+    0000015E C3r32r00         [16]  297 	jp	00111$
+                                    298 ;src/main.c:116: }
+    00000161 E8 06            [16]  299 	add	sp, #6
+    00000163 C9               [16]  300 	ret
+    00000164                        301 _sprite_tile:
+    00000164 3C                     302 	.db #0x3c	; 60
+    00000165 18                     303 	.db #0x18	; 24
+    00000166 7E                     304 	.db #0x7e	; 126
+    00000167 18                     305 	.db #0x18	; 24
+    00000168 FF                     306 	.db #0xff	; 255
+    00000169 18                     307 	.db #0x18	; 24
+    0000016A FF                     308 	.db #0xff	; 255
+    0000016B FF                     309 	.db #0xff	; 255
+    0000016C FF                     310 	.db #0xff	; 255
+    0000016D FF                     311 	.db #0xff	; 255
+    0000016E FF                     312 	.db #0xff	; 255
+    0000016F 18                     313 	.db #0x18	; 24
+    00000170 7E                     314 	.db #0x7e	; 126
+    00000171 18                     315 	.db #0x18	; 24
+    00000172 3C                     316 	.db #0x3c	; 60
+    00000173 18                     317 	.db #0x18	; 24
+    00000174                        318 ___str_1:
+    00000174 2D 42 20 74 6F 20 43   319 	.ascii "-B to Center"
+             65 6E 74 65 72
+    00000180 00                     320 	.db 0x00
+    00000181                        321 ___str_2:
+    00000181 2D 53 45 4C 45 43 54   322 	.ascii "-SELECT toggles info"
+             20 74 6F 67 67 6C 65
+             73 20 69 6E 66 6F
+    00000195 00                     323 	.db 0x00
+    00000196                        324 ___str_3:
+    00000196 6F 72 69 67 69 6E 20   325 	.ascii "origin x:%x"
+             78 3A 25 78
+    000001A1 0A                     326 	.db 0x0a
+    000001A2 6F 72 69 67 69 6E 20   327 	.ascii "origin y:%x"
+             79 3A 25 78
+    000001AD 00                     328 	.db 0x00
+    000001AE                        329 ___str_4:
+    000001AE 25 78                  330 	.ascii "%x"
+    000001B0 0A                     331 	.db 0x0a
+    000001B1 25 78                  332 	.ascii "%x"
+    000001B3 0A                     333 	.db 0x0a
+    000001B4 25 64 20 20 20         334 	.ascii "%d   "
+    000001B9 0A                     335 	.db 0x0a
+    000001BA 25 64 20 20 20         336 	.ascii "%d   "
+    000001BF 0A                     337 	.db 0x0a
+    000001C0 00                     338 	.db 0x00
+                                    339 	.area _CODE
+                                    340 	.area _INITIALIZER
+    00000000                        341 __xinit__joy:
+    00000000 00                     342 	.db #0x00	; 0
+                                    343 	.area _CABS (ABS)

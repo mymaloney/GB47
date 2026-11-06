@@ -1,0 +1,192 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module mbc7_accelerometer
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl _mbc7_accel_update
+                                     11 	.globl _mbc7_accel_setorigin
+                                     12 	.globl _mbc7_accel_init
+                                     13 	.globl _mbc7_accel_read
+                                     14 	.globl _delay
+                                     15 	.globl _accel_y_relative
+                                     16 	.globl _accel_x_relative
+                                     17 	.globl _accel_y_origin
+                                     18 	.globl _accel_x_origin
+                                     19 	.globl _accel_origin_set
+                                     20 	.globl _accel_y
+                                     21 	.globl _accel_x
+                                     22 ;--------------------------------------------------------
+                                     23 ; special function registers
+                                     24 ;--------------------------------------------------------
+                                     25 	.area _HRAM
+                                     26 ;--------------------------------------------------------
+                                     27 ; ram data
+                                     28 ;--------------------------------------------------------
+                                     29 	.area _DATA
+    00000000                         30 _accel_x::
+    00000000                         31 	.ds 2
+    00000002                         32 _accel_y::
+    00000002                         33 	.ds 2
+                                     34 ;--------------------------------------------------------
+                                     35 ; ram data
+                                     36 ;--------------------------------------------------------
+                                     37 	.area _INITIALIZED
+    00000000                         38 _accel_origin_set::
+    00000000                         39 	.ds 1
+    00000001                         40 _accel_x_origin::
+    00000001                         41 	.ds 2
+    00000003                         42 _accel_y_origin::
+    00000003                         43 	.ds 2
+    00000005                         44 _accel_x_relative::
+    00000005                         45 	.ds 2
+    00000007                         46 _accel_y_relative::
+    00000007                         47 	.ds 2
+                                     48 ;--------------------------------------------------------
+                                     49 ; absolute external ram data
+                                     50 ;--------------------------------------------------------
+                                     51 	.area _DABS (ABS)
+                                     52 ;--------------------------------------------------------
+                                     53 ; global & static initialisations
+                                     54 ;--------------------------------------------------------
+                                     55 	.area _HOME
+                                     56 	.area _GSINIT
+                                     57 	.area _GSFINAL
+                                     58 	.area _GSINIT
+                                     59 ;--------------------------------------------------------
+                                     60 ; Home
+                                     61 ;--------------------------------------------------------
+                                     62 	.area _HOME
+                                     63 	.area _HOME
+                                     64 ;--------------------------------------------------------
+                                     65 ; code
+                                     66 ;--------------------------------------------------------
+                                     67 	.area _CODE
+                                     68 ;src/mbc7_accelerometer.c:70: void mbc7_accel_read(void) {
+                                     69 ;	---------------------------------
+                                     70 ; Function mbc7_accel_read
+                                     71 ; ---------------------------------
+    00000000                         72 _mbc7_accel_read::
+                                     73 ;src/mbc7_accelerometer.c:72: accel_x = ((uint16_t)(rMBC7_ACCEL_X_HI) << 8) | (uint16_t)rMBC7_ACCEL_X_LO;
+    00000000 FAr00r00         [16]   74 	ld	a, (_rMBC7_ACCEL_X_HI)
+    00000003 47               [ 4]   75 	ld	b, a
+    00000004 FAr00r00         [16]   76 	ld	a, (_rMBC7_ACCEL_X_LO)
+    00000007 EAr00r00         [16]   77 	ld	(_accel_x), a
+    0000000A 78               [ 4]   78 	ld	a, b
+    0000000B EAr01r00         [16]   79 	ld	(_accel_x + 1), a
+                                     80 ;src/mbc7_accelerometer.c:73: accel_y = ((uint16_t)(rMBC7_ACCEL_Y_HI) << 8) | (uint16_t)rMBC7_ACCEL_Y_LO;
+    0000000E FAr00r00         [16]   81 	ld	a, (_rMBC7_ACCEL_Y_HI)
+    00000011 47               [ 4]   82 	ld	b, a
+    00000012 FAr00r00         [16]   83 	ld	a, (_rMBC7_ACCEL_Y_LO)
+    00000015 EAr02r00         [16]   84 	ld	(_accel_y), a
+    00000018 78               [ 4]   85 	ld	a, b
+    00000019 EAr03r00         [16]   86 	ld	(_accel_y + 1), a
+                                     87 ;src/mbc7_accelerometer.c:79: rMBC7_LATCH_1 = MBC7_LATCH_ERASE;
+    0000001C 21r00r00         [12]   88 	ld	hl, #_rMBC7_LATCH_1
+    0000001F 36 55            [12]   89 	ld	(hl), #0x55
+                                     90 ;src/mbc7_accelerometer.c:80: rMBC7_LATCH_2 = MBC7_LATCH_CAPTURE;
+    00000021 21r00r00         [12]   91 	ld	hl, #_rMBC7_LATCH_2
+    00000024 36 AA            [12]   92 	ld	(hl), #0xaa
+                                     93 ;src/mbc7_accelerometer.c:81: }
+    00000026 C9               [16]   94 	ret
+                                     95 ;src/mbc7_accelerometer.c:84: void mbc7_accel_init(void) {
+                                     96 ;	---------------------------------
+                                     97 ; Function mbc7_accel_init
+                                     98 ; ---------------------------------
+    00000027                         99 _mbc7_accel_init::
+                                    100 ;src/mbc7_accelerometer.c:87: rMBC7_SRAM_ENABLE_1 = MBC7_SRAM_ENABLE_KEY_1;
+    00000027 21r00r00         [12]  101 	ld	hl, #_rMBC7_SRAM_ENABLE_1
+    0000002A 36 0A            [12]  102 	ld	(hl), #0x0a
+                                    103 ;src/mbc7_accelerometer.c:88: rMBC7_SRAM_ENABLE_2 = MBC7_SRAM_ENABLE_KEY_2;
+    0000002C 21r00r00         [12]  104 	ld	hl, #_rMBC7_SRAM_ENABLE_2
+    0000002F 36 40            [12]  105 	ld	(hl), #0x40
+                                    106 ;src/mbc7_accelerometer.c:91: mbc7_accel_read();
+    00000031 CDr00r00         [24]  107 	call	_mbc7_accel_read
+                                    108 ;src/mbc7_accelerometer.c:95: delay(2);
+    00000034 11 02 00         [12]  109 	ld	de, #0x0002
+                                    110 ;src/mbc7_accelerometer.c:96: }
+    00000037 C3r00r00         [16]  111 	jp	_delay
+                                    112 ;src/mbc7_accelerometer.c:99: void mbc7_accel_setorigin(void) {
+                                    113 ;	---------------------------------
+                                    114 ; Function mbc7_accel_setorigin
+                                    115 ; ---------------------------------
+    0000003A                        116 _mbc7_accel_setorigin::
+                                    117 ;src/mbc7_accelerometer.c:100: accel_x_origin = accel_x;
+    0000003A FAr00r00         [16]  118 	ld	a, (#_accel_x)
+    0000003D EAr01r00         [16]  119 	ld	(#_accel_x_origin),a
+    00000040 FAr01r00         [16]  120 	ld	a, (#_accel_x + 1)
+    00000043 EAr02r00         [16]  121 	ld	(#_accel_x_origin + 1),a
+                                    122 ;src/mbc7_accelerometer.c:101: accel_y_origin = accel_y;
+    00000046 FAr02r00         [16]  123 	ld	a, (#_accel_y)
+    00000049 EAr03r00         [16]  124 	ld	(#_accel_y_origin),a
+    0000004C FAr03r00         [16]  125 	ld	a, (#_accel_y + 1)
+    0000004F EAr04r00         [16]  126 	ld	(#_accel_y_origin + 1),a
+                                    127 ;src/mbc7_accelerometer.c:102: accel_origin_set = true;
+    00000052 21r00r00         [12]  128 	ld	hl, #_accel_origin_set
+    00000055 36 01            [12]  129 	ld	(hl), #0x01
+                                    130 ;src/mbc7_accelerometer.c:103: }
+    00000057 C9               [16]  131 	ret
+                                    132 ;src/mbc7_accelerometer.c:106: void mbc7_accel_update(bool do_set_origin) {
+                                    133 ;	---------------------------------
+                                    134 ; Function mbc7_accel_update
+                                    135 ; ---------------------------------
+    00000058                        136 _mbc7_accel_update::
+    00000058 4F               [ 4]  137 	ld	c, a
+                                    138 ;src/mbc7_accelerometer.c:108: mbc7_accel_read();
+    00000059 C5               [16]  139 	push	bc
+    0000005A CDr00r00         [24]  140 	call	_mbc7_accel_read
+    0000005D C1               [12]  141 	pop	bc
+                                    142 ;src/mbc7_accelerometer.c:110: if (do_set_origin) {
+    0000005E CB 41            [ 8]  143 	bit	0, c
+    00000060 28 03            [12]  144 	jr	Z, 00102$
+                                    145 ;src/mbc7_accelerometer.c:111: mbc7_accel_setorigin();
+    00000062 CDr3Ar00         [24]  146 	call	_mbc7_accel_setorigin
+    00000065                        147 00102$:
+                                    148 ;src/mbc7_accelerometer.c:114: if (accel_origin_set) {
+    00000065 21r00r00         [12]  149 	ld	hl, #_accel_origin_set
+    00000068 CB 46            [12]  150 	bit	0, (hl)
+    0000006A C8               [20]  151 	ret	Z
+                                    152 ;src/mbc7_accelerometer.c:116: accel_x_relative = (int16_t)(accel_x_origin - accel_x);
+    0000006B FAr01r00         [16]  153 	ld	a, (#_accel_x_origin)
+    0000006E 21r00r00         [12]  154 	ld	hl, #_accel_x
+    00000071 96               [ 8]  155 	sub	a, (hl)
+    00000072 4F               [ 4]  156 	ld	c, a
+    00000073 FAr02r00         [16]  157 	ld	a, (#_accel_x_origin + 1)
+    00000076 21r01r00         [12]  158 	ld	hl, #_accel_x + 1
+    00000079 9E               [ 8]  159 	sbc	a, (hl)
+    0000007A 47               [ 4]  160 	ld	b, a
+    0000007B 21r05r00         [12]  161 	ld	hl, #_accel_x_relative
+    0000007E 79               [ 4]  162 	ld	a, c
+    0000007F 22               [ 8]  163 	ld	(hl+), a
+    00000080 70               [ 8]  164 	ld	(hl), b
+                                    165 ;src/mbc7_accelerometer.c:117: accel_y_relative = (int16_t)(accel_y_origin - accel_y);
+    00000081 FAr03r00         [16]  166 	ld	a, (#_accel_y_origin)
+    00000084 21r02r00         [12]  167 	ld	hl, #_accel_y
+    00000087 96               [ 8]  168 	sub	a, (hl)
+    00000088 4F               [ 4]  169 	ld	c, a
+    00000089 FAr04r00         [16]  170 	ld	a, (#_accel_y_origin + 1)
+    0000008C 21r03r00         [12]  171 	ld	hl, #_accel_y + 1
+    0000008F 9E               [ 8]  172 	sbc	a, (hl)
+    00000090 47               [ 4]  173 	ld	b, a
+    00000091 21r07r00         [12]  174 	ld	hl, #_accel_y_relative
+    00000094 79               [ 4]  175 	ld	a, c
+    00000095 22               [ 8]  176 	ld	(hl+), a
+    00000096 70               [ 8]  177 	ld	(hl), b
+                                    178 ;src/mbc7_accelerometer.c:119: }
+    00000097 C9               [16]  179 	ret
+                                    180 	.area _CODE
+                                    181 	.area _INITIALIZER
+    00000000                        182 __xinit__accel_origin_set:
+    00000000 00                     183 	.db #0x00	;  0
+    00000001                        184 __xinit__accel_x_origin:
+    00000001 00 00                  185 	.dw #0x0000
+    00000003                        186 __xinit__accel_y_origin:
+    00000003 00 00                  187 	.dw #0x0000
+    00000005                        188 __xinit__accel_x_relative:
+    00000005 00 00                  189 	.dw #0x0000
+    00000007                        190 __xinit__accel_y_relative:
+    00000007 00 00                  191 	.dw #0x0000
+                                    192 	.area _CABS (ABS)

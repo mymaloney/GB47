@@ -1,0 +1,166 @@
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 1
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    .__.$$$.                                                    =   00002710 L
+    .__.ABS.                                                    =   00000000 G
+    .__.CPU.                                                    =   00000000 L
+    .__.H$L.                                                    =   00000000 L
+    ___bank_scene00001                                              ******** GX
+    ___bank_scene00002                                              ******** GX
+    ___bank_scene00003                                              ******** GX
+    ___bank_scene00004                                              ******** GX
+    ___bank_scene00005                                              ******** GX
+    ___bank_scene00006                                              ******** GX
+    ___bank_scene00007                                              ******** GX
+    ___bank_scene00008                                              ******** GX
+    ___bank_scene00009                                              ******** GX
+    ___bank_scene00010                                              ******** GX
+    ___bank_scene00011                                              ******** GX
+    ___bank_scene00012                                              ******** GX
+    ___bank_scene00013                                              ******** GX
+    ___bank_scene00014                                              ******** GX
+    ___bank_scene00015                                              ******** GX
+    ___bank_scene00016                                              ******** GX
+    ___bank_scene00017                                              ******** GX
+    ___bank_scene00018                                              ******** GX
+    ___bank_scene00019                                              ******** GX
+    ___bank_scene00020                                              ******** GX
+    ___bank_scene00021                                              ******** GX
+    ___bank_scene00022                                              ******** GX
+    ___bank_scene00023                                              ******** GX
+    ___bank_scene00024                                              ******** GX
+    ___bank_scene00025                                              ******** GX
+    ___bank_scene00026                                              ******** GX
+    ___bank_scene00027                                              ******** GX
+    ___bank_scene00028                                              ******** GX
+    ___bank_scene00029                                              ******** GX
+    ___bank_scene00030                                              ******** GX
+    ___bank_scene00031                                              ******** GX
+    ___bank_scene00032                                              ******** GX
+    ___bank_scene00033                                              ******** GX
+    ___bank_scene00034                                              ******** GX
+    ___bank_scene00035                                              ******** GX
+    ___bank_scene00036                                              ******** GX
+    ___bank_scene00037                                              ******** GX
+    ___bank_scene00038                                              ******** GX
+    ___bank_scene00039                                              ******** GX
+    ___bank_scene00040                                              ******** GX
+    ___bank_scene00041                                              ******** GX
+    ___bank_scene00042                                              ******** GX
+    ___bank_scene00043                                              ******** GX
+    ___bank_scene00044                                              ******** GX
+    ___bank_scene00045                                              ******** GX
+    ___bank_scene00046                                              ******** GX
+    ___bank_scene00047                                              ******** GX
+    ___bank_scene00048                                              ******** GX
+    ___bank_scene00049                                              ******** GX
+    ___bank_scene00050                                              ******** GX
+    ___bank_scene00051                                              ******** GX
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 2
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    ___bank_scene00052                                              ******** GX
+    ___bank_scene00053                                              ******** GX
+    ___bank_scene00054                                              ******** GX
+    ___bank_scene00055                                              ******** GX
+    ___bank_scene00056                                              ******** GX
+    ___bank_scene00057                                              ******** GX
+    ___bank_scene00058                                              ******** GX
+    ___bank_scene00059                                              ******** GX
+    ___bank_scene00060                                              ******** GX
+    ___bank_scene00061                                              ******** GX
+    ___bank_scene00062                                              ******** GX
+    ___bank_scene00063                                              ******** GX
+    ___bank_scene00064                                              ******** GX
+  0 _frames                                                         00000000 GR
+    _scene00001_tiles                                               ******** GX
+    _scene00002_tiles                                               ******** GX
+    _scene00003_tiles                                               ******** GX
+    _scene00004_tiles                                               ******** GX
+    _scene00005_tiles                                               ******** GX
+    _scene00006_tiles                                               ******** GX
+    _scene00007_tiles                                               ******** GX
+    _scene00008_tiles                                               ******** GX
+    _scene00009_tiles                                               ******** GX
+    _scene00010_tiles                                               ******** GX
+    _scene00011_tiles                                               ******** GX
+    _scene00012_tiles                                               ******** GX
+    _scene00013_tiles                                               ******** GX
+    _scene00014_tiles                                               ******** GX
+    _scene00015_tiles                                               ******** GX
+    _scene00016_tiles                                               ******** GX
+    _scene00017_tiles                                               ******** GX
+    _scene00018_tiles                                               ******** GX
+    _scene00019_tiles                                               ******** GX
+    _scene00020_tiles                                               ******** GX
+    _scene00021_tiles                                               ******** GX
+    _scene00022_tiles                                               ******** GX
+    _scene00023_tiles                                               ******** GX
+    _scene00024_tiles                                               ******** GX
+    _scene00025_tiles                                               ******** GX
+    _scene00026_tiles                                               ******** GX
+    _scene00027_tiles                                               ******** GX
+    _scene00028_tiles                                               ******** GX
+    _scene00029_tiles                                               ******** GX
+    _scene00030_tiles                                               ******** GX
+    _scene00031_tiles                                               ******** GX
+    _scene00032_tiles                                               ******** GX
+    _scene00033_tiles                                               ******** GX
+    _scene00034_tiles                                               ******** GX
+    _scene00035_tiles                                               ******** GX
+    _scene00036_tiles                                               ******** GX
+    _scene00037_tiles                                               ******** GX
+    _scene00038_tiles                                               ******** GX
+    _scene00039_tiles                                               ******** GX
+    _scene00040_tiles                                               ******** GX
+    _scene00041_tiles                                               ******** GX
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 3
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    _scene00042_tiles                                               ******** GX
+    _scene00043_tiles                                               ******** GX
+    _scene00044_tiles                                               ******** GX
+    _scene00045_tiles                                               ******** GX
+    _scene00046_tiles                                               ******** GX
+    _scene00047_tiles                                               ******** GX
+    _scene00048_tiles                                               ******** GX
+    _scene00049_tiles                                               ******** GX
+    _scene00050_tiles                                               ******** GX
+    _scene00051_tiles                                               ******** GX
+    _scene00052_tiles                                               ******** GX
+    _scene00053_tiles                                               ******** GX
+    _scene00054_tiles                                               ******** GX
+    _scene00055_tiles                                               ******** GX
+    _scene00056_tiles                                               ******** GX
+    _scene00057_tiles                                               ******** GX
+    _scene00058_tiles                                               ******** GX
+    _scene00059_tiles                                               ******** GX
+    _scene00060_tiles                                               ******** GX
+    _scene00061_tiles                                               ******** GX
+    _scene00062_tiles                                               ******** GX
+    _scene00063_tiles                                               ******** GX
+    _scene00064_tiles                                               ******** GX
+
+
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 4
+Hexadecimal [32-Bits]
+
+Area Table
+
+   0 _CODE                                      size       C0   flags    0
+   1 _HRAM                                      size        0   flags    0
+   2 _DATA                                      size        0   flags    0
+   3 _INITIALIZED                               size        0   flags    0
+   4 _DABS                                      size        0   flags    8
+   5 _HOME                                      size        0   flags    0
+   6 _GSINIT                                    size        0   flags    0
+   7 _GSFINAL                                   size        0   flags    0
+   8 _INITIALIZER                               size        0   flags    0
+   9 _CABS                                      size        0   flags    8
+

@@ -1,0 +1,203 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module example_image
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl _example_image_data
+                                     11 	.globl b___func_example_image_palette
+                                     12 	.globl ___func_example_image_palette
+                                     13 	.globl b___func_example_image_attr
+                                     14 	.globl ___func_example_image_attr
+                                     15 	.globl b___func_example_image_map
+                                     16 	.globl ___func_example_image_map
+                                     17 	.globl b___func_example_image_tiles
+                                     18 	.globl ___func_example_image_tiles
+                                     19 	.globl b___func_example_image
+                                     20 	.globl ___func_example_image
+                                     21 ;--------------------------------------------------------
+                                     22 ; special function registers
+                                     23 ;--------------------------------------------------------
+                                     24 	.area _HRAM
+                                     25 ;--------------------------------------------------------
+                                     26 ; ram data
+                                     27 ;--------------------------------------------------------
+                                     28 	.area _DATA
+                                     29 ;--------------------------------------------------------
+                                     30 ; ram data
+                                     31 ;--------------------------------------------------------
+                                     32 	.area _INITIALIZED
+                                     33 ;--------------------------------------------------------
+                                     34 ; absolute external ram data
+                                     35 ;--------------------------------------------------------
+                                     36 	.area _DABS (ABS)
+                                     37 ;--------------------------------------------------------
+                                     38 ; global & static initialisations
+                                     39 ;--------------------------------------------------------
+                                     40 	.area _HOME
+                                     41 	.area _GSINIT
+                                     42 	.area _GSFINAL
+                                     43 	.area _GSINIT
+                                     44 ;--------------------------------------------------------
+                                     45 ; Home
+                                     46 ;--------------------------------------------------------
+                                     47 	.area _HOME
+                                     48 	.area _HOME
+                                     49 ;--------------------------------------------------------
+                                     50 ; code
+                                     51 ;--------------------------------------------------------
+                                     52 	.area _CODE_255
+                                     53 ;obj/example_image.c:5: BANKREF(example_image)
+                                     54 ;	---------------------------------
+                                     55 ; Function __func_example_image
+                                     56 ; ---------------------------------
+                         000000FF    57 	b___func_example_image	= 255
+    00000000                         58 ___func_example_image::
+                                     59 	.local b___func_example_image 
+                         000000FF    60 	___bank_example_image = b___func_example_image 
+                                     61 	.globl ___bank_example_image 
+                                     62 ;obj/example_image.c:13: INCBIN(example_image_tiles,   "obj/example_image.til")
+                                     63 ;	---------------------------------
+                                     64 ; Function __func_example_image_tiles
+                                     65 ; ---------------------------------
+                         000000FF    66 	b___func_example_image_tiles	= 255
+    00000000                         67 ___func_example_image_tiles::
+    00000000                         68 _example_image_tiles::
+    00000000                         69 1$:
+    00000000 73 60 A1 42 05 03 06    70 	.incbin "obj/example_image.til" 
+             FD 84 7F C0 24 00 03
+             01 A1 DF 5B B3 71 B0
+             50 A0 1F B0 4F 60 90
+             F0 70 78 E0 00 34 1B
+             C6 29 F7 30 01 00 3F
+             00 36 00 73 51 E0 00
+             E0 10 A8 8C 03 00 87
+             1C E3 3F CE 19 3E 0E
+             87 00 00 1F 20 7E DC
+             1B 25 0E 0C 06 8B C1
+             E3 00 40 00 0C 04 83
+             06 05 C6 A2 73 E2 39
+             19 04 88 00 84 00 01
+             00 19 3E C1 00 40 60
+             10 58 60 6C C8 66 28
+             00 F0 E0 10 FC 3A C0
+             22 FF 10 FE 0D F4 4B
+             4F BF
+    00001660                         71 2$:
+                         00001660    72 	___size_example_image_tiles = (2$-1$) 
+                                     73 	.globl ___size_example_image_tiles 
+                                     74 	.local b___func_example_image_tiles 
+                         000000FF    75 	___bank_example_image_tiles = b___func_example_image_tiles 
+                                     76 	.globl ___bank_example_image_tiles 
+                                     77 ;obj/example_image.c:14: INCBIN(example_image_map,     "obj/example_image.map")
+                                     78 ;	---------------------------------
+                                     79 ; Function __func_example_image_map
+                                     80 ; ---------------------------------
+                         000000FF    81 	b___func_example_image_map	= 255
+    00001660                         82 ___func_example_image_map::
+    00001660                         83 _example_image_map::
+    00001660                         84 1$:
+    00001660 00 01 02 03 04 05 06    85 	.incbin "obj/example_image.map" 
+             07 08 09 0A 0B 0C 0D
+             0E 0F 10 11 12 13 14
+             15 16 17 18 19 1A 1B
+             1C 1D 1E 1F 20 21 22
+             23 24 25 26 27 28 29
+             2A 2B 2C 2D 2E 2F 30
+             31 32 33 34 35 36 37
+             38 39 3A 3B 3C 3D 3E
+             3F 40 41 42 43 44 45
+             46 47 48 49 4A 4B 4C
+             4D 4D 4E 4F 50 51 52
+             53 54 55 56 57 58 59
+             5A 5B 5C 5D 5E 5F 60
+             61 62 63 64 65 66 67
+             68 69 6A 6B 6C 6D 6E
+             6F 70 71 72 73 74 4D
+             75 76 77 78 79 7A 7B
+             7C 7D
+    000017C8                         86 2$:
+                         00000168    87 	___size_example_image_map = (2$-1$) 
+                                     88 	.globl ___size_example_image_map 
+                                     89 	.local b___func_example_image_map 
+                         000000FF    90 	___bank_example_image_map = b___func_example_image_map 
+                                     91 	.globl ___bank_example_image_map 
+                                     92 ;obj/example_image.c:15: INCBIN(example_image_attr,    "obj/example_image.atr")
+                                     93 ;	---------------------------------
+                                     94 ; Function __func_example_image_attr
+                                     95 ; ---------------------------------
+                         000000FF    96 	b___func_example_image_attr	= 255
+    000017C8                         97 ___func_example_image_attr::
+    000017C8                         98 _example_image_attr::
+    000017C8                         99 1$:
+    000017C8 00 00 01 01 01 02 02   100 	.incbin "obj/example_image.atr" 
+             03 03 03 04 04 05 05
+             06 06 06 06 07 07 00
+             00 01 01 01 02 02 03
+             03 03 04 04 04 04 05
+             05 06 06 07 07 00 00
+             01 01 01 02 02 03 03
+             03 04 04 05 05 06 06
+             06 06 07 07 00 00 01
+             01 01 02 02 03 03 03
+             04 04 05 05 06 06 06
+             07 07 07 00 00 01 01
+             01 02 02 03 03 03 04
+             04 04 05 05 06 06 06
+             07 07 00 00 01 01 01
+             02 02 03 03 03 04 04
+             04 05 05 06 06 06 47
+             07 00 00 01 01 01 02
+             02 03
+    00001930                        101 2$:
+                         00000168   102 	___size_example_image_attr = (2$-1$) 
+                                    103 	.globl ___size_example_image_attr 
+                                    104 	.local b___func_example_image_attr 
+                         000000FF   105 	___bank_example_image_attr = b___func_example_image_attr 
+                                    106 	.globl ___bank_example_image_attr 
+                                    107 ;obj/example_image.c:16: INCBIN(example_image_palette, "obj/example_image.pal")
+                                    108 ;	---------------------------------
+                                    109 ; Function __func_example_image_palette
+                                    110 ; ---------------------------------
+                         000000FF   111 	b___func_example_image_palette	= 255
+    00001930                        112 ___func_example_image_palette::
+    00001930                        113 _example_image_palette::
+    00001930                        114 1$:
+    00001930 40 14 05 25 AB 49 A2   115 	.incbin "obj/example_image.pal" 
+             1C 80 1C 46 29 E4 20
+             AB 49 A0 20 8A 45 E3
+             24 AB 49 40 10 E3 24
+             80 1C AB 49 00 04 40
+             10 20 10 00 08 00 04
+             01 20 00 14 02 34 02
+             30 01 20 00 14 02 34
+             02 28 02 30 02 2C 02
+             34 80 18 26 25 68 29
+             C2 20 80 1C E4 24 C2
+             20 25 29 A0 20 46 31
+             03 29 EA 39 20 10 03
+             29 81 1C 46 31 00 08
+             40 10 20 0C 40 14 00
+             08 01 24 02 34 01 18
+             01 30 02 30 02 34 01
+             18 02 2C 02 30 02 34
+             01 18
+    00002B50                        116 2$:
+                         00001220   117 	___size_example_image_palette = (2$-1$) 
+                                    118 	.globl ___size_example_image_palette 
+                                    119 	.local b___func_example_image_palette 
+                         000000FF   120 	___bank_example_image_palette = b___func_example_image_palette 
+                                    121 	.globl ___bank_example_image_palette 
+                                    122 	.area _CODE_255
+    00002B50                        123 _example_image_data:
+    00002B50 66 01                  124 	.dw #0x0166
+    00002B52 12                     125 	.db #0x12	; 18
+    00002B53r00r00                  126 	.dw _example_image_tiles
+    00002B55r60r16                  127 	.dw _example_image_map
+    00002B57rC8r17                  128 	.dw _example_image_attr
+    00002B59r30r19                  129 	.dw _example_image_palette
+                                    130 	.area _INITIALIZER
+                                    131 	.area _CABS (ABS)

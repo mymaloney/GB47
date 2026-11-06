@@ -1,0 +1,84 @@
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 1
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    .__.$$$.                                                    =   00002710 L
+    .__.ABS.                                                    =   00000000 G
+    .__.CPU.                                                    =   00000000 L
+    .__.H$L.                                                    =   00000000 L
+    _LCDC_REG                                                       ******** GX
+    _NR10_REG                                                       ******** GX
+    _NR11_REG                                                       ******** GX
+    _NR12_REG                                                       ******** GX
+    _NR13_REG                                                       ******** GX
+    _NR14_REG                                                       ******** GX
+    _NR21_REG                                                       ******** GX
+    _NR22_REG                                                       ******** GX
+    _NR23_REG                                                       ******** GX
+    _NR24_REG                                                       ******** GX
+    _NR50_REG                                                       ******** GX
+    _NR51_REG                                                       ******** GX
+    _NR52_REG                                                       ******** GX
+  0 ___str_0                                                        00001437 R
+  0 ___str_1                                                        0000144A R
+  0 ___str_2                                                        00001450 R
+  0 _break_btn                                                      000000B8 GR
+  0 _break_button                                                   00000E04 GR
+  0 _break_tile                                                     00000858 GR
+  0 _clr_disp                                                       00000CBA GR
+  0 _col                                                            000006EC GR
+  0 _cursor_data                                                    00000668 GR
+    _delay                                                          ******** GX
+  0 _dialing_break                                                  00000861 GR
+  0 _dialing_press                                                  0000087C GR
+  0 _dialtone                                                       000008CA GR
+  0 _disp                                                           00000CD9 GR
+  0 _disp_lcd                                                       00000A26 GR
+  2 _disp_tile                                                      00000000 GR
+  0 _dtmf_lcd                                                       000001D8 GR
+  0 _dtmf_tile                                                      000006F0 GR
+  0 _frame_lcd                                                      00000028 GR
+  0 _init_background                                                00001008 GR
+  0 _init_cursor                                                    00001040 GR
+  0 _init_dial                                                      00000000 GR
+  0 _init_disp                                                      0000088E GR
+  0 _init_key                                                       00000E92 GR
+    _joypad                                                         ******** GX
+  0 _key_num                                                        000004F8 GR
+  0 _main                                                           0000108D GR
+  0 _move_cursor                                                    00001062 GR
+  0 _pad                                                            000008B2 GR
+  0 _press_btn                                                      00000148 GR
+  0 _press_button                                                   00000D76 GR
+  0 _press_tile                                                     00000873 GR
+  0 _row                                                            000006E8 GR
+    _set_bkg_data                                                   ******** GX
+    _set_bkg_tiles                                                  ******** GX
+    _set_sprite_data                                                ******** GX
+    _shadow_OAM                                                     ******** GX
+    _sprintf                                                        ******** GX
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 2
+Hexadecimal [32-Bits]
+
+Symbol Table
+
+    _strcpy                                                         ******** GX
+    _vsync                                                          ******** GX
+
+ASxxxx Assembler V02.00 + NoICE + SDCC mods  (GameBoy)                  Page 3
+Hexadecimal [32-Bits]
+
+Area Table
+
+   0 _CODE                                      size     1451   flags    0
+   1 _HRAM                                      size        0   flags    0
+   2 _DATA                                      size       3C   flags    0
+   3 _INITIALIZED                               size        0   flags    0
+   4 _DABS                                      size        0   flags    8
+   5 _HOME                                      size        0   flags    0
+   6 _GSINIT                                    size        0   flags    0
+   7 _GSFINAL                                   size        0   flags    0
+   8 _INITIALIZER                               size        0   flags    0
+   9 _CABS                                      size        0   flags    8
+

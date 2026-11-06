@@ -1,0 +1,418 @@
+                                      1 ;--------------------------------------------------------
+                                      2 ; File Created by SDCC : free open source ISO C Compiler
+                                      3 ; Version 4.5.1 #15267 (MINGW64)
+                                      4 ;--------------------------------------------------------
+                                      5 	.module rand
+                                      6 	
+                                      7 ;--------------------------------------------------------
+                                      8 ; Public variables in this module
+                                      9 ;--------------------------------------------------------
+                                     10 	.globl _main
+                                     11 	.globl _memset
+                                     12 	.globl _puts
+                                     13 	.globl _line
+                                     14 	.globl _plot
+                                     15 	.globl _arand
+                                     16 	.globl _initarand
+                                     17 	.globl _rand
+                                     18 	.globl _waitpadup
+                                     19 	.globl _waitpad
+                                     20 	.globl _accub
+                                     21 	.globl _accut
+                                     22 	.globl _accua
+                                     23 	.globl _accu
+                                     24 ;--------------------------------------------------------
+                                     25 ; special function registers
+                                     26 ;--------------------------------------------------------
+                                     27 	.area _HRAM
+                                     28 ;--------------------------------------------------------
+                                     29 ; ram data
+                                     30 ;--------------------------------------------------------
+                                     31 	.area _DATA
+    00000000                         32 _accu::
+    00000000                         33 	.ds 40
+    00000028                         34 _accua::
+    00000028                         35 	.ds 40
+    00000050                         36 _accut::
+    00000050                         37 	.ds 40
+    00000078                         38 _accub::
+    00000078                         39 	.ds 40
+                                     40 ;--------------------------------------------------------
+                                     41 ; ram data
+                                     42 ;--------------------------------------------------------
+                                     43 	.area _INITIALIZED
+                                     44 ;--------------------------------------------------------
+                                     45 ; absolute external ram data
+                                     46 ;--------------------------------------------------------
+                                     47 	.area _DABS (ABS)
+                                     48 ;--------------------------------------------------------
+                                     49 ; global & static initialisations
+                                     50 ;--------------------------------------------------------
+                                     51 	.area _HOME
+                                     52 	.area _GSINIT
+                                     53 	.area _GSFINAL
+                                     54 	.area _GSINIT
+                                     55 ;--------------------------------------------------------
+                                     56 ; Home
+                                     57 ;--------------------------------------------------------
+                                     58 	.area _HOME
+                                     59 	.area _HOME
+                                     60 ;--------------------------------------------------------
+                                     61 ; code
+                                     62 ;--------------------------------------------------------
+                                     63 	.area _CODE
+                                     64 ;src/rand.c:36: void main(void)
+                                     65 ;	---------------------------------
+                                     66 ; Function main
+                                     67 ; ---------------------------------
+    00000000                         68 _main::
+    00000000 E8 FC            [16]   69 	add	sp, #-4
+                                     70 ;src/rand.c:40: memset(accu, 0, sizeof(accu));
+    00000002 11 28 00         [12]   71 	ld	de, #0x0028
+    00000005 D5               [16]   72 	push	de
+    00000006 11 00 00         [12]   73 	ld	de, #0x0000
+    00000009 D5               [16]   74 	push	de
+    0000000A 11r00r00         [12]   75 	ld	de, #_accu
+    0000000D D5               [16]   76 	push	de
+    0000000E CDr00r00         [24]   77 	call	_memset
+    00000011 E8 06            [16]   78 	add	sp, #6
+                                     79 ;src/rand.c:41: memset(accua, 0, sizeof(accua));
+    00000013 11 28 00         [12]   80 	ld	de, #0x0028
+    00000016 D5               [16]   81 	push	de
+    00000017 11 00 00         [12]   82 	ld	de, #0x0000
+    0000001A D5               [16]   83 	push	de
+    0000001B 11r28r00         [12]   84 	ld	de, #_accua
+    0000001E D5               [16]   85 	push	de
+    0000001F CDr00r00         [24]   86 	call	_memset
+    00000022 E8 06            [16]   87 	add	sp, #6
+                                     88 ;src/rand.c:42: memset(accut, 0, sizeof(accut));
+    00000024 01r50r00         [12]   89 	ld	bc, #_accut
+    00000027 11 28 00         [12]   90 	ld	de, #0x0028
+    0000002A D5               [16]   91 	push	de
+    0000002B 11 00 00         [12]   92 	ld	de, #0x0000
+    0000002E D5               [16]   93 	push	de
+    0000002F C5               [16]   94 	push	bc
+    00000030 CDr00r00         [24]   95 	call	_memset
+    00000033 E8 06            [16]   96 	add	sp, #6
+                                     97 ;src/rand.c:43: memset(accut, 0, sizeof(accub));
+    00000035 11 28 00         [12]   98 	ld	de, #0x0028
+    00000038 D5               [16]   99 	push	de
+    00000039 11 00 00         [12]  100 	ld	de, #0x0000
+    0000003C D5               [16]  101 	push	de
+    0000003D C5               [16]  102 	push	bc
+    0000003E CDr00r00         [24]  103 	call	_memset
+    00000041 E8 06            [16]  104 	add	sp, #6
+                                    105 ;src/rand.c:47: puts("Push any key (1)");
+    00000043 11rDFr01         [12]  106 	ld	de, #___str_3
+    00000046 CDr00r00         [24]  107 	call	_puts
+                                    108 ;src/rand.c:48: waitpad(0xFF);
+    00000049 3E FF            [ 8]  109 	ld	a, #0xff
+    0000004B CDr00r00         [24]  110 	call	_waitpad
+                                    111 ;src/rand.c:49: waitpadup();
+    0000004E CDr00r00         [24]  112 	call	_waitpadup
+                                    113 ;src/rand.c:50: seed = DIV_REG;
+    00000051 F0r00            [12]  114 	ldh	a, (_DIV_REG + 0)
+    00000053 4F               [ 4]  115 	ld	c, a
+                                    116 ;src/rand.c:51: puts("Push any key (2)");
+    00000054 C5               [16]  117 	push	bc
+    00000055 11rCEr01         [12]  118 	ld	de, #___str_2
+    00000058 CDr00r00         [24]  119 	call	_puts
+    0000005B C1               [12]  120 	pop	bc
+                                    121 ;src/rand.c:52: waitpad(0xFF);
+    0000005C 3E FF            [ 8]  122 	ld	a, #0xff
+    0000005E CDr00r00         [24]  123 	call	_waitpad
+                                    124 ;src/rand.c:53: waitpadup();
+    00000061 CDr00r00         [24]  125 	call	_waitpadup
+                                    126 ;src/rand.c:54: seed |= (UWORD)DIV_REG << 8;
+    00000064 F0r00            [12]  127 	ldh	a, (_DIV_REG + 0)
+    00000066 47               [ 4]  128 	ld	b, a
+                                    129 ;src/rand.c:57: initarand(seed);
+    00000067 C5               [16]  130 	push	bc
+    00000068 CDr00r00         [24]  131 	call	_initarand
+    0000006B E1               [12]  132 	pop	hl
+                                    133 ;src/rand.c:60: line(RANGE_SIZE * 1, 0, RANGE_SIZE * 1, 143);
+    0000006C 21 28 8F         [12]  134 	ld	hl, #0x8f28
+    0000006F E5               [16]  135 	push	hl
+    00000070 21 28 00         [12]  136 	ld	hl, #0x28
+    00000073 E5               [16]  137 	push	hl
+    00000074 CDr00r00         [24]  138 	call	_line
+    00000077 E8 04            [16]  139 	add	sp, #4
+                                    140 ;src/rand.c:61: line(RANGE_SIZE * 2, 0, RANGE_SIZE * 2, 143);
+    00000079 21 50 8F         [12]  141 	ld	hl, #0x8f50
+    0000007C E5               [16]  142 	push	hl
+    0000007D 21 50 00         [12]  143 	ld	hl, #0x50
+    00000080 E5               [16]  144 	push	hl
+    00000081 CDr00r00         [24]  145 	call	_line
+    00000084 E8 04            [16]  146 	add	sp, #4
+                                    147 ;src/rand.c:62: line(RANGE_SIZE * 3, 0, RANGE_SIZE * 3, 143);
+    00000086 21 78 8F         [12]  148 	ld	hl, #0x8f78
+    00000089 E5               [16]  149 	push	hl
+    0000008A 21 78 00         [12]  150 	ld	hl, #0x78
+    0000008D E5               [16]  151 	push	hl
+    0000008E CDr00r00         [24]  152 	call	_line
+    00000091 E8 04            [16]  153 	add	sp, #4
+                                    154 ;src/rand.c:64: while (1) {
+    00000093                        155 00110$:
+                                    156 ;src/rand.c:70: uint8_t r = RAND_RANGE_8BIT(rand(), RANGE_SIZE);
+    00000093 CDr00r00         [24]  157 	call	_rand
+    00000096 4B               [ 4]  158 	ld	c, e
+    00000097 06 00            [ 8]  159 	ld	b, #0x00
+    00000099 69               [ 4]  160 	ld	l, c
+    0000009A 60               [ 4]  161 	ld	h, b
+    0000009B 29               [ 8]  162 	add	hl, hl
+    0000009C 29               [ 8]  163 	add	hl, hl
+    0000009D 09               [ 8]  164 	add	hl, bc
+    0000009E 29               [ 8]  165 	add	hl, hl
+    0000009F 29               [ 8]  166 	add	hl, hl
+    000000A0 29               [ 8]  167 	add	hl, hl
+    000000A1 4C               [ 4]  168 	ld	c, h
+                                    169 ;src/rand.c:73: uint8_t ra = RAND_RANGE_8BIT(arand(), RANGE_SIZE);
+    000000A2 CDr00r00         [24]  170 	call	_arand
+    000000A5 6B               [ 4]  171 	ld	l, e
+    000000A6 26 00            [ 8]  172 	ld	h, #0x00
+    000000A8 5D               [ 4]  173 	ld	e, l
+    000000A9 54               [ 4]  174 	ld	d, h
+    000000AA 29               [ 8]  175 	add	hl, hl
+    000000AB 29               [ 8]  176 	add	hl, hl
+    000000AC 19               [ 8]  177 	add	hl, de
+    000000AD 29               [ 8]  178 	add	hl, hl
+    000000AE 29               [ 8]  179 	add	hl, hl
+    000000AF 29               [ 8]  180 	add	hl, hl
+    000000B0 44               [ 4]  181 	ld	b, h
+    000000B1 F8 00            [12]  182 	ldhl	sp,	#0
+    000000B3 70               [ 8]  183 	ld	(hl), b
+                                    184 ;src/rand.c:76: uint8_t rt1 = RAND_RANGE_8BIT(rand(), HALF_RANGE_SIZE);
+    000000B4 CDr00r00         [24]  185 	call	_rand
+    000000B7 6B               [ 4]  186 	ld	l, e
+    000000B8 26 00            [ 8]  187 	ld	h, #0x00
+    000000BA 5D               [ 4]  188 	ld	e, l
+    000000BB 54               [ 4]  189 	ld	d, h
+    000000BC 29               [ 8]  190 	add	hl, hl
+    000000BD 29               [ 8]  191 	add	hl, hl
+    000000BE 19               [ 8]  192 	add	hl, de
+    000000BF 29               [ 8]  193 	add	hl, hl
+    000000C0 29               [ 8]  194 	add	hl, hl
+    000000C1 44               [ 4]  195 	ld	b, h
+                                    196 ;src/rand.c:77: uint8_t rt2 = RAND_RANGE_8BIT(rand(), HALF_RANGE_SIZE);
+    000000C2 CDr00r00         [24]  197 	call	_rand
+    000000C5 6B               [ 4]  198 	ld	l, e
+    000000C6 26 00            [ 8]  199 	ld	h, #0x00
+    000000C8 5D               [ 4]  200 	ld	e, l
+    000000C9 54               [ 4]  201 	ld	d, h
+    000000CA 29               [ 8]  202 	add	hl, hl
+    000000CB 29               [ 8]  203 	add	hl, hl
+    000000CC 19               [ 8]  204 	add	hl, de
+    000000CD 29               [ 8]  205 	add	hl, hl
+    000000CE 29               [ 8]  206 	add	hl, hl
+                                    207 ;src/rand.c:78: uint8_t rt = HALF_RANGE_SIZE + (rt1 - rt2);
+    000000CF 78               [ 4]  208 	ld	a, b
+    000000D0 94               [ 4]  209 	sub	a, h
+    000000D1 C6 14            [ 8]  210 	add	a, #0x14
+    000000D3 F8 01            [12]  211 	ldhl	sp,	#1
+    000000D5 77               [ 8]  212 	ld	(hl), a
+                                    213 ;src/rand.c:81: uint8_t rb1 = RAND_RANGE_8BIT(rand(), HALF_RANGE_SIZE / 2);
+    000000D6 CDr00r00         [24]  214 	call	_rand
+    000000D9 6B               [ 4]  215 	ld	l, e
+    000000DA 26 00            [ 8]  216 	ld	h, #0x00
+    000000DC 5D               [ 4]  217 	ld	e, l
+    000000DD 54               [ 4]  218 	ld	d, h
+    000000DE 29               [ 8]  219 	add	hl, hl
+    000000DF 29               [ 8]  220 	add	hl, hl
+    000000E0 19               [ 8]  221 	add	hl, de
+    000000E1 29               [ 8]  222 	add	hl, hl
+    000000E2 29               [ 8]  223 	add	hl, hl
+    000000E3 44               [ 4]  224 	ld	b, h
+    000000E4 CB 38            [ 8]  225 	srl	b
+    000000E6 F8 02            [12]  226 	ldhl	sp,	#2
+    000000E8 70               [ 8]  227 	ld	(hl), b
+                                    228 ;src/rand.c:82: uint8_t rb2 = RAND_RANGE_8BIT(rand(), HALF_RANGE_SIZE / 2);
+    000000E9 CDr00r00         [24]  229 	call	_rand
+    000000EC 6B               [ 4]  230 	ld	l, e
+    000000ED 26 00            [ 8]  231 	ld	h, #0x00
+    000000EF 5D               [ 4]  232 	ld	e, l
+    000000F0 54               [ 4]  233 	ld	d, h
+    000000F1 29               [ 8]  234 	add	hl, hl
+    000000F2 29               [ 8]  235 	add	hl, hl
+    000000F3 19               [ 8]  236 	add	hl, de
+    000000F4 29               [ 8]  237 	add	hl, hl
+    000000F5 29               [ 8]  238 	add	hl, hl
+    000000F6 CB 3C            [ 8]  239 	srl	h
+    000000F8 44               [ 4]  240 	ld	b, h
+                                    241 ;src/rand.c:83: uint8_t rb3 = RAND_RANGE_8BIT(rand(), HALF_RANGE_SIZE / 2);
+    000000F9 CDr00r00         [24]  242 	call	_rand
+    000000FC 6B               [ 4]  243 	ld	l, e
+    000000FD 26 00            [ 8]  244 	ld	h, #0x00
+    000000FF 5D               [ 4]  245 	ld	e, l
+    00000100 54               [ 4]  246 	ld	d, h
+    00000101 29               [ 8]  247 	add	hl, hl
+    00000102 29               [ 8]  248 	add	hl, hl
+    00000103 19               [ 8]  249 	add	hl, de
+    00000104 29               [ 8]  250 	add	hl, hl
+    00000105 29               [ 8]  251 	add	hl, hl
+    00000106 CB 3C            [ 8]  252 	srl	h
+    00000108 7C               [ 4]  253 	ld	a, h
+    00000109 F8 03            [12]  254 	ldhl	sp,	#3
+    0000010B 77               [ 8]  255 	ld	(hl), a
+                                    256 ;src/rand.c:84: uint8_t rb4 = RAND_RANGE_8BIT(rand(), HALF_RANGE_SIZE / 2);
+    0000010C CDr00r00         [24]  257 	call	_rand
+    0000010F 6B               [ 4]  258 	ld	l, e
+    00000110 26 00            [ 8]  259 	ld	h, #0x00
+    00000112 5D               [ 4]  260 	ld	e, l
+    00000113 54               [ 4]  261 	ld	d, h
+    00000114 29               [ 8]  262 	add	hl, hl
+    00000115 29               [ 8]  263 	add	hl, hl
+    00000116 19               [ 8]  264 	add	hl, de
+    00000117 29               [ 8]  265 	add	hl, hl
+    00000118 29               [ 8]  266 	add	hl, hl
+    00000119 CB 3C            [ 8]  267 	srl	h
+    0000011B 54               [ 4]  268 	ld	d, h
+                                    269 ;src/rand.c:85: uint8_t rb = HALF_RANGE_SIZE + (rb1 - rb2) + (rb3 - rb4);
+    0000011C F8 02            [12]  270 	ldhl	sp,	#2
+    0000011E 2A               [ 8]  271 	ld	a, (hl+)
+    0000011F 90               [ 4]  272 	sub	a, b
+    00000120 C6 14            [ 8]  273 	add	a, #0x14
+    00000122 5F               [ 4]  274 	ld	e, a
+    00000123 7E               [ 8]  275 	ld	a, (hl)
+    00000124 92               [ 4]  276 	sub	a, d
+    00000125 83               [ 4]  277 	add	a, e
+    00000126 77               [ 8]  278 	ld	(hl), a
+                                    279 ;src/rand.c:92: uint8_t r_bucket_height = ++accu[r];
+    00000127 21r00r00         [12]  280 	ld	hl, #_accu
+    0000012A 06 00            [ 8]  281 	ld	b, #0x00
+    0000012C 09               [ 8]  282 	add	hl, bc
+    0000012D 34               [12]  283 	inc	(hl)
+    0000012E 7E               [ 8]  284 	ld	a, (hl)
+                                    285 ;src/rand.c:93: if (r_bucket_height > 144) break;
+    0000012F FE 91            [ 8]  286 	cp	a, #0x91
+    00000131 D2rCBr01         [16]  287 	jp	NC, 00112$
+                                    288 ;src/rand.c:94: plot(r  + (RANGE_SIZE * 0), 144-r_bucket_height, LTGREY, SOLID);
+    00000134 47               [ 4]  289 	ld	b, a
+    00000135 3E 90            [ 8]  290 	ld	a, #0x90
+    00000137 90               [ 4]  291 	sub	a, b
+    00000138 26 00            [ 8]  292 	ld	h, #0x00
+    0000013A E5               [16]  293 	push	hl
+    0000013B 33               [ 8]  294 	inc	sp
+    0000013C 26 01            [ 8]  295 	ld	h, #0x01
+    0000013E E5               [16]  296 	push	hl
+    0000013F 33               [ 8]  297 	inc	sp
+    00000140 47               [ 4]  298 	ld	b, a
+    00000141 C5               [16]  299 	push	bc
+    00000142 CDr00r00         [24]  300 	call	_plot
+    00000145 E8 04            [16]  301 	add	sp, #4
+                                    302 ;src/rand.c:96: uint8_t ra_bucket_height = ++accua[ra];
+    00000147 11r28r00         [12]  303 	ld	de, #_accua
+    0000014A F8 00            [12]  304 	ldhl	sp,	#0
+    0000014C 6E               [ 8]  305 	ld	l, (hl)
+    0000014D 26 00            [ 8]  306 	ld	h, #0x00
+    0000014F 19               [ 8]  307 	add	hl, de
+    00000150 4D               [ 4]  308 	ld	c, l
+    00000151 44               [ 4]  309 	ld	b, h
+    00000152 0A               [ 8]  310 	ld	a, (bc)
+    00000153 3C               [ 4]  311 	inc	a
+    00000154 02               [ 8]  312 	ld	(bc), a
+                                    313 ;src/rand.c:97: if (ra_bucket_height > 144) break;
+    00000155 FE 91            [ 8]  314 	cp	a, #0x91
+    00000157 30 72            [12]  315 	jr	NC, 00112$
+                                    316 ;src/rand.c:98: plot(ra + (RANGE_SIZE * 1), 144 - ra_bucket_height, DKGREY, SOLID);
+    00000159 4F               [ 4]  317 	ld	c, a
+    0000015A 3E 90            [ 8]  318 	ld	a, #0x90
+    0000015C 91               [ 4]  319 	sub	a, c
+    0000015D 47               [ 4]  320 	ld	b, a
+    0000015E F8 00            [12]  321 	ldhl	sp,	#0
+    00000160 7E               [ 8]  322 	ld	a, (hl)
+    00000161 C6 28            [ 8]  323 	add	a, #0x28
+    00000163 26 00            [ 8]  324 	ld	h, #0x00
+    00000165 E5               [16]  325 	push	hl
+    00000166 33               [ 8]  326 	inc	sp
+    00000167 26 02            [ 8]  327 	ld	h, #0x02
+    00000169 68               [ 4]  328 	ld	l, b
+    0000016A E5               [16]  329 	push	hl
+    0000016B F5               [16]  330 	push	af
+    0000016C 33               [ 8]  331 	inc	sp
+    0000016D CDr00r00         [24]  332 	call	_plot
+    00000170 E8 04            [16]  333 	add	sp, #4
+                                    334 ;src/rand.c:100: uint8_t rt_bucket_height = ++accut[rt];
+    00000172 11r50r00         [12]  335 	ld	de, #_accut
+    00000175 F8 01            [12]  336 	ldhl	sp,	#1
+    00000177 6E               [ 8]  337 	ld	l, (hl)
+    00000178 26 00            [ 8]  338 	ld	h, #0x00
+    0000017A 19               [ 8]  339 	add	hl, de
+    0000017B 4D               [ 4]  340 	ld	c, l
+    0000017C 44               [ 4]  341 	ld	b, h
+    0000017D 0A               [ 8]  342 	ld	a, (bc)
+    0000017E 3C               [ 4]  343 	inc	a
+    0000017F 02               [ 8]  344 	ld	(bc), a
+                                    345 ;src/rand.c:101: if (rt_bucket_height > 144) break;
+    00000180 FE 91            [ 8]  346 	cp	a, #0x91
+    00000182 30 47            [12]  347 	jr	NC, 00112$
+                                    348 ;src/rand.c:102: plot(rt + (RANGE_SIZE * 2), 144 - rt_bucket_height, BLACK, SOLID);
+    00000184 4F               [ 4]  349 	ld	c, a
+    00000185 3E 90            [ 8]  350 	ld	a, #0x90
+    00000187 91               [ 4]  351 	sub	a, c
+    00000188 47               [ 4]  352 	ld	b, a
+    00000189 F8 01            [12]  353 	ldhl	sp,	#1
+    0000018B 7E               [ 8]  354 	ld	a, (hl)
+    0000018C C6 50            [ 8]  355 	add	a, #0x50
+    0000018E 26 00            [ 8]  356 	ld	h, #0x00
+    00000190 E5               [16]  357 	push	hl
+    00000191 33               [ 8]  358 	inc	sp
+    00000192 26 03            [ 8]  359 	ld	h, #0x03
+    00000194 68               [ 4]  360 	ld	l, b
+    00000195 E5               [16]  361 	push	hl
+    00000196 F5               [16]  362 	push	af
+    00000197 33               [ 8]  363 	inc	sp
+    00000198 CDr00r00         [24]  364 	call	_plot
+    0000019B E8 04            [16]  365 	add	sp, #4
+                                    366 ;src/rand.c:104: uint8_t rb_bucket_height = ++accub[rb];
+    0000019D 11r78r00         [12]  367 	ld	de, #_accub
+    000001A0 F8 03            [12]  368 	ldhl	sp,	#3
+    000001A2 6E               [ 8]  369 	ld	l, (hl)
+    000001A3 26 00            [ 8]  370 	ld	h, #0x00
+    000001A5 19               [ 8]  371 	add	hl, de
+    000001A6 4D               [ 4]  372 	ld	c, l
+    000001A7 44               [ 4]  373 	ld	b, h
+    000001A8 0A               [ 8]  374 	ld	a, (bc)
+    000001A9 3C               [ 4]  375 	inc	a
+    000001AA 02               [ 8]  376 	ld	(bc), a
+                                    377 ;src/rand.c:105: if (rb_bucket_height > 144) break;
+    000001AB FE 91            [ 8]  378 	cp	a, #0x91
+    000001AD 30 1C            [12]  379 	jr	NC, 00112$
+                                    380 ;src/rand.c:106: plot(rb + (RANGE_SIZE * 3), 144 - rb_bucket_height, BLACK, SOLID);
+    000001AF 4F               [ 4]  381 	ld	c, a
+    000001B0 3E 90            [ 8]  382 	ld	a, #0x90
+    000001B2 91               [ 4]  383 	sub	a, c
+    000001B3 47               [ 4]  384 	ld	b, a
+    000001B4 F8 03            [12]  385 	ldhl	sp,	#3
+    000001B6 7E               [ 8]  386 	ld	a, (hl)
+    000001B7 C6 78            [ 8]  387 	add	a, #0x78
+    000001B9 26 00            [ 8]  388 	ld	h, #0x00
+    000001BB E5               [16]  389 	push	hl
+    000001BC 33               [ 8]  390 	inc	sp
+    000001BD 26 03            [ 8]  391 	ld	h, #0x03
+    000001BF 68               [ 4]  392 	ld	l, b
+    000001C0 E5               [16]  393 	push	hl
+    000001C1 F5               [16]  394 	push	af
+    000001C2 33               [ 8]  395 	inc	sp
+    000001C3 CDr00r00         [24]  396 	call	_plot
+    000001C6 E8 04            [16]  397 	add	sp, #4
+    000001C8 C3r93r00         [16]  398 	jp	00110$
+    000001CB                        399 00112$:
+                                    400 ;src/rand.c:108: }
+    000001CB E8 04            [16]  401 	add	sp, #4
+    000001CD C9               [16]  402 	ret
+    000001CE                        403 ___str_2:
+    000001CE 50 75 73 68 20 61 6E   404 	.ascii "Push any key (2)"
+             79 20 6B 65 79 20 28
+             32 29
+    000001DE 00                     405 	.db 0x00
+    000001DF                        406 ___str_3:
+    000001DF 47 65 74 74 69 6E 67   407 	.ascii "Getting seed"
+             20 73 65 65 64
+    000001EB 0A                     408 	.db 0x0a
+    000001EC 50 75 73 68 20 61 6E   409 	.ascii "Push any key (1)"
+             79 20 6B 65 79 20 28
+             31 29
+    000001FC 00                     410 	.db 0x00
+                                    411 	.area _CODE
+                                    412 	.area _INITIALIZER
+                                    413 	.area _CABS (ABS)
