@@ -10,7 +10,7 @@ stealth with social stealth (disguises, dialogue) and combat.
 
 ## Current state: prototype
 
-- One-screen levels on a 20×16 tile grid, plus a 2-row HUD
+- Levels from one screen (20×16 tiles) up to 60×48, scrolling as you move
 - Guards patrol waypoint loops, or stand still as sentries
 - Vision cones (4 tiles deep, 3 wide) blocked by walls and drawn on the map
 - Getting caught, reaching the exit, 32 turns of undo, restart
@@ -20,7 +20,7 @@ stealth with social stealth (disguises, dialogue) and combat.
   push the body out of sight
 - **Disguises:** take a uniform from a body; each guard is hostile,
   an enforcer, or blind to what you're wearing, which sets its vision cone
-- 6 levels, each checked solvable by an automated solver
+- 7 levels, each checked solvable by an automated solver
 - **Level editor** with in-editor playtesting and a built-in solver
 
 ## Level editor
@@ -35,6 +35,8 @@ This needs only `gcc` and Python 3 (no extra packages). It builds the game
 rules into `build/libgame.so`, starts a local server, and opens
 `http://127.0.0.1:8047` in your browser. Stop it with Ctrl+C.
 
+- **Size:** set width and height, or use **+ screen →** / **+ screen ↓**.
+  Dashed lines mark screen-sized areas; **Zoom** fits big maps on screen.
 - **Paint** walls, floor and exits, and place the player start (keys `1`-`4`).
 - **Guards** (`5`): click to add one (max 4), click to select, drag to
   move. **Route** (`6`): click to add waypoints. Corners are inserted for
@@ -50,9 +52,9 @@ rules into `build/libgame.so`, starts a local server, and opens
   level actually needs (e.g. "Needs a disguise", "Optional: items").
   **Watch solution** replays it.
 - **Playtest** (or press `P`) plays the level with the real rules from
-  `src/game.c` and the same screen as the ROM. Keyboard: arrows = D-pad,
-  `Z` = A, `X` = B, `Shift` = SELECT, `Enter` = START, `Esc` = back to
-  editing.
+  `src/game.c` and the same screen and scrolling camera as the ROM.
+  Keyboard: arrows = D-pad, `Z` = A, `X` = B, `Shift` = SELECT (hold +
+  arrows to look around), `Enter` = START, `Esc` = back to editing.
 - **Undo/redo** (Ctrl+Z / Ctrl+Shift+Z) for every edit. Level list: add,
   copy, reorder, delete.
 - **Save** (Ctrl+S) writes `levels/levels.json` and regenerates
@@ -71,12 +73,36 @@ Levels live in `levels/levels.json` (format documented at the top of
 | A | Wait one turn / next level after escaping |
 | B | Take down an adjacent guard (`B:TAKEDOWN`), or put on the uniform of the body you're standing on (`B:TAKE UNIFORM`) |
 | Hold B + D-pad | Drag a body behind you, or push one in front of you |
-| SELECT | Open inventory |
+| SELECT (tap) | Open inventory |
+| Hold SELECT + D-pad | Look around a big level; let go to return |
 | START | Tap: undo. Hold about a second: restart level |
 
 In the inventory, UP/DOWN chooses an item and A starts aiming. While
 aiming, dots mark every square you can hit; move the cursor with the
 D-pad and press A to throw. B goes back, SELECT cancels.
+
+### Big levels and scrolling
+
+![The camera following the player across a two-by-two-screen level](docs/scrolling.png)
+
+A level can be any size from one screen (20×16 tiles) up to 60 wide and
+48 tall, with at most 2,048 tiles in total, e.g. 40×48, 60×32 or 2×2
+screens. The limit is RAM: guard pathfinding needs one byte per tile.
+
+- The view follows you, keeping you at least 5 tiles from the sides and
+  4 from the top and bottom, and slides one tile at a time.
+- While aiming, the view follows the cursor instead.
+- Hold SELECT and use the D-pad to look around; let go and the view goes
+  back to where it was. A quick tap of SELECT still opens the inventory
+  (it now opens when you let go).
+- Guards off screen keep moving, and can still see you if you're inside
+  their cone. Look around before committing.
+- The HUD is drawn in the window layer, so it doesn't scroll.
+
+How it works: the Game Boy's background map is 32×32 tiles and wraps, so
+`main.c` draws only the visible part of the level into it, at the level
+position modulo 32, and scrolls the hardware registers. `game.c` reads
+the map straight from ROM.
 
 ### Throwing distractions
 
@@ -189,9 +215,13 @@ throws, takedowns and drags. It prints each level's shortest solution
 `TAKEDOWN`, `UNIFORM`, and `S7,5` means "stone at (7,5)", `B` is a bottle) and fails
 if any level is unsolvable. A table in `tests/test_game.c` lists what each
 level teaches (level 4 needs items; level 5 needs a takedown and moving
-the body; level 6 needs a disguise). The solver re-runs with that mechanic switched off and fails if
-the level can still be beaten. **Run it after every level edit.** It takes a few seconds because
-throws multiply the number of possibilities.
+the body; level 6 needs a disguise; level 7, the 2×2-screen level, needs
+the stone). The solver re-runs with that mechanic switched off and fails if
+the level can still be beaten. **Run it after every level edit.** The solver uses A* search (the
+walking distance to the nearest exit guides it), so even big levels solve
+in seconds while still finding a shortest solution. Proving a level
+*can't* be beaten still means checking every reachable situation; it
+gives up after 2 million and reports "too big to tell".
 
 ## Code layout
 

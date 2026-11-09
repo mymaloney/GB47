@@ -8,11 +8,18 @@
  *   B            take down an adjacent guard, or take the uniform of
  *                the body you stand on (when prompted)
  *   B + D-pad    hold B to drag a body behind you, or push one ahead
- *   SELECT       open inventory
+ *   SELECT       tap: open inventory
+ *   SELECT+D-pad hold SELECT to look around a big level; let go to return
  *   START        tap: undo    hold: restart level
  *
  * Inventory:  UP/DOWN choose, A aim, B/SELECT close
  * Aiming:     D-pad move cursor, A throw (spends a turn), B back, SELECT cancel
+ *
+ * Levels bigger than the screen scroll. The camera follows the player
+ * (or the aiming cursor), keeping it CAM_MARGIN tiles from the edges, and
+ * slides one tile at a time. The background map is 32x32 tiles and wraps,
+ * so the visible part of a level of any size is drawn into it at world
+ * position modulo 32. The HUD lives in the window layer so it stays still.
  */
 #include <gb/gb.h>
 #include <stdint.h>
@@ -21,7 +28,10 @@
 #include "levels.h"
 #include "tiles.h"
 
-#define HUD_Y 16   /* HUD occupies rows 16 and 17 */
+#define HUD_WIN_Y  (VIEW_H * 8)   /* window top when showing the 2-row HUD */
+#define CAM_MARGIN_X 5            /* keep the player this far from the sides */
+#define CAM_MARGIN_Y 4            /* ... and from the top/bottom */
+#define SCROLL_STEP  2            /* pixels per frame when sliding */
 
 /* Hardware sprite slots */
 #define SPRITE_PLAYER 0
@@ -44,8 +54,14 @@
 static GameState   state;
 static GameState   before;   /* snapshot taken before each turn, for undo */
 static uint8_t     level_idx;
-static uint8_t     vision[MAP_H][MAP_W];
-static uint8_t     row_buf[MAP_W];
+static uint8_t     vision[(VIEW_W + 1) * (VIEW_H + 1)];  /* view + 1 for slides */
+static uint8_t     row_buf[32];
+
+static uint8_t     cam_x, cam_y;            /* camera (top-left), in tiles */
+static uint16_t    scroll_x, scroll_y;      /* camera, in pixels */
+static uint8_t     select_armed;            /* SELECT pressed while playing */
+static uint8_t     looking;                 /* SELECT held and panned */
+static uint8_t     look_x, look_y;          /* camera before looking */
 
 static uint8_t     ui_mode;
 static uint8_t     inv_item;     /* highlighted / chosen item type */
@@ -72,7 +88,7 @@ static uint8_t char_tile(char c)
 /* Writes str into row_buf starting at x; returns the next x. */
 static uint8_t put_text(uint8_t x, const char *str)
 {
-    while (*str && x < MAP_W) row_buf[x++] = char_tile(*str++);
+    while (*str && x < VIEW_W) row_buf[x++] = char_tile(*str++);
     return x;
 }
 
@@ -87,7 +103,7 @@ static void put_number3(uint8_t x, uint16_t n)
 static void clear_row_buf(void)
 {
     uint8_t x;
-    for (x = 0; x < MAP_W; x++) row_buf[x] = TILE_BLANK;
+    for (x = 0; x < VIEW_W; x++) row_buf[x] = TILE_BLANK;
 }
 
 /* ------------------------------------------------------------------ */
@@ -120,6 +136,8 @@ static uint8_t next_item(uint8_t from, uint8_t step)
 
 static void draw_hud(void)
 {
+    if (ui_mode == UI_INVENTORY) return;   /* the window shows the inventory */
+
     /* Row 1: "1 FIRST STEPS   T012" or "THROW STONE     T012" */
     clear_row_buf();
     if (ui_mode == UI_AIM) {
@@ -133,7 +151,7 @@ static void draw_hud(void)
     }
     row_buf[16] = char_tile('T');
     put_number3(17, state.turn);
-    set_bkg_tiles(0, HUD_Y, MAP_W, 1, row_buf);
+    set_win_tiles(0, 0, VIEW_W, 1, row_buf);
 
     /* Row 2: what the player can do right now */
     clear_row_buf();
@@ -145,9 +163,10 @@ static void draw_hud(void)
     else if (game_takedown_target(&state) != 0xFF) put_text(0, "B:TAKEDOWN");
     else if (game_uniform_here(&state) != 0xFF)    put_text(0, "B:TAKE UNIFORM");
     else if (game_body_adjacent(&state)) put_text(0, "HOLD B:DRAG");
+    else if (looking)                    put_text(0, "LOOKING AROUND");
     else if (has_items())                put_text(0, "SEL:ITEMS START:UNDO");
     else                                 put_text(0, "A:WAIT START:UNDO");
-    set_bkg_tiles(0, HUD_Y + 1, MAP_W, 1, row_buf);
+    set_win_tiles(0, 1, VIEW_W, 1, row_buf);
     hud_msg = 0;   /* messages last until the next HUD redraw */
 }
 
@@ -155,35 +174,117 @@ static void draw_hud(void)
 /* Map + sprites                                                       */
 /* ------------------------------------------------------------------ */
 
-static void draw_map(void)
+/* Draw the w x h block of the level at (x0, y0) into the background map
+ * (wrapping at 32 tiles), with vision cones and the aiming overlay. */
+static void draw_tiles(uint8_t x0, uint8_t y0, uint8_t w, uint8_t h)
 {
-    uint8_t x, y, cell, seen, aim;
+    uint8_t  x, y, wx, wy, cell, seen, aim, bx, first;
+    uint8_t *v = vision;
 
-    game_compute_vision(&state, vision);
+    game_compute_vision(&state, x0, y0, w, h, vision);
 
-    for (y = 0; y < MAP_H; y++) {
-        for (x = 0; x < MAP_W; x++) {
-            cell = game_cell(x, y);
-            seen = vision[y][x];
+    for (y = 0; y < h; y++) {
+        wy = y0 + y;
+        for (x = 0; x < w; x++, v++) {
+            wx   = x0 + x;
+            cell = game_cell(wx, wy);
+            seen = *v;
             if (cell == CELL_WALL) {
                 row_buf[x] = TILE_WALL;
             } else if (cell == CELL_EXIT) {
                 row_buf[x] = seen == VIS_SEEN ? TILE_EXIT_SEEN : TILE_EXIT;
             } else {
-                aim = (ui_mode == UI_AIM) && game_can_throw(&state, inv_item, x, y);
+                aim = (ui_mode == UI_AIM) && game_can_throw(&state, inv_item, wx, wy);
                 if (aim)                    row_buf[x] = seen == VIS_SEEN ? TILE_AIM_SEEN : TILE_AIM;
                 else if (seen == VIS_SEEN)  row_buf[x] = TILE_SEEN;
                 else if (seen)              row_buf[x] = TILE_WATCH;  /* blind guard */
                 else                        row_buf[x] = TILE_FLOOR;
             }
         }
-        set_bkg_tiles(0, y, MAP_W, 1, row_buf);
+        /* the row may wrap past the right edge of the 32-tile map */
+        bx    = x0 & 31;
+        first = 32 - bx;
+        if (first > w) first = w;
+        set_bkg_tiles(bx, wy & 31, first, 1, row_buf);
+        if (first < w) set_bkg_tiles(0, wy & 31, w - first, 1, row_buf + first);
     }
 }
 
-/* Hardware sprite coordinates are offset by (8, 16). */
-#define SPR_X(tx) ((uint8_t)((tx) * 8 + 8))
-#define SPR_Y(ty) ((uint8_t)((ty) * 8 + 16))
+static void set_scroll(uint16_t px, uint16_t py)
+{
+    scroll_x = px;
+    scroll_y = py;
+    move_bkg((uint8_t)px, (uint8_t)py);   /* the map wraps every 256 px */
+}
+
+/* Camera position (one axis) that keeps tile t at least margin tiles inside
+ * the view, moving as little as possible, and never past the level edge. */
+static uint8_t follow(uint8_t cam, uint8_t t, uint8_t margin, uint8_t view, uint8_t size)
+{
+    int16_t c = cam;
+    if ((int16_t)t < c + margin) c = (int16_t)t - margin;
+    if ((int16_t)t > c + view - 1 - margin) c = (int16_t)t - (view - 1 - margin);
+    if (c > (int16_t)size - view) c = (int16_t)size - view;
+    if (c < 0) c = 0;
+    return (uint8_t)c;
+}
+
+/* Where the camera should be: on the aiming cursor while aiming, wherever
+ * the player panned it while looking, otherwise on the player. */
+static void camera_target(uint8_t *nx, uint8_t *ny)
+{
+    if (looking) {
+        *nx = cam_x;
+        *ny = cam_y;
+    } else if (ui_mode == UI_AIM) {
+        *nx = follow(cam_x, aim_x, 1, VIEW_W, game_width());
+        *ny = follow(cam_y, aim_y, 1, VIEW_H, game_height());
+    } else {
+        *nx = follow(cam_x, state.px, CAM_MARGIN_X, VIEW_W, game_width());
+        *ny = follow(cam_y, state.py, CAM_MARGIN_Y, VIEW_H, game_height());
+    }
+}
+
+static void draw_sprites(void);
+
+/* Move the camera, redrawing the visible tiles. A one-tile move slides;
+ * anything bigger (restart, undo) jumps. */
+static void move_camera(uint8_t nx, uint8_t ny)
+{
+    int8_t  dx = (int8_t)(nx - cam_x), dy = (int8_t)(ny - cam_y);
+    uint8_t f;
+
+    if (dx < -1 || dx > 1 || dy < -1 || dy > 1 || (dx == 0 && dy == 0)) {
+        cam_x = nx;
+        cam_y = ny;
+        draw_tiles(cam_x, cam_y, VIEW_W, VIEW_H);
+        set_scroll((uint16_t)cam_x * 8, (uint16_t)cam_y * 8);
+        return;
+    }
+    /* draw old view + the new strip, then slide across */
+    draw_tiles(dx < 0 ? nx : cam_x, dy < 0 ? ny : cam_y,
+               VIEW_W + (dx != 0), VIEW_H + (dy != 0));
+    for (f = SCROLL_STEP; f <= 8; f += SCROLL_STEP) {
+        vsync();
+        set_scroll((uint16_t)cam_x * 8 + dx * f, (uint16_t)cam_y * 8 + dy * f);
+        draw_sprites();
+    }
+    cam_x = nx;
+    cam_y = ny;
+}
+
+/* Put a sprite on a level tile, hiding it if that tile is off screen or
+ * would overlap the HUD. Hardware coordinates are offset by (8, 16). */
+static void place_sprite(uint8_t n, uint8_t tx, uint8_t ty)
+{
+    int16_t sx = (int16_t)tx * 8 - (int16_t)scroll_x;
+    int16_t sy = (int16_t)ty * 8 - (int16_t)scroll_y;
+    if (sx <= -8 || sx >= VIEW_W * 8 || sy <= -8 || sy + 8 > VIEW_H * 8) {
+        move_sprite(n, 0, 0);
+        return;
+    }
+    move_sprite(n, (uint8_t)(sx + 8), (uint8_t)(sy + 16));
+}
 
 static void draw_cursor(void)
 {
@@ -193,7 +294,7 @@ static void draw_cursor(void)
     }
     set_sprite_tile(SPRITE_CURSOR,
         game_can_throw(&state, inv_item, aim_x, aim_y) ? SPR_CURSOR : SPR_CURSOR_BAD);
-    move_sprite(SPRITE_CURSOR, SPR_X(aim_x), SPR_Y(aim_y));
+    place_sprite(SPRITE_CURSOR, aim_x, aim_y);
 }
 
 /* First sprite tile of a guard's uniform style (see SPR_GUARD_STYLE_TILES). */
@@ -208,7 +309,7 @@ static void draw_sprites(void)
     uint8_t i;
 
     set_sprite_tile(SPRITE_PLAYER, SPR_PLAYER + state.disguise);
-    move_sprite(SPRITE_PLAYER, SPR_X(state.px), SPR_Y(state.py));
+    place_sprite(SPRITE_PLAYER, state.px, state.py);
 
     for (i = 0; i < MAX_GUARDS; i++) {
         uint8_t spr   = SPRITE_GUARD + i;
@@ -220,11 +321,11 @@ static void draw_sprites(void)
                 set_sprite_tile(spr, g->stripped ? SPR_BODY_STRIPPED : base + 5);
             else if (g->mode == GUARD_SUBDUED) set_sprite_tile(spr, base + 4);
             else                               set_sprite_tile(spr, base + g->facing);
-            move_sprite(spr, SPR_X(g->x), SPR_Y(g->y));
+            place_sprite(spr, g->x, g->y);
             /* mark the spot this guard is heading to investigate */
             if (g->mode == GUARD_INVESTIGATE) {
                 set_sprite_tile(noise, SPR_NOISE);
-                move_sprite(noise, SPR_X(g->tx), SPR_Y(g->ty));
+                place_sprite(noise, g->tx, g->ty);
             } else {
                 move_sprite(noise, 0, 0);
             }
@@ -238,7 +339,10 @@ static void draw_sprites(void)
 
 static void redraw(void)
 {
-    draw_map();
+    uint8_t nx, ny;
+    camera_target(&nx, &ny);
+    if (nx == cam_x && ny == cam_y) draw_tiles(cam_x, cam_y, VIEW_W, VIEW_H);
+    else move_camera(nx, ny);
     draw_sprites();
     draw_hud();
 }
@@ -251,12 +355,12 @@ static void draw_inventory(void)
 {
     uint8_t i, row = 2;
 
-    for (i = 0; i < MAP_W; i++) row_buf[i] = TILE_WIN_EDGE;
-    set_win_tiles(0, 0, MAP_W, 1, row_buf);
+    for (i = 0; i < VIEW_W; i++) row_buf[i] = TILE_WIN_EDGE;
+    set_win_tiles(0, 0, VIEW_W, 1, row_buf);
 
     clear_row_buf();
     put_text(1, "THROW WHAT?");
-    set_win_tiles(0, 1, MAP_W, 1, row_buf);
+    set_win_tiles(0, 1, VIEW_W, 1, row_buf);
 
     for (i = 0; i < ITEM_TYPES; i++) {
         if (!state.items[i]) continue;
@@ -270,13 +374,13 @@ static void draw_inventory(void)
         } else {
             row_buf[16] = FONT_BASE + state.items[i];
         }
-        set_win_tiles(0, row++, MAP_W, 1, row_buf);
+        set_win_tiles(0, row++, VIEW_W, 1, row_buf);
     }
     clear_row_buf();
-    while (row < WIN_ROWS - 1) set_win_tiles(0, row++, MAP_W, 1, row_buf);
+    while (row < WIN_ROWS - 1) set_win_tiles(0, row++, VIEW_W, 1, row_buf);
 
     put_text(1, "A:AIM  B:BACK");
-    set_win_tiles(0, WIN_ROWS - 1, MAP_W, 1, row_buf);
+    set_win_tiles(0, WIN_ROWS - 1, VIEW_W, 1, row_buf);
 }
 
 static void open_inventory(void)
@@ -284,14 +388,13 @@ static void open_inventory(void)
     if (!state.items[inv_item]) inv_item = next_item(inv_item, 1);
     ui_mode = UI_INVENTORY;
     draw_inventory();
-    move_win(7, WIN_Y);
-    HIDE_SPRITES;     /* sprites would draw on top of the window */
-    SHOW_WIN;
+    move_win(7, WIN_Y);   /* grow the window up over the map */
+    HIDE_SPRITES;         /* sprites would draw on top of the window */
 }
 
 static void close_inventory(void)
 {
-    HIDE_WIN;
+    move_win(7, HUD_WIN_Y);   /* back to just the HUD */
     SHOW_SPRITES;
 }
 
@@ -300,6 +403,27 @@ static void back_to_play(void)
     if (ui_mode == UI_INVENTORY) close_inventory();
     ui_mode = UI_PLAY;
     redraw();
+}
+
+/* SELECT was let go: a tap opens the inventory, a look returns to the
+ * player. */
+static void select_released(void)
+{
+    if (!select_armed) return;
+    select_armed = 0;
+    if (looking) {             /* put the camera back where it was */
+        looking = 0;
+        move_camera(look_x, look_y);
+        redraw();
+        return;
+    }
+    if (ui_mode != UI_PLAY || state.status != STATUS_PLAYING) return;
+    if (has_items()) {
+        open_inventory();
+    } else {
+        hud_msg = "NOTHING TO THROW";
+        draw_hud();
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -312,8 +436,15 @@ static void load_level(uint8_t idx)
     ui_mode   = UI_PLAY;
     level_idx = idx;
     inv_item  = 0;
+    looking   = 0;
+    select_armed = 0;
     game_load(&levels[idx], &state);
     undo_clear();
+    /* start with the player in the middle of the screen */
+    cam_x = follow(0, state.px, VIEW_W / 2 - 1, VIEW_W, game_width());
+    cam_y = follow(0, state.py, VIEW_H / 2 - 1, VIEW_H, game_height());
+    draw_tiles(cam_x, cam_y, VIEW_W, VIEW_H);
+    set_scroll((uint16_t)cam_x * 8, (uint16_t)cam_y * 8);
     redraw();
 }
 
@@ -378,11 +509,26 @@ static void input_play(uint8_t pressed, uint8_t keys)
         return;   /* otherwise B only matters while held (dragging) */
     }
 
-    if (pressed & J_SELECT) {
-        if (has_items()) {
-            open_inventory();
-        } else {
-            hud_msg = "NOTHING TO THROW";
+    if (pressed & J_SELECT) {   /* acted on when let go: see select_released */
+        select_armed = 1;
+        return;
+    }
+
+    /* holding SELECT: the D-pad pans the camera to look around */
+    if (keys & J_SELECT) {
+        uint8_t nx = cam_x, ny = cam_y;
+        if      ((pressed & J_UP) && ny > 0)                         ny--;
+        else if ((pressed & J_DOWN) && ny < game_height() - VIEW_H)  ny++;
+        else if ((pressed & J_LEFT) && nx > 0)                       nx--;
+        else if ((pressed & J_RIGHT) && nx < game_width() - VIEW_W)  nx++;
+        if (pressed & (J_UP | J_DOWN | J_LEFT | J_RIGHT)) {
+            if (!looking) {
+                look_x = cam_x;
+                look_y = cam_y;
+            }
+            looking = 1;
+            move_camera(nx, ny);
+            draw_sprites();
             draw_hud();
         }
         return;
@@ -457,11 +603,17 @@ static void input_aim(uint8_t pressed)
     else return;
 
     /* keep the cursor on the map and within throwing range */
-    if (nx >= MAP_W || ny >= MAP_H) return;
+    if (nx >= game_width() || ny >= game_height()) return;
     if (game_distance(state.px, state.py, nx, ny) > item_defs[inv_item].range) return;
     aim_x = nx;
     aim_y = ny;
-    draw_cursor();
+    camera_target(&nx, &ny);          /* scroll if the cursor nears an edge */
+    if (nx != cam_x || ny != cam_y) {
+        move_camera(nx, ny);
+        draw_sprites();
+    } else {
+        draw_cursor();
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -501,9 +653,10 @@ void main(void)
     OBP0_REG = 0xE4;
     set_bkg_data(0, BKG_TILE_COUNT, bkg_tile_data);
     set_sprite_data(0, SPRITE_TILE_COUNT, sprite_tile_data);
-    HIDE_WIN;
+    move_win(7, HUD_WIN_Y);   /* the HUD: bottom two rows, never scrolls */
     load_level(0);
     SHOW_BKG;
+    SHOW_WIN;
     SHOW_SPRITES;
     DISPLAY_ON;
 
@@ -515,6 +668,7 @@ void main(void)
         prev     = keys;
 
         handle_start(keys, released);
+        if (released & J_SELECT) select_released();
         pressed &= ~J_START;
         if (!pressed) continue;
 

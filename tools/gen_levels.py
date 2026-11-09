@@ -12,8 +12,11 @@ JSON format, one object per level:
     {
       "name":  "FIRST STEPS",              max 12 chars, HUD font only
       "notes": "Shown as a comment in levels.c",
-      "map":   [16 strings of 20 chars],   '#' wall '.' floor 'E' exit
-                                           'P' player start
+      "map":   [rows of equal length],     '#' wall '.' floor 'E' exit
+                                           'P' player start. At least one
+                                           screen (20x16), at most 60x48
+                                           and 2048 tiles; bigger maps
+                                           scroll
       "items": {"stone": 0, "bottle": 0},
       "guards": [{
           "facing":   "right",             up/right/down/left
@@ -34,7 +37,8 @@ ROOT = Path(__file__).resolve().parent.parent
 JSON_PATH = ROOT / "levels" / "levels.json"
 
 # Must match src/game.h
-MAP_W, MAP_H = 20, 16
+VIEW_W, VIEW_H = 20, 16
+MAP_MAX_W, MAP_MAX_H, MAP_MAX_CELLS = 60, 48, 2048
 MAX_GUARDS, MAX_WAYPOINTS = 4, 6
 NAME_MAX = 12
 DIRS = ["up", "right", "down", "left"]
@@ -57,8 +61,18 @@ def validate_level(lv):
                     f"(not {' '.join(bad)}).")
 
     rows = lv.get("map", [])
-    if len(rows) != MAP_H or any(len(r) != MAP_W for r in rows):
-        errs.append(f"Map must be {MAP_H} rows of {MAP_W} characters.")
+    mh = len(rows)
+    mw = len(rows[0]) if rows else 0
+    if any(len(r) != mw for r in rows):
+        errs.append("All map rows must be the same length.")
+        return errs
+    if not (VIEW_W <= mw <= MAP_MAX_W and VIEW_H <= mh <= MAP_MAX_H):
+        errs.append(f"Map is {mw}x{mh}; it must be {VIEW_W}-{MAP_MAX_W} wide and "
+                    f"{VIEW_H}-{MAP_MAX_H} tall.")
+        return errs
+    if mw * mh > MAP_MAX_CELLS:
+        errs.append(f"Map has {mw * mh} tiles; the Game Boy has room for "
+                    f"{MAP_MAX_CELLS} (e.g. 40x48 or 60x32).")
         return errs
     if any(c not in "#.EP" for r in rows for c in r):
         errs.append("Map may only contain # . E P.")
@@ -69,7 +83,7 @@ def validate_level(lv):
         errs.append("Map needs at least one exit.")
 
     def wall(x, y):
-        return not (0 <= x < MAP_W and 0 <= y < MAP_H) or rows[y][x] == "#"
+        return not (0 <= x < mw and 0 <= y < mh) or rows[y][x] == "#"
 
     items = lv.get("items", {})
     for k in ITEMS:
@@ -151,11 +165,11 @@ def generate_c(levels):
         out.append(f"    /* {n + 1}: {lv['name']}" + (f" - {notes}" if notes else "")
                    .replace("*/", "* /") + " */")
         out.append("    {")
+        rows = lv["map"]
         out.append(f"        {c_string(lv['name'])},")
-        out.append("        {")
-        for r in lv["map"]:
-            out.append(f"            {c_string(r)},")
-        out.append("        },")
+        out.append(f"        {len(rows[0])}, {len(rows)},")
+        for k, r in enumerate(rows):
+            out.append(f"            {c_string(r)}" + ("," if k == len(rows) - 1 else ""))
         guards = lv.get("guards", [])
         out.append(f"        {len(guards)},")
         out.append("        {")

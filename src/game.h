@@ -12,9 +12,14 @@
 
 #include <stdint.h>
 
-/* Play field: one screen, no scrolling. 20x18 tiles total, bottom 2 = HUD. */
-#define MAP_W 20
-#define MAP_H 16
+/* The screen shows VIEW_W x VIEW_H map tiles (the bottom 2 of the 18 tile
+ * rows are the HUD). Levels can be bigger and scroll. Their size is limited
+ * by RAM: pathfinding needs one byte per tile. */
+#define VIEW_W        20
+#define VIEW_H        16
+#define MAP_MAX_W     60    /* 3 screens wide */
+#define MAP_MAX_H     48    /* 3 screens tall */
+#define MAP_MAX_CELLS 2048  /* width * height, e.g. 40x48 or 60x32 */
 
 #define MAX_GUARDS    4
 #define MAX_WAYPOINTS 6
@@ -107,8 +112,11 @@ typedef struct {
 
 typedef struct {
     const char *name;        /* shown in the HUD, max 12 chars */
-    /* '#' wall, '.' floor, 'E' exit, 'P' player start */
-    const char *rows[MAP_H];
+    uint8_t     width;       /* VIEW_W..MAP_MAX_W */
+    uint8_t     height;      /* VIEW_H..MAP_MAX_H */
+    /* width * height chars, row after row:
+     * '#' wall, '.' floor, 'E' exit, 'P' player start */
+    const char *map;
     uint8_t     guard_count;
     GuardDef    guards[MAX_GUARDS];
     uint8_t     items[ITEM_TYPES]; /* starting inventory, by item type */
@@ -180,8 +188,10 @@ uint8_t game_throw(GameState *s, uint8_t item, uint8_t x, uint8_t y);
 /* Grid-step (Manhattan) distance. */
 uint8_t game_distance(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1);
 
-/* Map queries for the current level. */
+/* Map queries for the current level. Outside the map counts as wall. */
 uint8_t game_cell(uint8_t x, uint8_t y);
+uint8_t game_width(void);
+uint8_t game_height(void);
 
 /* Can this guard see tile (x, y) with the normal cone (+ line of sight)? */
 uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y);
@@ -189,12 +199,15 @@ uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y);
 /* ATT_* of guard idx toward the player's current disguise. */
 uint8_t game_attitude(const GameState *s, uint8_t idx);
 
-/* Fill vis[y][x]: VIS_SEEN where a guard would spot the player,
- * VIS_WATCHED where only a blind guard looks (bodies, suspicious acts). */
+/* Vision for the w x h block of tiles starting at (x0, y0), written row by
+ * row into vis (w * h bytes): VIS_SEEN where a guard would spot the player,
+ * VIS_WATCHED where only a blind guard looks (bodies, suspicious acts).
+ * The Game Boy only asks for the part of the map on screen. */
 #define VIS_NONE    0
 #define VIS_WATCHED 1
 #define VIS_SEEN    2
-void game_compute_vision(const GameState *s, uint8_t vis[MAP_H][MAP_W]);
+void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
+                         uint8_t w, uint8_t h, uint8_t *vis);
 
 /* Index of the body under the player whose uniform can be taken, or 0xFF. */
 uint8_t game_uniform_here(const GameState *s);

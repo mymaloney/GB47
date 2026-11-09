@@ -107,12 +107,15 @@ kbd {
 .tabs { display: flex; gap: 4px; margin-bottom: 10px; }
 .tab { border-radius: 6px; padding: 6px 18px; }
 .tab.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-#screen {
-  width: 480px; height: 432px; image-rendering: pixelated;
+.map-scroll {
+  max-width: 100%; max-height: 72vh; overflow: auto;
   border-radius: 6px; box-shadow: 0 0 0 6px #0f1411, 0 8px 30px rgba(0,0,0,.35);
-  cursor: crosshair; background: #e0f8d0;
+  background: #0f1411;
 }
-.tools { width: 480px; margin-top: 16px; }
+#screen { display: block; image-rendering: pixelated; cursor: crosshair; background: #e0f8d0; }
+.size-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
+.size-row input { width: 4.5em; }
+.tools { width: 100%; max-width: 640px; margin-top: 16px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
 .toolbar button b { color: var(--muted); font-weight: 600; margin-right: 2px; }
 .toolbar button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }

@@ -41,7 +41,9 @@ lib = C.CDLL(str(LIB_PATH))
 lib.editor_info.restype = C.c_int
 lib.editor_info.argtypes = [C.c_int]
 
-MAP_W, MAP_H = lib.editor_info(4), lib.editor_info(5)
+MAP_MAX_W, MAP_MAX_H = lib.editor_info(4), lib.editor_info(5)
+MAP_MAX_CELLS = lib.editor_info(13)
+VIEW_W, VIEW_H = lib.editor_info(14), lib.editor_info(15)
 MAX_GUARDS, MAX_WAYPOINTS = lib.editor_info(6), lib.editor_info(7)
 ITEM_TYPES, DISGUISE_TYPES = lib.editor_info(8), lib.editor_info(9)
 
@@ -57,7 +59,8 @@ class GuardDef(C.Structure):
 
 
 class LevelDef(C.Structure):
-    _fields_ = [("name", C.c_char_p), ("rows", C.c_char_p * MAP_H),
+    _fields_ = [("name", C.c_char_p), ("width", C.c_uint8), ("height", C.c_uint8),
+                ("map", C.c_char_p),
                 ("guard_count", C.c_uint8), ("guards", GuardDef * MAX_GUARDS),
                 ("items", C.c_uint8 * ITEM_TYPES)]
 
@@ -101,7 +104,8 @@ _sig = {
     "game_throw": (C.c_uint8, [S, C.c_uint8, C.c_uint8, C.c_uint8]),
     "game_can_throw": (C.c_uint8, [S, C.c_uint8, C.c_uint8, C.c_uint8]),
     "game_cell": (C.c_uint8, [C.c_uint8, C.c_uint8]),
-    "game_compute_vision": (None, [S, C.POINTER((C.c_uint8 * MAP_W) * MAP_H)]),
+    "game_compute_vision": (None, [S, C.c_uint8, C.c_uint8, C.c_uint8, C.c_uint8,
+                                   C.POINTER(C.c_uint8)]),
     "game_takedown_target": (C.c_uint8, [S]),
     "game_uniform_here": (C.c_uint8, [S]),
     "game_body_adjacent": (C.c_uint8, [S]),
@@ -128,8 +132,10 @@ class Level:
         self._keep = []
         d = self.c = LevelDef()
         d.name = self._b(data["name"])
-        for y, row in enumerate(data["map"]):
-            d.rows[y] = self._b(row)
+        rows = data["map"]
+        self.width, self.height = len(rows[0]), len(rows)
+        d.width, d.height = self.width, self.height
+        d.map = self._b("".join(rows))
         guards = data.get("guards", [])[:MAX_GUARDS]
         d.guard_count = len(guards)
         for i, g in enumerate(guards):
@@ -187,13 +193,14 @@ def throw(level, state, item, x, y):
 def view(level, state, aim_item=None):
     """Everything the screen needs, computed the same way as src/main.c."""
     level.activate()
-    vis = ((C.c_uint8 * MAP_W) * MAP_H)()
-    lib.game_compute_vision(C.byref(state), C.byref(vis))
+    w, h = level.width, level.height
+    vis = (C.c_uint8 * (w * h))()
+    lib.game_compute_vision(C.byref(state), 0, 0, w, h, vis)
     tiles, aim = [], []
-    for y in range(MAP_H):
+    for y in range(h):
         row, arow = [], []
-        for x in range(MAP_W):
-            cell, seen = lib.game_cell(x, y), vis[y][x]
+        for x in range(w):
+            cell, seen = lib.game_cell(x, y), vis[y * w + x]
             can = aim_item is not None and lib.game_can_throw(C.byref(state), aim_item, x, y)
             arow.append(1 if can else 0)
             if cell == G["CELL_WALL"]:

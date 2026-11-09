@@ -7,8 +7,9 @@
  */
 "use strict";
 
-const SCALE = 3;                 // 160x144 Game Boy screen -> 480x432
-const TILE = 8 * SCALE;
+const PLAY_SCALE = 3;            // playtest: 160x144 Game Boy screen -> 480x432
+let TILE = 16;                   // current tile size on the canvas, in px
+let zoomSetting = "fit";         // edit view zoom: "fit" or 1-3
 const PALETTE = ["#e0f8d0", "#88c070", "#346856", "#081820"];
 const GUARD_COLORS = ["#e4572e", "#2e86ab", "#c23bd4", "#f2b705"];
 const TOOL_HINTS = {
@@ -83,6 +84,24 @@ function makeTile(px, transparent) {
 
 function drawBkg(t, tx, ty) { ctx.drawImage(bkgTiles[t], tx * TILE, ty * TILE, TILE, TILE); }
 function drawSpr(t, tx, ty) { ctx.drawImage(sprTiles[t], tx * TILE, ty * TILE, TILE, TILE); }
+/* draw at a pixel offset (playtest camera), in Game Boy pixels */
+function drawBkgPx(t, gx, gy) {
+  ctx.drawImage(bkgTiles[t], gx * PLAY_SCALE, gy * PLAY_SCALE, 8 * PLAY_SCALE, 8 * PLAY_SCALE);
+}
+function drawSprPx(t, gx, gy) {
+  ctx.drawImage(sprTiles[t], gx * PLAY_SCALE, gy * PLAY_SCALE, 8 * PLAY_SCALE, 8 * PLAY_SCALE);
+}
+
+const mapW = (lv) => lv.map[0].length;
+const mapH = (lv) => lv.map.length;
+
+function sizeCanvas(wPx, hPx) {
+  if (canvas.width !== wPx || canvas.height !== hPx) {
+    canvas.width = wPx;
+    canvas.height = hPx;
+    ctx.imageSmoothingEnabled = false;
+  }
+}
 
 function charTile(c) {
   const T = A.T;
@@ -122,6 +141,7 @@ function hudRows(lv, idx, v, ui) {
   else if (v.prompt.takedown) msg = "B:TAKEDOWN";
   else if (v.prompt.uniform) msg = "B:TAKE UNIFORM";
   else if (v.prompt.body_adjacent) msg = "HOLD B:DRAG";
+  else if (ui.looking) msg = "LOOKING AROUND";
   else if (v.items.some((c) => c > 0)) msg = "SEL:ITEMS START:UNDO";
   else msg = "A:WAIT START:UNDO";
   return [row1, textRow([[0, msg]])];
@@ -141,9 +161,12 @@ function guardBase(g) {
 
 function renderEdit() {
   const lv = level();
+  TILE = 8 * editZoom(lv);
+  sizeCanvas(mapW(lv) * TILE, mapH(lv) * TILE);
   const fresh = preview && preview.key === keyOf(lv) && previewDisguise >= 0;
   const tiles = fresh ? preview.view.tiles : localTiles(lv);
   tiles.forEach((row, y) => row.forEach((t, x) => drawBkg(t, x, y)));
+  drawScreenGuides(lv);
 
   // routes under the sprites
   lv.guards.forEach((g, i) => drawRoute(g, i, i === selGuard));
@@ -163,11 +186,61 @@ function renderEdit() {
     ctx.strokeRect(x * TILE + 1.5, y * TILE + 1.5, TILE - 3, TILE - 3);
   }
 
-  const v = fresh ? preview.view : { turn: 0, status: 0, items: [0, 0],
-    prompt: { takedown: false, uniform: false, body_adjacent: false } };
-  const [r1, r2] = hudRows(lv, cur, v, { mode: "play" });
-  drawRow(r1, 16);
-  drawRow(r2, 17);
+  updateSizeInfo(lv);
+}
+
+/* Dashed lines every screen (20x16 tiles) so you can see how much fits on
+ * the Game Boy at once. The camera scrolls freely; these are just a guide. */
+function drawScreenGuides(lv) {
+  const w = mapW(lv), h = mapH(lv);
+  if (w <= A.view_w && h <= A.view_h) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(242, 183, 5, 0.85)";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 6]);
+  for (let x = A.view_w; x < w; x += A.view_w) {
+    ctx.beginPath(); ctx.moveTo(x * TILE, 0); ctx.lineTo(x * TILE, h * TILE); ctx.stroke();
+  }
+  for (let y = A.view_h; y < h; y += A.view_h) {
+    ctx.beginPath(); ctx.moveTo(0, y * TILE); ctx.lineTo(w * TILE, y * TILE); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* "Fit": the biggest zoom that keeps the map within about 720x600 px. */
+function editZoom(lv) {
+  if (zoomSetting !== "fit") return parseInt(zoomSetting, 10);
+  for (let z = 3; z > 1; z--)
+    if (mapW(lv) * 8 * z <= 720 && mapH(lv) * 8 * z <= 600) return z;
+  return 1;
+}
+
+function updateSizeInfo(lv) {
+  const w = mapW(lv), h = mapH(lv);
+  if (document.activeElement !== $("map-w")) $("map-w").value = w;
+  if (document.activeElement !== $("map-h")) $("map-h").value = h;
+  const screens = (w / A.view_w) * (h / A.view_h);
+  $("size-info").textContent = `${w}×${h} = ${w * h} of ${A.map_max_cells} tiles` +
+    ` (about ${Math.round(screens * 10) / 10} screens). Dashed lines mark screen-sized areas.`;
+  $("add-right").disabled = w + A.view_w > A.map_max_w || (w + A.view_w) * h > A.map_max_cells;
+  $("add-down").disabled = h + A.view_h > A.map_max_h || w * (h + A.view_h) > A.map_max_cells;
+}
+
+/* Resize the map: new area is wall; cutting off part of the map can strand
+ * the start, exits or guards, which the problems list will point out. */
+function resizeMap(w, h) {
+  const lv = level();
+  w = Math.max(A.view_w, Math.min(A.map_max_w, w | 0));
+  h = Math.max(A.view_h, Math.min(A.map_max_h, h | 0));
+  if (w === mapW(lv) && h === mapH(lv)) return;
+  pushUndo();
+  const rows = [];
+  for (let y = 0; y < h; y++) {
+    const old = lv.map[y] || "";
+    rows.push((old + "#".repeat(w)).slice(0, w));
+  }
+  lv.map = rows;
+  changed();
 }
 
 function drawRoute(g, i, selected) {
@@ -255,10 +328,13 @@ let stroke = null;   // {before, changed, drag}
 
 function tileAt(e) {
   const r = canvas.getBoundingClientRect();
-  const x = Math.floor((e.clientX - r.left) / (r.width / 20));
-  const y = Math.floor((e.clientY - r.top) / (r.height / 18));
+  const lv = level();
+  const x = Math.floor((e.clientX - r.left) / (r.width / mapW(lv)));
+  const y = Math.floor((e.clientY - r.top) / (r.height / mapH(lv)));
   return [x, y];
 }
+
+const inMap = (x, y) => x >= 0 && y >= 0 && x < mapW(level()) && y < mapH(level());
 
 function setCell(x, y, c) {
   const lv = level();
@@ -338,7 +414,7 @@ canvas.addEventListener("contextmenu", (e) => { if (mode === "edit") e.preventDe
 canvas.addEventListener("mousedown", (e) => {
   if (mode !== "edit") return;
   const [x, y] = tileAt(e);
-  if (x < 0 || x >= 20 || y < 0 || y >= 16) return;
+  if (!inMap(x, y)) return;
   stroke = { before: snapshot(), changed: false, drag: null };
   if (applyTool(x, y, e, true)) { stroke.changed = true; renderAll(); }
   e.preventDefault();
@@ -347,7 +423,7 @@ canvas.addEventListener("mousedown", (e) => {
 canvas.addEventListener("mousemove", (e) => {
   if (!stroke) return;
   const [x, y] = tileAt(e);
-  if (x < 0 || x >= 20 || y < 0 || y >= 16) return;
+  if (!inMap(x, y)) return;
   if (applyTool(x, y, e, false)) { stroke.changed = true; renderAll(); }
 });
 
@@ -551,7 +627,56 @@ async function solve() {
 
 let P = null;   // playtest session
 
-function newPlayUI() { return { mode: "play", item: 0, ax: 0, ay: 0, msg: null }; }
+function newPlayUI() { return { mode: "play", item: 0, ax: 0, ay: 0, msg: null, looking: false }; }
+
+// ----- camera: same rules as follow()/camera_target()/move_camera() in main.c
+const CAM_MARGIN_X = 5, CAM_MARGIN_Y = 4, SCROLL_STEP = 2;
+
+function follow(cam, t, margin, view, size) {
+  let c = cam;
+  if (t < c + margin) c = t - margin;
+  if (t > c + view - 1 - margin) c = t - (view - 1 - margin);
+  if (c > size - view) c = size - view;
+  if (c < 0) c = 0;
+  return c;
+}
+
+function cameraTarget() {
+  const W = mapW(P.lv), H = mapH(P.lv);
+  if (P.ui.looking) return [P.cam.x, P.cam.y];
+  if (P.ui.mode === "aim")
+    return [follow(P.cam.x, P.ui.ax, 1, A.view_w, W), follow(P.cam.y, P.ui.ay, 1, A.view_h, H)];
+  const [px, py] = P.view.player;
+  return [follow(P.cam.x, px, CAM_MARGIN_X, A.view_w, W), follow(P.cam.y, py, CAM_MARGIN_Y, A.view_h, H)];
+}
+
+function snapCamera(x, y) {
+  P.cam = { x, y };
+  P.scroll = { x: x * 8, y: y * 8 };
+}
+
+function centerCamera() {
+  const [px, py] = P.view.player;
+  snapCamera(follow(0, px, A.view_w / 2 - 1, A.view_w, mapW(P.lv)),
+             follow(0, py, A.view_h / 2 - 1, A.view_h, mapH(P.lv)));
+}
+
+/* One-tile moves slide SCROLL_STEP px per frame; bigger moves jump. */
+async function moveCamera(nx, ny) {
+  const dx = nx - P.cam.x, dy = ny - P.cam.y;
+  if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (!dx && !dy)) { snapCamera(nx, ny); return; }
+  for (let f = SCROLL_STEP; f <= 8; f += SCROLL_STEP) {
+    P.scroll = { x: P.cam.x * 8 + dx * f, y: P.cam.y * 8 + dy * f };
+    renderPlay();
+    await sleep(1000 / 60);
+  }
+  snapCamera(nx, ny);
+}
+
+async function followCamera() {
+  const [nx, ny] = cameraTarget();
+  await moveCamera(nx, ny);
+}
 
 async function enterPlay() {
   const lv = clone(level());
@@ -563,7 +688,9 @@ async function enterPlay() {
   }
   mode = "play";
   P = { lv, idx: cur, state: res.state, view: res.view, undo: [], ui: newPlayUI(),
-        busy: false, replay: null, keys: new Set(), struggle: null };
+        busy: false, replay: null, keys: new Set(), struggle: null,
+        cam: { x: 0, y: 0 }, scroll: { x: 0, y: 0 }, selectArmed: false };
+  centerCamera();
   $("tab-play").classList.add("active");
   $("tab-edit").classList.remove("active");
   $("edit-tools").hidden = true;
@@ -587,47 +714,65 @@ function enterEdit() {
   renderEdit();
 }
 
+/* Draw what the Game Boy shows: the map scrolled to the camera, sprites,
+ * then the HUD (the window layer) over the bottom two rows. */
 function renderPlay() {
   const v = P.view;
   const ui = P.ui;
-  v.tiles.forEach((row, y) => row.forEach((t, x) => drawBkg(t, x, y)));
-  const [r1, r2] = hudRows(P.lv, P.idx, v, ui);
-  drawRow(r1, 16);
-  drawRow(r2, 17);
+  const sx = P.scroll.x, sy = P.scroll.y;
+  sizeCanvas(160 * PLAY_SCALE, 144 * PLAY_SCALE);
 
-  if (ui.mode === "inventory") { drawInventory(); return; }   // sprites hidden
-
-  // lower sprite index = on top (player is sprite 0), so draw in reverse
-  [...v.sprites].reverse().forEach((s) => {
-    let t = s.t;
-    if (P.struggle && s.guard === v.takedown_guard && P.struggle.on)
-      t = s.base + 4;
-    else if (P.struggle && s.guard === v.takedown_guard)
-      t = s.base + v.guards[s.guard].facing;
-    drawSpr(t, s.x, s.y);
-  });
-  if (ui.mode === "aim") {
-    const ok = v.aim && v.aim[ui.ay][ui.ax];
-    drawSpr(ok ? A.T.SPR_CURSOR : A.T.SPR_CURSOR_BAD, ui.ax, ui.ay);
+  const tx0 = Math.floor(sx / 8), ty0 = Math.floor(sy / 8);
+  for (let ty = ty0; ty <= ty0 + A.view_h; ty++) {
+    for (let tx = tx0; tx <= tx0 + A.view_w; tx++) {
+      const row = v.tiles[ty];
+      const t = row && row[tx] !== undefined ? row[tx] : A.T.TILE_WALL;
+      drawBkgPx(t, tx * 8 - sx, ty * 8 - sy);
+    }
   }
+
+  const place = (t, x, y) => {
+    const px = x * 8 - sx, py = y * 8 - sy;
+    if (px <= -8 || px >= A.view_w * 8 || py <= -8 || py + 8 > A.view_h * 8) return;  // off screen / under HUD
+    drawSprPx(t, px, py);
+  };
+  if (ui.mode !== "inventory") {          // sprites are hidden while the inventory is open
+    // lower sprite index = on top (player is sprite 0), so draw in reverse
+    [...v.sprites].reverse().forEach((s) => {
+      let t = s.t;
+      if (P.struggle && s.guard === v.takedown_guard)
+        t = P.struggle.on ? s.base + 4 : s.base + v.guards[s.guard].facing;
+      place(t, s.x, s.y);
+    });
+    if (ui.mode === "aim") {
+      const ok = v.aim && v.aim[ui.ay][ui.ax];
+      place(ok ? A.T.SPR_CURSOR : A.T.SPR_CURSOR_BAD, ui.ax, ui.ay);
+    }
+  }
+
+  if (ui.mode === "inventory") { drawInventory(); return; }
+  const [r1, r2] = hudRows(P.lv, P.idx, v, ui);
+  r1.forEach((t, x) => drawBkgPx(t, x * 8, A.view_h * 8));
+  r2.forEach((t, x) => drawBkgPx(t, x * 8, A.view_h * 8 + 8));
 }
 
 function drawInventory() {
   const T = A.T;
   const rows = 3 + A.items.length;
   const top = 18 - rows;
-  drawRow(new Array(20).fill(T.TILE_WIN_EDGE), top);
-  drawRow(textRow([[1, "THROW WHAT?"]]), top + 1);
+  const row = (r, y) => r.forEach((t, x) => drawBkgPx(t, x * 8, y * 8));
+  row(new Array(20).fill(T.TILE_WIN_EDGE), top);
+  row(textRow([[1, "THROW WHAT?"]]), top + 1);
   let r = top + 2;
   A.items.forEach((it, i) => {
     const n = P.view.items[i];
     if (!n) return;
     const parts = [[3, it.name], [15, "X" + n]];
     if (i === P.ui.item) parts.push([1, ">"]);
-    drawRow(textRow(parts), r++);
+    row(textRow(parts), r++);
   });
-  while (r < top + rows - 1) drawRow(textRow([]), r++);
-  drawRow(textRow([[1, "A:AIM  B:BACK"]]), top + rows - 1);
+  while (r < top + rows - 1) row(textRow([]), r++);
+  row(textRow([[1, "A:AIM  B:BACK"]]), top + rows - 1);
 }
 
 async function act(action, opts = {}) {
@@ -642,6 +787,7 @@ async function act(action, opts = {}) {
   }
   P.state = res.state;
   P.view = res.view;
+  await followCamera();
   return true;
 }
 
@@ -656,6 +802,8 @@ async function restartPlay() {
   P.view = res.view;
   P.undo = [];
   P.ui = newPlayUI();
+  P.selectArmed = false;
+  centerCamera();
   renderPlay();
 }
 
@@ -663,6 +811,7 @@ async function undoPlay() {
   if (P.ui.mode !== "play" || !P.undo.length) return;
   P.state = P.undo.pop();
   await refreshView();
+  await followCamera();
   renderPlay();
 }
 
@@ -719,20 +868,23 @@ async function onPlayKey(btn, dir) {
   }
 
   if (ui.mode === "aim") {
-    if (btn === "SELECT") { ui.mode = "play"; await refreshView(); return; }
-    if (btn === "B") { ui.mode = "inventory"; await refreshView(); return; }
+    if (btn === "SELECT") { ui.mode = "play"; await refreshView(); await followCamera(); return; }
+    if (btn === "B") { ui.mode = "inventory"; await refreshView(); await followCamera(); return; }
     if (btn === "A") {
-      if (await act({ type: "throw", item: ui.item, x: ui.ax, y: ui.ay })) ui.mode = "play";
-      else ui.msg = "NO CLEAR SHOT";
+      if (await act({ type: "throw", item: ui.item, x: ui.ax, y: ui.ay })) {
+        ui.mode = "play";
+        await followCamera();
+      } else ui.msg = "NO CLEAR SHOT";
       return;
     }
     if (dir === undefined) return;
     const nx = ui.ax + [0, 1, 0, -1][dir];
     const ny = ui.ay + [-1, 0, 1, 0][dir];
-    if (nx < 0 || ny < 0 || nx >= 20 || ny >= 16) return;
+    if (nx < 0 || ny < 0 || nx >= mapW(P.lv) || ny >= mapH(P.lv)) return;
     const d = Math.abs(nx - v.player[0]) + Math.abs(ny - v.player[1]);
     if (d > A.items[ui.item].range) return;
     ui.ax = nx; ui.ay = ny;
+    await followCamera();                  // scroll if the cursor nears an edge
     return;
   }
 
@@ -744,15 +896,39 @@ async function onPlayKey(btn, dir) {
     else if (v.prompt.uniform) await act({ type: "step", code: G.ACT_UNIFORM });
     return;
   }
-  if (btn === "SELECT") {
-    if (hasItems()) { if (!v.items[ui.item]) ui.item = nextItem(ui.item, 1); ui.mode = "inventory"; }
-    else ui.msg = "NOTHING TO THROW";
+  if (btn === "SELECT") { P.selectArmed = true; return; }   // acted on when let go
+  if (P.keys.has("SELECT") && dir !== undefined) {           // look around
+    let { x, y } = P.cam;
+    if (dir === 0 && y > 0) y--;
+    else if (dir === 2 && y < mapH(P.lv) - A.view_h) y++;
+    else if (dir === 3 && x > 0) x--;
+    else if (dir === 1 && x < mapW(P.lv) - A.view_w) x++;
+    if (!ui.looking) P.lookFrom = { ...P.cam };   // to return to on release
+    ui.looking = true;
+    await moveCamera(x, y);
     return;
   }
   if (btn === "A") { await act({ type: "step", code: G.ACT_WAIT }); return; }
   if (dir === undefined) return;
   const drag = P.keys.has("B") && v.prompt.body_adjacent;
   await act({ type: "step", code: drag ? G.ACT_DRAG + dir : dir });
+}
+
+/* SELECT let go: a tap opens the inventory, a look returns to the player. */
+async function selectUp() {
+  if (!P.selectArmed) return;
+  P.selectArmed = false;
+  const ui = P.ui;
+  if (ui.looking) {
+    ui.looking = false;
+    await moveCamera(P.lookFrom.x, P.lookFrom.y);
+  } else if (ui.mode === "play" && P.view.status === A.G.STATUS_PLAYING) {
+    if (hasItems()) {
+      if (!P.view.items[ui.item]) ui.item = nextItem(ui.item, 1);
+      ui.mode = "inventory";
+    } else ui.msg = "NOTHING TO THROW";
+  }
+  renderPlay();
 }
 
 // START: tap to undo, hold to restart (like handle_start in main.c)
@@ -859,6 +1035,7 @@ window.addEventListener("keyup", async (e) => {
   const btn = buttonFor(e);
   if (btn) P.keys.delete(btn);
   if (btn === "START") await startUp();
+  if (btn === "SELECT" && !P.busy) await selectUp();
 });
 
 // ============================================================== actions
@@ -920,6 +1097,11 @@ function wire() {
   $("btn-build").addEventListener("click", build);
   $("btn-solve").addEventListener("click", solve);
   $("btn-watch").addEventListener("click", watchSolution);
+  $("zoom").addEventListener("change", (e) => { zoomSetting = e.target.value; renderEdit(); });
+  $("map-w").addEventListener("change", (e) => resizeMap(parseInt(e.target.value, 10), mapH(level())));
+  $("map-h").addEventListener("change", (e) => resizeMap(mapW(level()), parseInt(e.target.value, 10)));
+  $("add-right").addEventListener("click", () => resizeMap(mapW(level()) + A.view_w, mapH(level())));
+  $("add-down").addEventListener("click", () => resizeMap(mapW(level()), mapH(level()) + A.view_h));
   $("preview-disguise").addEventListener("change", (e) => {
     previewDisguise = parseInt(e.target.value, 10);
     preview = null;

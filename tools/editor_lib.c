@@ -16,8 +16,8 @@ int editor_info(int what)
     case 1:  return sizeof(LevelDef);
     case 2:  return sizeof(GuardDef);
     case 3:  return sizeof(Guard);
-    case 4:  return MAP_W;
-    case 5:  return MAP_H;
+    case 4:  return MAP_MAX_W;
+    case 5:  return MAP_MAX_H;
     case 6:  return MAX_GUARDS;
     case 7:  return MAX_WAYPOINTS;
     case 8:  return ITEM_TYPES;
@@ -25,6 +25,9 @@ int editor_info(int what)
     case 10: return ACT_COUNT;
     case 11: return TAKEDOWN_TURNS;
     case 12: return UNDO_DEPTH;
+    case 13: return MAP_MAX_CELLS;
+    case 14: return VIEW_W;
+    case 15: return VIEW_H;
     default: return -1;
     }
 }

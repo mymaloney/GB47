@@ -40,6 +40,16 @@ assert g.decode(token).px == 2
 r = g.solve(lv, g.G["SOLVE_USE_ALL"])
 assert r["length"] == 20, r
 
+# a two-screen-wide level works end to end
+wide = dict(levels[0], map=[row + "#" * 20 for row in levels[0]["map"]])
+assert not gen_levels.validate_level(wide), gen_levels.validate_level(wide)
+lw = g.Level(wide)
+vw = g.view(lw, g.new_game(lw))
+assert len(vw["tiles"][0]) == 40 and len(vw["tiles"]) == 16
+assert g.solve(lw, g.G["SOLVE_USE_ALL"])["length"] == 20
+too_big = dict(levels[0], map=[row * 3 for row in levels[0]["map"]] * 3)
+assert any("tiles" in e for e in gen_levels.validate_level(too_big))
+
 # validation catches common mistakes
 bad = dict(levels[0], map=[row.replace("P", ".") for row in levels[0]["map"]])
 assert any("player start" in e for e in gen_levels.validate_level(bad))

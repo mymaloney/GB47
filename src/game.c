@@ -26,8 +26,11 @@ const ItemDef item_defs[ITEM_TYPES] = {
     { "BOTTLE",  6,    6 },
 };
 
-static uint8_t         map[MAP_H][MAP_W];
+/* The map is read straight from the level data in ROM; row_start[y] is
+ * y * width, so a tile lookup needs no multiply (slow on the Game Boy). */
 static const LevelDef *level;
+static uint8_t         map_w, map_h;
+static uint16_t        row_start[MAP_MAX_H];
 
 static const int8_t dir_dx[4] = { 0, 1, 0, -1 };
 static const int8_t dir_dy[4] = { -1, 0, 1, 0 };
@@ -38,28 +41,23 @@ static const int8_t dir_dy[4] = { -1, 0, 1, 0 };
 
 void game_load(const LevelDef *lvl, GameState *s)
 {
-    uint8_t x, y, i;
+    uint8_t  x, y, i;
+    uint16_t at = 0;
 
     /* zero everything (incl. padding) so states compare with memcmp */
     memset(s, 0, sizeof(GameState));
     level = lvl;
+    map_w = lvl->width;
+    map_h = lvl->height;
     s->px = 1;
     s->py = 1;
 
-    for (y = 0; y < MAP_H; y++) {
-        const char *row = lvl->rows[y];
-        for (x = 0; x < MAP_W; x++) {
-            char c = row[x];
-            if (c == '#') {
-                map[y][x] = CELL_WALL;
-            } else if (c == 'E') {
-                map[y][x] = CELL_EXIT;
-            } else {
-                map[y][x] = CELL_FLOOR;
-                if (c == 'P') {
-                    s->px = x;
-                    s->py = y;
-                }
+    for (y = 0; y < map_h; y++) {
+        row_start[y] = at;
+        for (x = 0; x < map_w; x++, at++) {
+            if (lvl->map[at] == 'P') {
+                s->px = x;
+                s->py = y;
             }
         }
     }
@@ -80,9 +78,16 @@ void game_load(const LevelDef *lvl, GameState *s)
 
 uint8_t game_cell(uint8_t x, uint8_t y)
 {
-    if (x >= MAP_W || y >= MAP_H) return CELL_WALL;
-    return map[y][x];
+    char c;
+    if (x >= map_w || y >= map_h) return CELL_WALL;
+    c = level->map[row_start[y] + x];
+    if (c == '#') return CELL_WALL;
+    if (c == 'E') return CELL_EXIT;
+    return CELL_FLOOR;
 }
+
+uint8_t game_width(void)  { return map_w; }
+uint8_t game_height(void) { return map_h; }
 
 uint8_t game_distance(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1)
 {
@@ -111,7 +116,7 @@ static uint8_t line_of_sight(int8_t x0, int8_t y0, int8_t x1, int8_t y1)
         if (e2 > -dy) { err -= dy; x0 += sx; }
         if (e2 <  dx) { err += dx; y0 += sy; }
         if (x0 == x1 && y0 == y1) return 1;
-        if (map[y0][x0] == CELL_WALL) return 0;
+        if (game_cell((uint8_t)x0, (uint8_t)y0) == CELL_WALL) return 0;
     }
 }
 
@@ -182,14 +187,15 @@ static uint8_t watch_cone(uint8_t att)
     return att == ATT_HOSTILE ? ATT_HOSTILE : ATT_ENFORCER;
 }
 
-void game_compute_vision(const GameState *s, uint8_t vis[MAP_H][MAP_W])
+void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
+                         uint8_t w, uint8_t h, uint8_t *vis)
 {
-    uint8_t i, x, y, att, cone, mark, range;
-    int8_t  fwd, side, half, tx, ty;
+    uint8_t  i, att, cone, mark, range;
+    int8_t   fwd, side, half;
+    int16_t  tx, ty;
+    uint8_t *v;
 
-    for (y = 0; y < MAP_H; y++)
-        for (x = 0; x < MAP_W; x++)
-            vis[y][x] = VIS_NONE;
+    memset(vis, VIS_NONE, (uint16_t)w * h);
 
     for (i = 0; i < s->guard_count; i++) {
         const Guard *g  = &s->guards[i];
@@ -208,12 +214,13 @@ void game_compute_vision(const GameState *s, uint8_t vis[MAP_H][MAP_W])
         for (fwd = 1; fwd <= (int8_t)range; fwd++) {
             half = cone_half(cone, fwd);
             for (side = -half; side <= half; side++) {
-                tx = (int8_t)g->x + fx * fwd + lx * side;
-                ty = (int8_t)g->y + fy * fwd + ly * side;
-                if (tx < 0 || ty < 0 || tx >= MAP_W || ty >= MAP_H) continue;
-                if (vis[ty][tx] >= mark) continue;
-                if (cone_sees(g, (uint8_t)tx, (uint8_t)ty, cone))
-                    vis[ty][tx] = mark;
+                tx = (int16_t)g->x + fx * fwd + lx * side;
+                ty = (int16_t)g->y + fy * fwd + ly * side;
+                /* only tiles inside the requested block */
+                if (tx < x0 || ty < y0 || tx >= x0 + w || ty >= y0 + h) continue;
+                v = &vis[(uint16_t)(ty - y0) * w + (tx - x0)];
+                if (*v >= mark) continue;
+                if (cone_sees(g, (uint8_t)tx, (uint8_t)ty, cone)) *v = mark;
             }
         }
     }
@@ -254,38 +261,43 @@ static uint8_t body_spotted(const GameState *s)
 /* ------------------------------------------------------------------ */
 
 #define NO_PATH 0xFF
+#define QUEUE_SIZE 1024   /* ring buffer; holds the BFS frontier only */
 
-static uint8_t dist[MAP_H][MAP_W];
-static uint8_t queue_x[MAP_W * MAP_H];
-static uint8_t queue_y[MAP_W * MAP_H];
+static uint8_t dist[MAP_MAX_CELLS];   /* dist[row_start[y] + x] */
+static uint8_t queue_x[QUEUE_SIZE];
+static uint8_t queue_y[QUEUE_SIZE];
 
-/* Fill dist[][] with walking distance to (x, y), ignoring guards and the
+#define DIST(x, y) dist[row_start[y] + (x)]
+
+/* Fill dist[] with walking distance to (x, y), ignoring guards and the
  * player. Unreachable tiles get NO_PATH. */
 static void distances_to(uint8_t x, uint8_t y)
 {
     uint16_t head = 0, tail = 0;
     uint8_t  cx, cy, nx, ny, nd, d;
 
-    memset(dist, NO_PATH, sizeof(dist));
-    dist[y][x] = 0;
-    queue_x[tail] = x;
-    queue_y[tail] = y;
-    tail++;
+    memset(dist, NO_PATH, (uint16_t)map_w * map_h);
+    DIST(x, y) = 0;
+    queue_x[0] = x;
+    queue_y[0] = y;
+    tail = 1;
 
-    while (head < tail) {
+    while (head != tail) {
         cx = queue_x[head];
         cy = queue_y[head];
-        head++;
-        nd = dist[cy][cx] + 1;
+        head = (head + 1) & (QUEUE_SIZE - 1);
+        nd = DIST(cx, cy) + 1;
+        if (nd == NO_PATH) nd = NO_PATH - 1;   /* very long paths saturate */
         for (d = 0; d < 4; d++) {
             nx = cx + dir_dx[d];
             ny = cy + dir_dy[d];
             if (game_cell(nx, ny) == CELL_WALL) continue;
-            if (dist[ny][nx] != NO_PATH) continue;
-            dist[ny][nx] = nd;
+            if (DIST(nx, ny) != NO_PATH) continue;
+            DIST(nx, ny) = nd;
             queue_x[tail] = nx;
             queue_y[tail] = ny;
-            tail++;
+            tail = (tail + 1) & (QUEUE_SIZE - 1);
+            if (tail == head) return;          /* frontier overflow: give up */
         }
     }
 }
@@ -347,7 +359,7 @@ static uint8_t step_toward(GameState *s, uint8_t idx, uint8_t x, uint8_t y)
     uint8_t d, here, nx, ny;
 
     distances_to(x, y);
-    here = dist[g->y][g->x];
+    here = DIST(g->x, g->y);
     if (here == NO_PATH) return STEP_NOPATH;
     if (here == 0) return STEP_OK;
 
@@ -355,8 +367,9 @@ static uint8_t step_toward(GameState *s, uint8_t idx, uint8_t x, uint8_t y)
     for (d = 0; d < 4; d++) {
         nx = g->x + dir_dx[d];
         ny = g->y + dir_dy[d];
-        if (game_cell(nx, ny) != CELL_WALL && dist[ny][nx] == here - 1) break;
+        if (game_cell(nx, ny) != CELL_WALL && DIST(nx, ny) == here - 1) break;
     }
+    if (d == 4) return STEP_NOPATH;   /* path too long to track: stay put */
 
     g->facing = d;
     if (nx == s->px && ny == s->py) {
@@ -470,7 +483,7 @@ static uint8_t react_to_noise(GameState *s, uint8_t x, uint8_t y, uint8_t radius
         if (game_distance(g->x, g->y, x, y) > radius) continue;
         heard |= (uint8_t)(1 << i);
         if (g->x != x || g->y != y) g->facing = dir_look(g->x, g->y, x, y);
-        d = dist[g->y][g->x];
+        d = DIST(g->x, g->y);
         if (d < best_dist) {        /* ties go to the lower guard index */
             best_dist = d;
             best = i;

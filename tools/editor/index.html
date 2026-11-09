@@ -37,7 +37,9 @@
       <button id="tab-edit" class="tab active">Edit</button>
       <button id="tab-play" class="tab">Playtest</button>
     </div>
-    <canvas id="screen" width="480" height="432" tabindex="0" aria-label="Game Boy screen"></canvas>
+    <div id="map-scroll" class="map-scroll">
+      <canvas id="screen" width="480" height="432" tabindex="0" aria-label="Level map / Game Boy screen"></canvas>
+    </div>
 
     <div id="edit-tools" class="tools">
       <div class="toolbar" id="toolbar">
@@ -49,6 +51,18 @@
         <button data-tool="route" title="Add waypoints to the selected guard; drag to move, right-click to remove (6)"><b>6</b> Route</button>
       </div>
       <p id="tool-hint" class="hint"></p>
+      <div class="size-row">
+        <label class="inline">Size
+          <input id="map-w" type="number" min="20" max="60" step="1"> ×
+          <input id="map-h" type="number" min="16" max="48" step="1">
+        </label>
+        <button id="add-right" title="Add a screen (20 columns) on the right">+ screen →</button>
+        <button id="add-down" title="Add a screen (16 rows) at the bottom">+ screen ↓</button>
+        <label class="inline">Zoom
+          <select id="zoom"><option value="fit" selected>Fit</option><option value="1">1×</option><option value="2">2×</option><option value="3">3×</option></select>
+        </label>
+      </div>
+      <p id="size-info" class="hint"></p>
       <label class="inline">Show cones as seen by a player in
         <select id="preview-disguise">
           <option value="-1">(hide cones)</option>
@@ -69,7 +83,7 @@
         <tr><td><kbd>←↑↓→</kbd></td><td>D-pad: move (hold <kbd>X</kbd> to drag/push a body)</td></tr>
         <tr><td><kbd>Z</kbd></td><td>A: wait</td></tr>
         <tr><td><kbd>X</kbd></td><td>B: takedown / take uniform; hold to drag</td></tr>
-        <tr><td><kbd>Shift</kbd></td><td>SELECT: inventory</td></tr>
+        <tr><td><kbd>Shift</kbd></td><td>SELECT: tap for inventory; hold + arrows to look around</td></tr>
         <tr><td><kbd>Enter</kbd></td><td>START: tap undo, hold restart</td></tr>
       </table>
       <p id="play-status" class="hint"></p>

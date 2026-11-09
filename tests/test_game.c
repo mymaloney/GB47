@@ -30,24 +30,23 @@ static int failures = 0;
 /* A tiny level for unit tests. */
 static const LevelDef test_level = {
     "TEST",
-    {
+    20, 16,
+        "####################"
+        "#P.................#"
+        "#..................#"
+        "#.....#............#"
+        "#..................#"
+        "#..................#"
+        "#.................E#"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
         "####################",
-        "#P.................#",
-        "#..................#",
-        "#.....#............#",
-        "#..................#",
-        "#..................#",
-        "#.................E#",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-    },
     2,
     {
         { DIR_LEFT, 1, { {10, 3} }, DISGUISE_NONE, 0 },  /* sentry looking left at the wall */
@@ -200,24 +199,23 @@ static void test_patroller_resumes_route(void)
  * right). Guard 1 looks down over x 14-16, rows 3-5. */
 static const LevelDef td_level = {
     "TD",
-    {
+    20, 16,
+        "####################"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#.................E#"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
         "####################",
-        "#..................#",
-        "#..................#",
-        "#..................#",
-        "#..................#",
-        "#.................E#",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-    },
     2,
     {
         { DIR_LEFT, 1, { {5, 3} }, DISGUISE_NONE, 0 },
@@ -299,24 +297,23 @@ static void test_body_alarm(void)
  * GUARD. Both wear GUARD uniforms. */
 static const LevelDef dz_level = {
     "DZ",
-    {
+    20, 16,
+        "####################"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
         "####################",
-        "#..................#",
-        "#..................#",
-        "#..................#",
-        "#..................#",
-        "#..................#",
-        "#..................#",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-        "####################",
-    },
     2,
     {
         { DIR_RIGHT, 1, { {2, 3} },           DISGUISE_GUARD, "HBE" },
@@ -327,7 +324,7 @@ static const LevelDef dz_level = {
 
 static void test_disguise_cones(void)
 {
-    static uint8_t vis[MAP_H][MAP_W];
+    static uint8_t vis[VIEW_H][VIEW_W];
     GameState s;
 
     game_load(&levels[0], &s);
@@ -337,7 +334,7 @@ static void test_disguise_cones(void)
     game_load(&dz_level, &s);
     CHECK(game_attitude(&s, 0) == ATT_HOSTILE, "hostile to own clothes");
     s.guards[1].x = 17;   /* move guard 1's cone out of the way */
-    game_compute_vision(&s, vis);
+    game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
     CHECK(vis[3][9] == VIS_SEEN, "hostile cone reaches 7");
     CHECK(vis[3][10] == VIS_NONE, "but not 8");
     CHECK(vis[6][9] == VIS_SEEN && vis[1][9] == VIS_SEEN, "7 tiles wide");
@@ -351,7 +348,7 @@ static void test_disguise_cones(void)
     game_load(&dz_level, &s);
     s.disguise = DISGUISE_GUARD;
     CHECK(game_attitude(&s, 0) == ATT_BLIND, "blind to GUARD");
-    game_compute_vision(&s, vis);
+    game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
     CHECK(vis[3][5] == VIS_WATCHED, "blind guard's cone shown as watched");
     CHECK(vis[3][7] == VIS_NONE, "watch cone is the normal size");
     s.px = 4; s.py = 3;
@@ -421,6 +418,75 @@ static void test_take_uniform(void)
     CHECK(game_uniform_here(&s) == 0xFF, "no uniform defined");
 }
 
+/* Two screens wide, more than one tall. A wall splits it at x=20 with a
+ * single gap at the bottom (y=17). Guard 0 stands right of the wall. */
+static const LevelDef big_level = {
+    "BIG",
+    40, 20,
+        "########################################"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#............P......#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#................E.#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#...................#..................#"
+        "#......................................#"
+        "#...................#..................#"
+        "########################################",
+    1,
+    {
+        { DIR_RIGHT, 1, { {24, 4} }, DISGUISE_NONE, 0 },
+    },
+    { 1, 0 },
+};
+
+static void test_big_map(void)
+{
+    static uint8_t full[20][40], part[VIEW_H][VIEW_W];
+    GameState s;
+    int x, y, ok = 1, turns;
+
+    game_load(&big_level, &s);
+    CHECK(game_width() == 40 && game_height() == 20, "size");
+    CHECK(s.px == 13 && s.py == 4, "player start found in a flat map");
+    CHECK(game_cell(25, 5) == CELL_FLOOR && game_cell(20, 5) == CELL_WALL, "cells");
+    CHECK(game_cell(37, 10) == CELL_EXIT, "exit beyond the first screen");
+    CHECK(game_cell(40, 5) == CELL_WALL && game_cell(5, 20) == CELL_WALL,
+          "outside the map is wall");
+
+    /* vision for a screen-sized block matches the same tiles of the whole */
+    game_compute_vision(&s, 0, 0, 40, 20, &full[0][0]);
+    game_compute_vision(&s, 20, 4, VIEW_W, VIEW_H, &part[0][0]);
+    for (y = 0; y < VIEW_H; y++)
+        for (x = 0; x < VIEW_W; x++)
+            if (part[y][x] != full[y + 4][x + 20]) ok = 0;
+    CHECK(ok, "partial vision block matches full map");
+    CHECK(full[4][28] == VIS_SEEN && full[4][29] == VIS_NONE, "cone in screen 2");
+
+    /* noise across the wall: the guard hears it (hearing ignores walls)
+     * and walks the long way round through the gap, then back */
+    CHECK(game_throw(&s, ITEM_STONE, 18, 4), "throw");
+    CHECK(s.guards[0].mode == GUARD_INVESTIGATE, "guard heard it");
+    for (turns = 0; turns < 60 && !(s.guards[0].x == 18 && s.guards[0].y == 4); turns++)
+        game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 18 && s.guards[0].y == 4, "reached the noise");
+    CHECK(turns == 32, "via the gap: 13 down, 6 across, 13 up (took %d)", turns);
+    CHECK(s.status == STATUS_PLAYING, "player unseen");
+    for (turns = 0; turns < 60 && s.guards[0].mode != GUARD_PATROL; turns++)
+        game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 24 && s.guards[0].y == 4, "and walked back to its post");
+}
+
 /* Validate level data: row lengths, waypoints on floor and axis aligned. */
 static void test_level_data(void)
 {
@@ -429,13 +495,16 @@ static void test_level_data(void)
         const LevelDef *lv = &levels[l];
         int players = 0, exits = 0;
         GameState s;
-        for (y = 0; y < MAP_H; y++) {
-            CHECK(strlen(lv->rows[y]) == MAP_W, "level %d row %d length %zu",
-                  l + 1, y, strlen(lv->rows[y]));
-            for (i = 0; i < MAP_W; i++) {
-                players += lv->rows[y][i] == 'P';
-                exits += lv->rows[y][i] == 'E';
-            }
+        size_t cells = (size_t)lv->width * lv->height;
+        CHECK(lv->width >= VIEW_W && lv->width <= MAP_MAX_W &&
+              lv->height >= VIEW_H && lv->height <= MAP_MAX_H &&
+              cells <= MAP_MAX_CELLS, "level %d size %dx%d out of range",
+              l + 1, lv->width, lv->height);
+        CHECK(strlen(lv->map) == cells, "level %d map has %zu chars, expected %zu",
+              l + 1, strlen(lv->map), cells);
+        for (y = 0; y < (int)cells; y++) {
+            players += lv->map[y] == 'P';
+            exits += lv->map[y] == 'E';
         }
         CHECK(players == 1, "level %d needs exactly one P", l + 1);
         CHECK(exits >= 1, "level %d needs an exit", l + 1);
@@ -498,6 +567,7 @@ static const struct {
     { 5, SOLVE_USE_TAKEDOWN, "a takedown" },
     { 5, SOLVE_USE_DRAG,     "dragging the body" },
     { 6, SOLVE_USE_UNIFORM,  "a disguise" },
+    { 7, SOLVE_USE_ITEMS,    "the stone (multi-screen level)" },
 };
 
 static void test_mechanics_needed(void)
@@ -527,6 +597,7 @@ int main(void)
     test_disguise_cones();
     test_disguise_suspicious();
     test_take_uniform();
+    test_big_map();
     test_level_data();
     if (failures == 0) {
         test_solvable();
