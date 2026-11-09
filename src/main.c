@@ -25,6 +25,7 @@
 #include <stdint.h>
 
 #include "game.h"
+#include "world.h"
 #include "levels.h"
 #include "tiles.h"
 
@@ -49,9 +50,12 @@
 #define RESTART_HOLD   45   /* frames START must be held to restart */
 #define TAKEDOWN_PAUSE 24   /* frames shown per automatic takedown turn */
 
-static GameState   state;
-static GameState   before;   /* snapshot taken before each turn, for undo */
-static uint8_t     level_idx;
+static World       world;    /* every map of the current level */
+static GameState  *st;       /* the map the player is in: see sync() */
+#define state (*st)
+static World       before;   /* snapshot taken before each turn, for undo */
+static uint8_t     level_idx;    /* levels[] index of the level's first map */
+static uint8_t     level_num;    /* 1-based number shown in the HUD */
 static uint8_t     vision[VIEW_W * VIEW_H];
 static uint8_t     row_buf[32];
 
@@ -142,7 +146,7 @@ static void draw_hud(void)
         put_text(put_text(0, "THROW ") , item_defs[inv_item].name);
     } else {
         /* level number (1-99), a space, then the name (max 12 chars) */
-        uint8_t n = level_idx + 1, x = 0;
+        uint8_t n = level_num, x = 0;
         if (n >= 10) row_buf[x++] = FONT_BASE + n / 10;
         row_buf[x++] = FONT_BASE + n % 10;
         put_text(x + 1, levels[level_idx].name);
@@ -281,7 +285,7 @@ static void draw_cursor(void)
 /* First sprite tile of a guard's uniform style (see SPR_GUARD_STYLE_TILES). */
 static uint8_t guard_tiles(uint8_t i)
 {
-    if (levels[level_idx].guards[i].uniform == DISGUISE_OFFICER) return SPR_OFFICER_UP;
+    if (world_def(&world)->guards[i].uniform == DISGUISE_OFFICER) return SPR_OFFICER_UP;
     return SPR_GUARD_UP;
 }
 
@@ -411,16 +415,37 @@ static void select_released(void)
 /* Level flow                                                          */
 /* ------------------------------------------------------------------ */
 
+/* Point `state` at the map the player is in (after anything that can
+ * change it: loading, a step that crosses an edge, undo). */
+static void sync(void)
+{
+    st = world_state(&world);
+}
+
+/* The first map of the level after the one starting at idx (wrapping). */
+static uint8_t next_level(uint8_t idx)
+{
+    do {
+        idx = (idx + 1) % LEVEL_COUNT;
+    } while (levels[idx].part != 0);
+    return idx;
+}
+
 static void load_level(uint8_t idx)
 {
+    uint8_t i;
+
     if (ui_mode == UI_INVENTORY) close_inventory();
     ui_mode   = UI_PLAY;
     level_idx = idx;
     inv_item  = 0;
     looking   = 0;
     select_armed = 0;
-    game_load(&levels[idx], &state);
+    world_load(levels, idx, &world);
+    sync();
     undo_clear();
+    for (level_num = 0, i = 0; i <= idx; i++)
+        if (levels[i].part == 0) level_num++;
     move_camera(screen_of(state.px, VIEW_W), screen_of(state.py, VIEW_H));
     redraw();
 }
@@ -434,9 +459,10 @@ static uint8_t do_action(uint8_t action)
 {
     /* SDCC can't initialise a struct from another struct in its
      * declaration ("needs curly braces"), so assign separately. */
-    before = state;
-    if (!game_step(&state, action)) return 0;
+    before = world;
+    if (!world_step(&world, action)) return 0;
     undo_push(&before);
+    sync();          /* the step may have crossed into another map */
     redraw();
     return 1;
 }
@@ -464,7 +490,7 @@ static void do_takedown(void)
     }
     while (state.takedown_left && state.status == STATUS_PLAYING) {
         struggle_frames(TAKEDOWN_PAUSE);
-        game_step(&state, ACT_WAIT);
+        world_step(&world, ACT_WAIT);
         if (state.takedown_left) hud_msg = "TAKEDOWN...";
         redraw();
     }
@@ -475,7 +501,7 @@ static void input_play(uint8_t pressed, uint8_t keys)
     uint8_t dir;
 
     if (state.status == STATUS_WON) {
-        if (pressed & J_A) load_level((level_idx + 1) % LEVEL_COUNT);
+        if (pressed & J_A) load_level(next_level(level_idx));
         return;
     }
     if (state.status != STATUS_PLAYING) return;   /* START to undo */
@@ -561,8 +587,8 @@ static void input_aim(uint8_t pressed)
         return;
     }
     if (pressed & J_A) {
-        before = state;   /* separate assignment: see do_action() */
-        if (game_throw(&state, inv_item, aim_x, aim_y)) {
+        before = world;   /* separate assignment: see do_action() */
+        if (world_throw(&world, inv_item, aim_x, aim_y)) {
             undo_push(&before);
             ui_mode = UI_PLAY;
             redraw();
@@ -613,7 +639,10 @@ static void handle_start(uint8_t keys, uint8_t released)
     }
     if (released & J_START) {
         if (held < 15) {                    /* a tap: undo */
-            if (ui_mode == UI_PLAY && undo_pop(&state)) redraw();
+            if (ui_mode == UI_PLAY && undo_pop(&world)) {
+                sync();
+                redraw();
+            }
         } else if (held < RESTART_HOLD) {   /* let go early: cancel */
             draw_hud();
         }

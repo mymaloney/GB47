@@ -66,6 +66,7 @@ def assets():
         "map_max_w": g.MAP_MAX_W, "map_max_h": g.MAP_MAX_H,
         "map_max_cells": g.MAP_MAX_CELLS,
         "max_guards": g.MAX_GUARDS, "max_waypoints": g.MAX_WAYPOINTS,
+        "max_maps": g.MAX_PARTS,
         "name_max": gen_levels.NAME_MAX,
         "font_chars": "".join(sorted(gen_levels.FONT_CHARS)),
         # building blocks: map char, name, background tile, what it blocks
@@ -163,7 +164,10 @@ class Handler(BaseHTTPRequestHandler):
         aim = req.get("aim_item")
 
         if path == "/api/start":
-            s = g.new_game(level, req.get("disguise"))
+            k = req.get("map", 0)
+            if not 0 <= k < len(level.maps):
+                return {"error": "no such map"}
+            s = g.new_game(level, req.get("disguise"), k)
             return {"state": g.encode(s), "view": g.view(level, s, aim)}
         if path == "/api/view":
             s = g.decode(req["state"])

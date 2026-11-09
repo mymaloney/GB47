@@ -153,7 +153,16 @@ typedef struct {
     const char *map;
     uint8_t     guard_count;
     GuardDef    guards[MAX_GUARDS];
-    uint8_t     items[ITEM_TYPES]; /* starting inventory, by item type */
+    uint8_t     items[ITEM_TYPES]; /* starting inventory (first map only) */
+    /* A level can be several of these maps joined at their edges (see
+     * world.h). part = which map of its level this is (0 = where the level
+     * starts). link[dir] = 1 + index in the level table of the map beyond
+     * that edge, 0 = none. link_offset[dir] = where the neighbour's row 0
+     * (for left/right) or column 0 (for up/down) lines up along this map's
+     * edge. */
+    uint8_t     part;
+    uint8_t     link[4];
+    int8_t      link_offset[4];
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */
@@ -180,8 +189,21 @@ typedef struct {
     Guard    guards[MAX_GUARDS];
 } GameState;
 
-/* Load a level: builds the static map and initialises *s. */
+/* Make lvl the current map (rules read the map through it) and start a
+ * fresh game on it in *s. */
 void game_load(const LevelDef *lvl, GameState *s);
+
+/* Make lvl the current map without touching any game state, e.g. to
+ * resume a map the player left earlier. */
+void game_use(const LevelDef *lvl);
+
+/* The player steps into this map at (x, y) from a neighbouring one: counts
+ * as a turn, wins on an exit, and guards who can see the spot catch them,
+ * but guards don't move. Returns 1. */
+uint8_t game_arrive(GameState *s, uint8_t x, uint8_t y);
+
+/* Is a standing guard (not a body) on this tile? */
+uint8_t game_guard_at(const GameState *s, uint8_t x, uint8_t y);
 
 /* Apply one player action (ACT_*). Returns 1 if a turn was spent, 0 if the
  * action was illegal (e.g. walking into a wall) and nothing changed.
@@ -248,10 +270,6 @@ void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
 /* Index of the body under the player whose uniform can be taken, or 0xFF. */
 uint8_t game_uniform_here(const GameState *s);
 
-/* Undo history. game_step does not push automatically; the caller does,
- * so the solver in tests/ can step without touching the history. */
-void    undo_clear(void);
-void    undo_push(const GameState *s);
-uint8_t undo_pop(GameState *s);     /* returns 0 if history is empty */
+/* Undo lives in world.h, since a turn may cross between maps. */
 
 #endif

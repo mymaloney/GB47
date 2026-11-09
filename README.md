@@ -23,7 +23,8 @@ stealth with social stealth (disguises, dialogue) and combat.
 - **Building blocks:** doors, windows, railings, security doors, curtains,
   mesh screens and vents, each blocking a different mix of movement,
   sight and throws
-- 8 levels, each checked solvable by an automated solver
+- **Linked maps:** a level can be up to 4 maps joined at their edges
+- 9 levels, each checked solvable by an automated solver
 - **Level editor** with in-editor playtesting and a built-in solver
 
 ## Level editor
@@ -38,6 +39,10 @@ This needs only `gcc` and Python 3 (no extra packages). It builds the game
 rules into `build/libgame.so`, starts a local server, and opens
 `http://127.0.0.1:8047` in your browser. Stop it with Ctrl+C.
 
+- **Maps:** each level has tabs Map 1, Map 2, …; **+ Map** adds one (up
+  to 4). The **Links** panel joins the current map's edges to other
+  maps, with an offset; linked edges are marked on the map with where they
+  lead. Tools and guards work on the map you're viewing.
 - **Size:** pick how many screens across and down (sizes that won't fit
   in RAM are greyed out). Dashed lines are the screen boundaries; **Zoom**
   fits big maps on screen.
@@ -88,6 +93,32 @@ Levels live in `levels/levels.json` (format documented at the top of
 In the inventory, UP/DOWN chooses an item and A starts aiming. While
 aiming, dots mark every square you can hit; move the cursor with the
 D-pad and press A to throw. B goes back, SELECT cancels.
+
+### Levels made of several maps
+
+A level can be up to **4 maps**, each up to 2×3 screens (the RAM limit),
+joined at their edges. Walk off an edge that's linked to another map
+and you step into it at the matching spot.
+
+- Only the map you're in is live. Guards in other maps stand still, and
+  bodies stay where you left them, until you come back.
+- Crossing takes a turn. Guards in the new map get one look at where you
+  arrive, but don't move that turn.
+- Your items, disguise and turn count come with you. You can't drag a
+  body or be mid-takedown across an edge.
+- Undo steps back across crossings too.
+- Maps are separate: guards can't see, hear or walk from one map into
+  another. Put crossings at natural breaks (corridors, doorways).
+- The player always starts in the level's first map; exits can be in any.
+
+A link joins one map's edge to another map's opposite edge, with an
+**offset**: which row (for left/right) or column (for up/down) of this map
+the other map's first row/column lines up with. Openings on both sides
+must line up, and the editor's problem list says exactly where they
+don't. In `levels.json` a level has `maps` (each with `map` and `guards`)
+and `links` (`from`, `edge`, `to`, `offset`). In `src/levels.c` each map
+is one `LevelDef`; a level's maps are consecutive, and `part` and `link`
+tie them together. `src/world.c` does the crossing and undo.
 
 ### Building blocks
 
@@ -241,6 +272,17 @@ Cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and `HOSTILE_HALF`.
 Every push also builds the ROM on GitHub Actions. Download it from the
 `stealth-rom` artifact on the run.
 
+### ROM space
+
+```bash
+make usage
+```
+
+prints how full the ROM banks and RAM are (GBDK's `romusage`); CI prints
+it on every build. Levels currently live in the first 32 KB of the
+cartridge with the code. Several large multi-map levels will outgrow it,
+at which point level data needs to move into switchable ROM banks.
+
 ### Rule tests (no GBDK needed)
 
 ```bash
@@ -256,10 +298,12 @@ if any level is unsolvable. A table in `tests/test_game.c` lists what each
 level teaches (level 4 needs items; level 5 needs a takedown and moving
 the body; level 6 needs a disguise; level 7, the 2×2-screen level, needs
 the stone; level 8 needs the vent, checked by turning every vent into
-wall). The solver re-runs with that mechanic switched off and fails if
+wall). Level 9 is two linked maps. The solver re-runs with that mechanic switched off and fails if
 the level can still be beaten. **Run it after every level edit.** The solver uses A* search (the
-walking distance to the nearest exit guides it), so even big levels solve
-in seconds while still finding a shortest solution. Proving a level
+walking distance to the nearest exit, or through a linked edge to one,
+guides it), so even big levels solve in seconds while still finding a
+shortest solution. Wide-open multi-map levels with every mechanic in
+play can still be too big; corridors and rooms keep the search small. Proving a level
 *can't* be beaten still means checking every reachable situation; it
 gives up after 2 million and reports "too big to tell".
 

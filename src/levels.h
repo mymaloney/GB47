@@ -4,7 +4,8 @@
 
 #include "game.h"
 
-#define LEVEL_COUNT 8
+/* One entry per map; a level's maps are consecutive (part 0 first). */
+#define LEVEL_COUNT 10
 extern const LevelDef levels[LEVEL_COUNT];
 
 #endif

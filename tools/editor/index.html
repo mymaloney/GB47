@@ -37,6 +37,7 @@
       <button id="tab-edit" class="tab active">Edit</button>
       <button id="tab-play" class="tab">Playtest</button>
     </div>
+    <div id="map-tabs" class="tabs map-tabs" aria-label="Maps in this level"></div>
     <div id="map-scroll" class="map-scroll">
       <canvas id="screen" width="480" height="432" tabindex="0" aria-label="Level map / Game Boy screen"></canvas>
     </div>
@@ -94,7 +95,15 @@
     <label>Notes <textarea id="lv-notes" rows="2" placeholder="Design notes (kept as a comment in levels.c)"></textarea></label>
     <div class="items" id="lv-items"></div>
 
-    <h2>Guards <span id="guard-count" class="muted"></span></h2>
+    <div id="links-section">
+      <h2>Links <span class="muted">(this map's edges)</span></h2>
+      <div id="links" class="links"></div>
+      <p class="hint">Walking off a linked edge enters the other map. Openings on
+        both sides must line up; the offset slides the other map along the edge.</p>
+    </div>
+    <div class="row-buttons"><button id="map-delete" class="danger">Delete this map</button></div>
+
+    <h2>Guards <span id="guard-count" class="muted">(this map)</span></h2>
     <div id="guard-list" class="guard-list"></div>
     <div id="guard-props" class="guard-props" hidden>
       <div class="two">

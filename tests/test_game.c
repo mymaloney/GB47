@@ -14,6 +14,7 @@
 #include "../src/game.h"
 #include "../src/levels.h"
 #include "../tools/solver.h"
+#include "../src/world.h"
 
 static int failures = 0;
 
@@ -53,6 +54,7 @@ static const LevelDef test_level = {
         { DIR_UP,   1, { {15, 5} }, DISGUISE_NONE, 0 },  /* sentry looking up */
     },
     { 2, 0 },
+    0, { 0 }, { 0 },   /* single map: no links */
 };
 
 static void test_movement(void)
@@ -83,21 +85,23 @@ static void test_vision(void)
 
 static void test_caught_and_undo(void)
 {
-    GameState s, before;
+    World w, before;
+    GameState *s;
     int i;
-    game_load(&test_level, &s);
+    world_load(&test_level, 0, &w);
+    s = world_state(&w);
     undo_clear();
     /* walk right along row 2; (6,2) is the far corner of the cone */
-    game_step(&s, ACT_DOWN);
-    for (i = 0; i < 4; i++) { undo_push(&s); game_step(&s, ACT_RIGHT); }
-    CHECK(s.px == 5 && s.status == STATUS_PLAYING, "not yet seen at (5,2)");
-    before = s;
-    undo_push(&s);
-    game_step(&s, ACT_RIGHT);
-    CHECK(s.status == STATUS_CAUGHT, "caught entering cone");
-    CHECK(game_step(&s, ACT_RIGHT) == 0, "no moves after caught");
-    CHECK(undo_pop(&s) == 1, "undo works");
-    CHECK(memcmp(&s, &before, sizeof s) == 0, "undo restores state");
+    world_step(&w, ACT_DOWN);
+    for (i = 0; i < 4; i++) { undo_push(&w); world_step(&w, ACT_RIGHT); }
+    CHECK(s->px == 5 && s->status == STATUS_PLAYING, "not yet seen at (5,2)");
+    before = w;
+    undo_push(&w);
+    world_step(&w, ACT_RIGHT);
+    CHECK(s->status == STATUS_CAUGHT, "caught entering cone");
+    CHECK(world_step(&w, ACT_RIGHT) == 0, "no moves after caught");
+    CHECK(undo_pop(&w) == 1, "undo works");
+    CHECK(memcmp(&w, &before, WORLD_BYTES(&w)) == 0, "undo restores state");
 }
 
 static void test_patrol(void)
@@ -130,13 +134,15 @@ static void test_throw_targeting(void)
 
 static void test_throw_lures_one_guard(void)
 {
-    GameState s, before;
+    World w, before;
+    GameState s;
     int i;
-    game_load(&test_level, &s);
-    s.px = 3; s.py = 1;
+    world_load(&test_level, 0, &w);
+    w.part[0].px = 3; w.part[0].py = 1;
     undo_clear();
-    before = s;
-    undo_push(&s);
+    before = w;
+    undo_push(&w);
+    s = w.part[0];
 
     /* only guard 0 at (10,3) is within 6 of (9,1); guard 1 is 10 away */
     CHECK(game_throw(&s, ITEM_STONE, 9, 1) == 1, "throw spends a turn");
@@ -156,8 +162,9 @@ static void test_throw_lures_one_guard(void)
     CHECK(s.guards[0].mode == GUARD_PATROL, "back on routine");
     CHECK(s.guards[0].facing == DIR_LEFT, "sentry faces its post again");
 
-    while (undo_pop(&s)) {}
-    CHECK(memcmp(&s, &before, sizeof s) == 0, "undo returns the stone");
+    w.part[0] = s;
+    while (undo_pop(&w)) {}
+    CHECK(memcmp(&w, &before, WORLD_BYTES(&w)) == 0, "undo returns the stone");
 }
 
 static void test_throw_two_hearers(void)
@@ -222,6 +229,7 @@ static const LevelDef td_level = {
         { DIR_DOWN, 1, { {15, 1} }, DISGUISE_NONE, 0 },
     },
     { 0, 0 },
+    0, { 0 }, { 0 },   /* single map: no links */
 };
 
 static void test_takedown(void)
@@ -320,6 +328,7 @@ static const LevelDef dz_level = {
         { DIR_RIGHT, 2, { {2, 6}, {17, 6} },  DISGUISE_GUARD, "EBE" },
     },
     { 0, 0 },
+    0, { 0 }, { 0 },   /* single map: no links */
 };
 
 static void test_disguise_cones(void)
@@ -448,6 +457,7 @@ static const LevelDef big_level = {
         { DIR_RIGHT, 1, { {24, 4} }, DISGUISE_NONE, 0 },
     },
     { 1, 0 },
+    0, { 0 }, { 0 },   /* single map: no links */
 };
 
 static void test_big_map(void)
@@ -496,6 +506,7 @@ static const LevelDef tile_level = {
     1,
     { { DIR_LEFT, 1, { {10, 8} }, DISGUISE_NONE, 0 } },
     { 2, 0 },
+    0, { 0 }, { 0 },   /* single map: no links */
 };
 
 static void tiles_reset(char column, char gap)
@@ -617,13 +628,15 @@ static void test_tile_types(void)
           "body in the vent isn't spotted (guard 4 tiles away)");
 }
 
-/* Validate level data: row lengths, waypoints on floor and axis aligned. */
+/* Validate level data: sizes, starts and exits, links, guard routes.
+ * levels[] has one entry per map; a level's maps are consecutive. */
 static void test_level_data(void)
 {
-    int l, y, i, w;
+    int l, y, i, w, d, level_exits = 0;
     for (l = 0; l < LEVEL_COUNT; l++) {
         const LevelDef *lv = &levels[l];
         int players = 0, exits = 0;
+        if (lv->part == 0) level_exits = 0;
         GameState s;
         size_t cells = (size_t)lv->width * lv->height;
         CHECK(lv->width >= VIEW_W && lv->width <= MAP_MAX_W &&
@@ -637,8 +650,20 @@ static void test_level_data(void)
             players += lv->map[y] == 'P';
             exits += lv->map[y] == 'E';
         }
-        CHECK(players == 1, "level %d needs exactly one P", l + 1);
-        CHECK(exits >= 1, "level %d needs an exit", l + 1);
+        CHECK(players == (lv->part == 0), "map %d: the start (P) belongs in a level's first map",
+              l + 1);
+        level_exits += exits;
+        if (l + 1 == LEVEL_COUNT || levels[l + 1].part == 0)
+            CHECK(level_exits >= 1, "level ending at map %d needs an exit", l + 1);
+        CHECK(l == 0 || lv->part == 0 || lv->part == levels[l - 1].part + 1,
+              "map %d: maps of a level must be consecutive", l + 1);
+        for (d = 0; d < 4; d++) {
+            int to = lv->link[d] - 1, back = (d + 2) % 4;
+            if (!lv->link[d]) continue;
+            CHECK(to >= 0 && to < LEVEL_COUNT && levels[to].link[back] == l + 1 &&
+                  levels[to].link_offset[back] == -lv->link_offset[d],
+                  "map %d: link %d must be matched by one back from map %d", l + 1, d, to + 1);
+        }
         CHECK(strlen(lv->name) <= 12, "level %d name too long", l + 1);
         game_load(lv, &s);
         for (i = 0; i < lv->guard_count; i++) {
@@ -661,28 +686,162 @@ static void test_level_data(void)
 
 /* ---- Solvability (tools/solver.c) ---- */
 
-static int solve(const LevelDef *lv, int use, char *out, int outlen)
+static int solve(const LevelDef *table, int first, int use, char *out, int outlen)
 {
     static SolveStep steps[1024];
-    int states, len = solver_run(lv, use, steps, 1024, &states);
+    int states, len = solver_run(table, (uint8_t)first, use, steps, 1024, &states);
     if (getenv("SOLVER_STATS"))
-        fprintf(stderr, "  [%s: %d states]\n", lv->name, states);
+        fprintf(stderr, "  [%s: %d states]\n", table[first].name, states);
     out[0] = 0;
     if (len > 0) solver_format(steps, len < 1024 ? len : 1024, out, outlen);
     return len;
+}
+
+/* Index in levels[] of the n-th level (1-based); levels can span several
+ * entries, one per map. */
+static int level_start(int n)
+{
+    int i;
+    for (i = 0; i < LEVEL_COUNT; i++)
+        if (levels[i].part == 0 && --n == 0) return i;
+    return -1;
+}
+
+/* ---- Levels of several maps (world.c). Map A's right edge leads to map
+ * B; B's row 0 lines up with A's row 2, so A's opening on rows 5-8 meets
+ * B's on rows 3-6. ---- */
+static LevelDef two_maps[2] = {
+    {
+        "TWO", 20, 16,
+        "####################"
+        "#..................#"
+        "#.P................#"
+        "#..................#"
+        "#..................#"
+        "#..................."
+        "#..................."
+        "#..................."
+        "#..................."
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "####################",
+        1,
+        { { DIR_DOWN, 2, { {4, 10}, {14, 10} }, DISGUISE_NONE, 0 } },
+        { 1, 0 },
+        0, { 0, 2, 0, 0 }, { 0, 2, 0, 0 },      /* right -> B, offset 2 */
+    },
+    {
+        "TWO", 20, 16,
+        "####################"
+        "#..................#"
+        "#..................#"
+        "...................#"
+        "...................#"
+        "...................#"
+        "...................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..................#"
+        "#..............E...#"
+        "#..................#"
+        "#..................#"
+        "####################",
+        1,
+        { { DIR_DOWN, 1, { {3, 10} }, DISGUISE_NONE, 0 } },
+        { 0, 0 },
+        1, { 0, 0, 0, 1 }, { 0, 0, 0, -2 },     /* left -> A, offset -2 */
+    },
+};
+
+static void test_world(void)
+{
+    World w, before;
+    GameState *s;
+    int i;
+    char sol[1024];
+
+    world_load(two_maps, 0, &w);
+    CHECK(w.part_count == 2 && w.part_def[1] == 1, "linked map found");
+    CHECK(w.cur == 0 && w.part[0].px == 2 && w.part[0].py == 2, "start in map A");
+    CHECK(w.part[1].items[0] == 0 && w.part[0].items[0] == 1, "items start with the player");
+
+    s = world_state(&w);
+    s->px = 18; s->py = 6;
+    CHECK(world_step(&w, ACT_RIGHT) == 1 && w.part[0].px == 19, "walk into the opening");
+    CHECK(world_step(&w, ACT_DOWN) == 1, "move along it (row 7)");
+    s->px = 19; s->py = 9;
+    CHECK(world_step(&w, ACT_RIGHT) == 0, "no crossing where the edge is wall");
+    s->py = 6;
+    {
+        uint8_t guard_x = w.part[0].guards[0].x, guard_y = w.part[0].guards[0].y;
+        uint16_t turn = s->turn;
+        undo_clear();
+        before = w;
+        undo_push(&w);
+        CHECK(world_step(&w, ACT_RIGHT) == 1, "cross into map B");
+        s = world_state(&w);
+        CHECK(w.cur == 1 && s->px == 0 && s->py == 4, "arrive at row 6 - 2 = 4");
+        CHECK(s->turn == turn + 1 && s->items[0] == 1, "turn and items carried over");
+        CHECK(world_def(&w) == &two_maps[1] && game_width() == 20, "rules use map B");
+        for (i = 0; i < 5; i++) { undo_push(&w); world_step(&w, ACT_WAIT); }
+        CHECK(w.part[0].guards[0].x == guard_x && w.part[0].guards[0].y == guard_y,
+              "map A's guard stands still while the player is away");
+        CHECK(w.part[1].guards[0].facing == DIR_DOWN, "map B's guard keeps its post");
+        for (i = 0; i < 5; i++) undo_pop(&w);
+        CHECK(undo_pop(&w) && memcmp(&w, &before, WORLD_BYTES(&w)) == 0,
+              "undo steps back across the crossing exactly");
+    }
+
+    /* cross and come back */
+    world_step(&w, ACT_RIGHT);
+    CHECK(world_step(&w, ACT_LEFT) == 1 && w.cur == 0 &&
+          w.part[0].px == 19 && w.part[0].py == 6, "back into map A, same row");
+
+    /* no dragging bodies across */
+    world_load(two_maps, 0, &w);
+    s = world_state(&w);
+    s->px = 18; s->py = 6;
+    s->guards[0].mode = GUARD_BODY; s->guards[0].x = 17; s->guards[0].y = 6;
+    world_step(&w, ACT_RIGHT);
+    CHECK(world_step(&w, ACT_DRAG + DIR_RIGHT) == 0 && w.cur == 0,
+          "bodies stay in their map");
+
+    /* a guard who can see the arrival spot catches the player */
+    two_maps[1].guards[0].wp[0].x = 3; two_maps[1].guards[0].wp[0].y = 4;
+    two_maps[1].guards[0].facing = DIR_LEFT;
+    world_load(two_maps, 0, &w);
+    w.part[0].px = 19; w.part[0].py = 6;
+    world_step(&w, ACT_RIGHT);
+    CHECK(w.cur == 1 && w.part[1].status == STATUS_CAUGHT, "spotted on arrival");
+    two_maps[1].guards[0].wp[0].y = 10;
+    two_maps[1].guards[0].facing = DIR_DOWN;
+
+    /* the solver finds its way across (moves only: this is about crossing,
+     * and two open rooms with every mechanic are a very big search) */
+    CHECK(solve(two_maps, 0, 0, sol, sizeof sol) == 45,
+          "two-map level: 20 to the edge, 1 to cross, 24 to the exit: %s", sol);
+    two_maps[0].link[DIR_RIGHT] = 0;
+    CHECK(solve(two_maps, 0, 0, sol, sizeof sol) == 0,
+          "and can't be solved without the link");
+    two_maps[0].link[DIR_RIGHT] = 2;
 }
 
 static void test_solvable(void)
 {
     int l;
     char sol[1024];
-    for (l = 0; l < LEVEL_COUNT; l++) {
-        int len = solve(&levels[l], SOLVE_USE_ALL, sol, sizeof sol);
-        CHECK(len > 0, "level %d (%s) is not solvable (%d)", l + 1,
-              levels[l].name, len);
+    for (l = 1; level_start(l) >= 0; l++) {
+        int i = level_start(l);
+        int len = solve(levels, i, SOLVE_USE_ALL, sol, sizeof sol);
+        CHECK(len > 0, "level %d (%s) is not solvable (%d)", l, levels[i].name, len);
         if (len > 0)
-            printf("level %d %-12s solved in %3d turns: %s\n",
-                   l + 1, levels[l].name, len, sol);
+            printf("level %d %-12s solved in %3d turns: %s\n", l, levels[i].name, len, sol);
     }
 }
 
@@ -718,12 +877,12 @@ static void test_tiles_needed(void)
     size_t i;
     char sol[1024];
     for (r = 0; r < sizeof required_tiles / sizeof required_tiles[0]; r++) {
-        LevelDef copy = levels[required_tiles[r].level - 1];
+        LevelDef copy = levels[level_start(required_tiles[r].level)];
         for (i = 0; copy.map[i]; i++)
             map[i] = copy.map[i] == required_tiles[r].tile ? '#' : copy.map[i];
         map[i] = 0;
         copy.map = map;
-        CHECK(solve(&copy, SOLVE_USE_ALL, sol, sizeof sol) == 0,
+        CHECK(solve(&copy, 0, SOLVE_USE_ALL, sol, sizeof sol) == 0,
               "level %d (%s) can be beaten without %s: %s",
               required_tiles[r].level, copy.name, required_tiles[r].what, sol);
     }
@@ -734,8 +893,9 @@ static void test_mechanics_needed(void)
     unsigned r;
     char sol[1024];
     for (r = 0; r < sizeof required / sizeof required[0]; r++) {
-        const LevelDef *lv = &levels[required[r].level - 1];
-        CHECK(solve(lv, SOLVE_USE_ALL & ~required[r].without, sol, sizeof sol) == 0,
+        int first = level_start(required[r].level);
+        const LevelDef *lv = &levels[first];
+        CHECK(solve(levels, first, SOLVE_USE_ALL & ~required[r].without, sol, sizeof sol) == 0,
               "level %d (%s) can be beaten without %s: %s",
               required[r].level, lv->name, required[r].what, sol);
     }
@@ -760,6 +920,7 @@ int main(void)
     test_tile_types();
     test_level_data();
     if (failures == 0) {
+        test_world();
         test_solvable();
         test_mechanics_needed();
         test_tiles_needed();

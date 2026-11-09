@@ -21,6 +21,7 @@ const TOOL_HINTS = {
 let A = null;                    // assets from /api/assets
 let levels = [];
 let cur = 0;
+let curMap = 0;                  // which map of the level is being edited
 let dirty = false;
 let mode = "edit";
 let tool = "tile:#";
@@ -50,6 +51,7 @@ async function api(path, body) {
 
 const clone = (o) => JSON.parse(JSON.stringify(o));
 const level = () => levels[cur];
+const cmap = () => levels[cur].maps[curMap];     // the map being edited
 const keyOf = (lv) => JSON.stringify(lv);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -191,10 +193,10 @@ function guardBase(g) {
 }
 
 function renderEdit() {
-  const lv = level();
+  const lv = cmap();
   TILE = 8 * editZoom(lv);
   sizeCanvas(mapW(lv) * TILE, mapH(lv) * TILE);
-  const fresh = preview && preview.key === keyOf(lv) && previewDisguise >= 0;
+  const fresh = preview && preview.key === previewKey() && previewDisguise >= 0;
   const tiles = fresh ? preview.view.tiles : localTiles(lv);
   tiles.forEach((row, y) => row.forEach((t, x) => drawBkg(t, x, y)));
   drawScreenGuides(lv);
@@ -217,6 +219,7 @@ function renderEdit() {
     ctx.strokeRect(x * TILE + 1.5, y * TILE + 1.5, TILE - 3, TILE - 3);
   }
 
+  drawLinkMarkers();
   updateSizeInfo(lv);
 }
 
@@ -270,7 +273,7 @@ function updateSizeInfo(lv) {
  * the map can strand the start, exits or guards, which the problems list
  * will point out. */
 function resizeMap(w, h) {
-  const lv = level();
+  const lv = cmap();
   if (w * h > A.map_max_cells) return;
   if (w === mapW(lv) && h === mapH(lv)) return;
   pushUndo();
@@ -330,7 +333,8 @@ function restore(s) {
   const o = JSON.parse(s);
   levels = o.levels;
   cur = Math.min(o.cur, levels.length - 1);
-  if (selGuard >= level().guards.length) selGuard = -1;
+  curMap = Math.min(curMap, level().maps.length - 1);
+  if (selGuard >= cmap().guards.length) selGuard = -1;
   changed(false);
 }
 
@@ -368,25 +372,26 @@ let stroke = null;   // {before, changed, drag}
 
 function tileAt(e) {
   const r = canvas.getBoundingClientRect();
-  const lv = level();
+  const lv = cmap();
   const x = Math.floor((e.clientX - r.left) / (r.width / mapW(lv)));
   const y = Math.floor((e.clientY - r.top) / (r.height / mapH(lv)));
   return [x, y];
 }
 
-const inMap = (x, y) => x >= 0 && y >= 0 && x < mapW(level()) && y < mapH(level());
+const inMap = (x, y) => x >= 0 && y >= 0 && x < mapW(cmap()) && y < mapH(cmap());
 
 function setCell(x, y, c) {
-  const lv = level();
+  const lv = cmap();
   if (lv.map[y][x] === c) return false;
-  if (c === "P") lv.map = lv.map.map((r) => r.replace("P", "."));
+  if (c === "P")   // one start per level, in whichever map you put it
+    level().maps.forEach((m) => { m.map = m.map.map((r) => r.replace("P", ".")); });
   const row = lv.map[y];
   lv.map[y] = row.slice(0, x) + c + row.slice(x + 1);
   return true;
 }
 
 function guardAt(x, y) {
-  return level().guards.findIndex((g) => g.route[0][0] === x && g.route[0][1] === y);
+  return cmap().guards.findIndex((g) => g.route[0][0] === x && g.route[0][1] === y);
 }
 
 function waypointAt(g, x, y) {
@@ -406,7 +411,7 @@ function addWaypoint(g, x, y) {
 }
 
 function applyTool(x, y, e, first) {
-  const lv = level();
+  const lv = cmap();
   const paint = tool.startsWith("tile:") ? tool.slice(5) : null;
   if (paint) return setCell(x, y, paint);
   if (tool === "start") return first ? setCell(x, y, "P") : false;
@@ -415,7 +420,8 @@ function applyTool(x, y, e, first) {
     if (first) {
       const i = guardAt(x, y);
       if (i >= 0) { selGuard = i; stroke.drag = { guard: i, point: 0 }; renderGuards(); return false; }
-      if (lv.map[y][x] === "#") { hint("Guards can't stand in walls."); return false; }
+      const here = A.tiles.find((d) => d.char === lv.map[y][x]);
+      if (here && here.blocks.guards) { hint(`Guards can't stand on a ${here.name}.`); return false; }
       if (lv.guards.length >= A.max_guards) { hint(`At most ${A.max_guards} guards per level.`); return false; }
       lv.guards.push({ facing: "down", route: [[x, y]], uniform: "none", attitude: null });
       selGuard = lv.guards.length - 1;
@@ -442,7 +448,7 @@ function applyTool(x, y, e, first) {
 
 function moveDragged(x, y) {
   if (!stroke.drag) return false;
-  const g = level().guards[stroke.drag.guard];
+  const g = cmap().guards[stroke.drag.guard];
   const p = g.route[stroke.drag.point];
   if (p[0] === x && p[1] === y) return false;
   g.route[stroke.drag.point] = [x, y];
@@ -491,6 +497,8 @@ function setTool(t) {
 
 function renderAll() {
   renderLevelList();
+  renderMapTabs();
+  renderLinks();
   renderProps();
   renderGuards();
   if (mode === "edit") renderEdit();
@@ -501,7 +509,7 @@ function renderLevelList() {
   ol.innerHTML = "";
   levels.forEach((lv, i) => {
     const li = document.createElement("li");
-    li.textContent = lv.name || "(unnamed)";
+    li.textContent = (lv.name || "(unnamed)") + (lv.maps.length > 1 ? ` (${lv.maps.length} maps)` : "");
     li.classList.toggle("active", i === cur);
     li.classList.toggle("invalid", validity[i] === false);
     li.addEventListener("click", () => selectLevel(i));
@@ -537,7 +545,7 @@ function renderProps() {
 }
 
 function renderGuards() {
-  const lv = level();
+  const lv = cmap();
   $("guard-count").textContent = `${lv.guards.length}/${A.max_guards}`;
   const list = $("guard-list");
   list.innerHTML = "";
@@ -599,10 +607,140 @@ function renderGuards() {
 
 function selectLevel(i) {
   cur = i;
+  curMap = 0;
   selGuard = -1;
   preview = null;
   if (mode === "play") enterEdit();
   changed(false);
+}
+
+// ------------------------------------------------------ maps and links
+
+const EDGES = ["up", "right", "down", "left"];
+const OPP = { up: "down", down: "up", left: "right", right: "left" };
+const previewKey = () => keyOf(level()) + "#" + curMap;
+
+/* The link on edge `edge` of map k, seen from map k: {to, offset} or null.
+ * Links are stored once (from -> to) and work both ways. */
+function linkOf(k, edge) {
+  for (const ln of level().links) {
+    if (ln.from === k && ln.edge === edge) return { to: ln.to, offset: ln.offset || 0 };
+    if (ln.to === k && OPP[ln.edge] === edge) return { to: ln.from, offset: -(ln.offset || 0) };
+  }
+  return null;
+}
+
+/* Join (or with to = null, unjoin) edge `edge` of map k. Anything already
+ * on either edge is replaced. */
+function setLink(k, edge, to, offset) {
+  const lv = level();
+  lv.links = lv.links.filter((ln) =>
+    !((ln.from === k && ln.edge === edge) || (ln.to === k && OPP[ln.edge] === edge)) &&
+    !(to !== null && ((ln.from === to && ln.edge === OPP[edge]) || (ln.to === to && ln.edge === edge))));
+  if (to !== null) lv.links.push({ from: k, edge, to, offset });
+}
+
+function renderMapTabs() {
+  const box = $("map-tabs");
+  const lv = level();
+  box.innerHTML = "";
+  lv.maps.forEach((m, k) => {
+    const b = document.createElement("button");
+    b.className = "tab" + (k === curMap ? " active" : "");
+    b.textContent = `Map ${k + 1}`;
+    b.title = `${mapW(m) / A.view_w}×${mapH(m) / A.view_h} screens` + (k === 0 ? "; the level starts here" : "");
+    b.addEventListener("click", () => { curMap = k; selGuard = -1; preview = null; changed(false); });
+    box.appendChild(b);
+  });
+  const add = document.createElement("button");
+  add.className = "tab";
+  add.textContent = "+ Map";
+  add.title = `Add a map (max ${A.max_maps}); join it with the Links panel`;
+  add.disabled = lv.maps.length >= A.max_maps;
+  add.addEventListener("click", () => {
+    pushUndo();
+    lv.maps.push({ map: emptyRoom(), guards: [] });
+    curMap = lv.maps.length - 1;
+    selGuard = -1;
+    changed();
+  });
+  box.appendChild(add);
+}
+
+function renderLinks() {
+  const lv = level();
+  const box = $("links");
+  box.innerHTML = "";
+  $("map-delete").disabled = curMap === 0;
+  $("links-section").hidden = lv.maps.length < 2;
+  if (lv.maps.length < 2) return;
+  EDGES.forEach((edge) => {
+    const ln = linkOf(curMap, edge);
+    const label = document.createElement("span");
+    label.textContent = edge[0].toUpperCase() + edge.slice(1) + " edge";
+    const sel = document.createElement("select");
+    sel.add(new Option("not linked", ""));
+    lv.maps.forEach((m, k) => { if (k !== curMap) sel.add(new Option(`→ Map ${k + 1}`, String(k))); });
+    sel.value = ln ? String(ln.to) : "";
+    const off = document.createElement("input");
+    off.type = "number";
+    off.value = ln ? ln.offset : 0;
+    off.disabled = !ln;
+    off.title = edge === "left" || edge === "right"
+      ? "Which row of this map the other map's top row lines up with"
+      : "Which column of this map the other map's left column lines up with";
+    const apply = () => {
+      pushUndo();
+      setLink(curMap, edge, sel.value === "" ? null : parseInt(sel.value, 10),
+              parseInt(off.value || "0", 10));
+      changed();
+    };
+    sel.addEventListener("change", apply);
+    off.addEventListener("change", apply);
+    box.append(label, sel, off);
+  });
+}
+
+function deleteMap() {
+  const lv = level();
+  if (curMap === 0) return;
+  if (!confirm(`Delete map ${curMap + 1} of this level?`)) return;
+  pushUndo();
+  const k = curMap;
+  lv.maps.splice(k, 1);
+  lv.links = lv.links.filter((ln) => ln.from !== k && ln.to !== k)
+    .map((ln) => ({ ...ln, from: ln.from > k ? ln.from - 1 : ln.from, to: ln.to > k ? ln.to - 1 : ln.to }));
+  curMap = k - 1;
+  selGuard = -1;
+  changed();
+}
+
+/* A strip along each linked edge, labelled with where it leads. */
+function drawLinkMarkers() {
+  const m = cmap();
+  const w = mapW(m) * TILE, h = mapH(m) * TILE;
+  ctx.save();
+  ctx.font = "bold 12px system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  EDGES.forEach((edge) => {
+    const ln = linkOf(curMap, edge);
+    if (!ln) return;
+    const t = 5;
+    ctx.fillStyle = "rgba(242, 183, 5, 0.55)";
+    if (edge === "up") ctx.fillRect(0, 0, w, t);
+    if (edge === "down") ctx.fillRect(0, h - t, w, t);
+    if (edge === "left") ctx.fillRect(0, 0, t, h);
+    if (edge === "right") ctx.fillRect(w - t, 0, t, h);
+    const text = `Map ${ln.to + 1}`;
+    const tw = ctx.measureText(text).width + 10;
+    const [bx, by] = edge === "up" ? [w / 2 - tw / 2, 4] : edge === "down" ? [w / 2 - tw / 2, h - 22]
+      : edge === "left" ? [6, h / 2 - 9] : [w - tw - 6, h / 2 - 9];
+    ctx.fillStyle = "rgba(15, 20, 17, 0.85)";
+    ctx.fillRect(bx, by, tw, 18);
+    ctx.fillStyle = "#f2b705";
+    ctx.fillText(text, bx + 5, by + 9);
+  });
+  ctx.restore();
 }
 
 // ------------------------------------------------- validation & preview
@@ -622,8 +760,9 @@ const checkLevel = debounce(async () => {
   } else {
     ul.innerHTML = '<li class="ok">No problems found.</li>';
     if (previewDisguise >= 0) {
-      const p = await api("/api/start", { level: lv, disguise: previewDisguise });
-      if (!p.error && keyOf(level()) === k) preview = { key: k, view: p.view };
+      const m = curMap;
+      const p = await api("/api/start", { level: lv, disguise: previewDisguise, map: m });
+      if (!p.error && keyOf(level()) === k && curMap === m) preview = { key: k + "#" + m, view: p.view };
     }
   }
   renderLevelList();
@@ -901,7 +1040,7 @@ async function onPlayKey(btn, dir) {
     if (dir === undefined) return;
     const nx = ui.ax + [0, 1, 0, -1][dir];
     const ny = ui.ay + [-1, 0, 1, 0][dir];
-    if (nx < 0 || ny < 0 || nx >= mapW(P.lv) || ny >= mapH(P.lv)) return;
+    if (nx < 0 || ny < 0 || nx >= P.view.w || ny >= P.view.h) return;
     const d = Math.abs(nx - v.player[0]) + Math.abs(ny - v.player[1]);
     if (d > A.items[ui.item].range) return;
     ui.ax = nx; ui.ay = ny;
@@ -921,9 +1060,9 @@ async function onPlayKey(btn, dir) {
   if (P.keys.has("SELECT") && dir !== undefined) {           // look at other screens
     let { x, y } = P.cam;
     if (dir === 0 && y > 0) y -= A.view_h;
-    else if (dir === 2 && y + A.view_h < mapH(P.lv)) y += A.view_h;
+    else if (dir === 2 && y + A.view_h < P.view.h) y += A.view_h;
     else if (dir === 3 && x > 0) x -= A.view_w;
-    else if (dir === 1 && x + A.view_w < mapW(P.lv)) x += A.view_w;
+    else if (dir === 1 && x + A.view_w < P.view.w) x += A.view_w;
     if (!ui.looking) P.lookFrom = { ...P.cam };   // to return to on release
     ui.looking = true;
     await moveCamera(x, y);
@@ -1064,21 +1203,27 @@ window.addEventListener("keyup", async (e) => {
 
 // ============================================================== actions
 
-function newLevel() {
+function emptyRoom() {
   const map = [];
   for (let y = 0; y < 16; y++) {
     let r = "";
     for (let x = 0; x < 20; x++) r += (x === 0 || y === 0 || x === 19 || y === 15) ? "#" : ".";
     map.push(r);
   }
+  return map;
+}
+
+function newLevel() {
+  const map = emptyRoom();
   map[1] = "#P" + map[1].slice(2);
   map[14] = map[14].slice(0, 18) + "E#";
-  return { name: "NEW LEVEL", notes: "", map, items: { stone: 0, bottle: 0 }, guards: [] };
+  return { name: "NEW LEVEL", notes: "", items: { stone: 0, bottle: 0 },
+           maps: [{ map, guards: [] }], links: [] };
 }
 
 function deleteGuard() {
   pushUndo();
-  level().guards.splice(selGuard, 1);
+  cmap().guards.splice(selGuard, 1);
   selGuard = -1;
   changed();
 }
@@ -1123,9 +1268,9 @@ function wire() {
   $("btn-watch").addEventListener("click", watchSolution);
   $("zoom").addEventListener("change", (e) => { zoomSetting = e.target.value; renderEdit(); });
   $("screens-x").addEventListener("change", (e) =>
-    resizeMap(parseInt(e.target.value, 10) * A.view_w, mapH(level())));
+    resizeMap(parseInt(e.target.value, 10) * A.view_w, mapH(cmap())));
   $("screens-y").addEventListener("change", (e) =>
-    resizeMap(mapW(level()), parseInt(e.target.value, 10) * A.view_h));
+    resizeMap(mapW(cmap()), parseInt(e.target.value, 10) * A.view_h));
   $("preview-disguise").addEventListener("change", (e) => {
     previewDisguise = parseInt(e.target.value, 10);
     preview = null;
@@ -1134,15 +1279,15 @@ function wire() {
   });
 
   $("lv-new").addEventListener("click", () => {
-    pushUndo(); levels.splice(cur + 1, 0, newLevel()); cur++; selGuard = -1; changed();
+    pushUndo(); levels.splice(cur + 1, 0, newLevel()); cur++; curMap = 0; selGuard = -1; changed();
   });
   $("lv-dup").addEventListener("click", () => {
-    pushUndo(); levels.splice(cur + 1, 0, clone(level())); cur++; changed();
+    pushUndo(); levels.splice(cur + 1, 0, clone(level())); cur++; curMap = 0; selGuard = -1; changed();
   });
   $("lv-del").addEventListener("click", () => {
     if (levels.length <= 1) return;
     if (!confirm(`Delete level ${cur + 1} "${level().name}"?`)) return;
-    pushUndo(); levels.splice(cur, 1); cur = Math.min(cur, levels.length - 1); selGuard = -1; changed();
+    pushUndo(); levels.splice(cur, 1); cur = Math.min(cur, levels.length - 1); curMap = 0; selGuard = -1; changed();
   });
   $("lv-up").addEventListener("click", () => {
     if (cur === 0) return;
@@ -1175,19 +1320,20 @@ function wire() {
 
   A.dirs.forEach((d) => $("g-facing").add(new Option(d, d)));
   A.uniforms.forEach((u) => $("g-uniform").add(new Option(u === "none" ? "none" : u.toUpperCase(), u)));
-  $("g-facing").addEventListener("change", (e) => { pushUndo(); level().guards[selGuard].facing = e.target.value; changed(); });
-  $("g-uniform").addEventListener("change", (e) => { pushUndo(); level().guards[selGuard].uniform = e.target.value; changed(); });
+  $("g-facing").addEventListener("change", (e) => { pushUndo(); cmap().guards[selGuard].facing = e.target.value; changed(); });
+  $("g-uniform").addEventListener("change", (e) => { pushUndo(); cmap().guards[selGuard].uniform = e.target.value; changed(); });
   $("g-custom").addEventListener("change", (e) => {
     pushUndo();
-    level().guards[selGuard].attitude = e.target.checked ? "EEE" : null;
+    cmap().guards[selGuard].attitude = e.target.checked ? "EEE" : null;
     changed();
   });
   $("g-route-clear").addEventListener("click", () => {
-    pushUndo(); const g = level().guards[selGuard]; g.route = [g.route[0]]; changed();
+    pushUndo(); const g = cmap().guards[selGuard]; g.route = [g.route[0]]; changed();
   });
   $("g-delete").addEventListener("click", deleteGuard);
+  $("map-delete").addEventListener("click", deleteMap);
   $("g-route-close").addEventListener("click", () => {
-    const g = level().guards[selGuard];
+    const g = cmap().guards[selGuard];
     const [fx, fy] = g.route[0];
     const [lx, ly] = g.route[g.route.length - 1];
     if (g.route.length < 2 || lx === fx || ly === fy) { hint("The loop already closes in a straight line."); return; }
@@ -1205,7 +1351,11 @@ async function init() {
   bkgTiles = A.bkg.map((px) => makeTile(px, false));
   sprTiles = A.spr.map((px) => makeTile(px, true));
   levels = (await api("/api/levels")).levels;
-  levels.forEach((lv) => { lv.items = lv.items || {}; lv.guards = lv.guards || []; });
+  levels.forEach((lv) => {
+    lv.items = lv.items || {};
+    lv.links = lv.links || [];
+    lv.maps.forEach((m) => { m.guards = m.guards || []; });
+  });
   wire();
   buildPalette();
   setTool("tile:#");

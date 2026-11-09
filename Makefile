@@ -19,7 +19,7 @@ CFLAGS  += -debug
 LDFLAGS += -debug
 endif
 
-.PHONY: all test test-editor tiles levels editor clean
+.PHONY: all test test-editor tiles levels editor usage clean
 
 all: $(ROM)
 
@@ -36,7 +36,7 @@ build:
 # can be finished.
 test: | build
 	gcc -std=c99 -Wall -Wextra -O2 -o build/test_game \
-		tests/test_game.c src/game.c src/levels.c tools/solver.c
+		tests/test_game.c src/game.c src/world.c src/levels.c tools/solver.c
 	./build/test_game
 
 # Editor bridge + "is src/levels.c up to date with levels/levels.json?"
@@ -53,11 +53,15 @@ src/levels.c src/levels.h: levels/levels.json tools/gen_levels.py
 	python3 tools/gen_levels.py
 
 # Level editor: game rules as a shared library + a local web server.
-build/libgame.so: src/game.c src/game.h tools/solver.c tools/solver.h tools/editor_lib.c | build
-	gcc -std=c99 -O2 -shared -fPIC -o $@ src/game.c tools/solver.c tools/editor_lib.c
+build/libgame.so: src/game.c src/game.h src/world.c src/world.h tools/solver.c tools/solver.h tools/editor_lib.c | build
+	gcc -std=c99 -O2 -shared -fPIC -o $@ src/game.c src/world.c tools/solver.c tools/editor_lib.c
 
 editor: build/libgame.so
 	python3 tools/editor/server.py
+
+# How full the ROM banks and RAM are (GBDK's romusage tool).
+usage: $(ROM)
+	$(GBDK_HOME)/bin/romusage $(ROM) -g
 
 clean:
 	rm -rf build

@@ -27,6 +27,10 @@ jobs:
       - name: Build ROM
         run: make GBDK_HOME="$HOME/gbdk"
 
+      - name: Report ROM and RAM usage
+        run: make usage GBDK_HOME="$HOME/gbdk"
+        continue-on-error: true
+
       - uses: actions/upload-artifact@v4
         with:
           name: stealth-rom

@@ -164,3 +164,8 @@ dialog {
   border-radius: 10px; width: min(800px, 90vw);
 }
 dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); padding: 10px; border-radius: 6px; font-size: 12px; }
+
+.map-tabs { margin-top: -2px; }
+.map-tabs .tab { padding: 4px 12px; font-size: 13px; }
+.links { display: grid; grid-template-columns: auto 1fr 4.5em; gap: 4px 8px; align-items: center; font-size: 13px; }
+.links span { color: var(--muted); }

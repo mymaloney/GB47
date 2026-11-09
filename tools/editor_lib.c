@@ -8,6 +8,7 @@
  */
 #include "../src/game.h"
 #include "solver.h"
+#include "../src/world.h"
 
 int editor_info(int what)
 {
@@ -28,6 +29,8 @@ int editor_info(int what)
     case 13: return MAP_MAX_CELLS;
     case 14: return VIEW_W;
     case 15: return VIEW_H;
+    case 16: return sizeof(World);
+    case 17: return MAX_PARTS;
     default: return -1;
     }
 }

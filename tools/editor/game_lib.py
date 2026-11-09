@@ -44,6 +44,7 @@ lib.editor_info.argtypes = [C.c_int]
 MAP_MAX_W, MAP_MAX_H = lib.editor_info(4), lib.editor_info(5)
 MAP_MAX_CELLS = lib.editor_info(13)
 VIEW_W, VIEW_H = lib.editor_info(14), lib.editor_info(15)
+MAX_PARTS = lib.editor_info(17)
 MAX_GUARDS, MAX_WAYPOINTS = lib.editor_info(6), lib.editor_info(7)
 ITEM_TYPES, DISGUISE_TYPES = lib.editor_info(8), lib.editor_info(9)
 
@@ -62,7 +63,8 @@ class LevelDef(C.Structure):
     _fields_ = [("name", C.c_char_p), ("width", C.c_uint8), ("height", C.c_uint8),
                 ("map", C.c_char_p),
                 ("guard_count", C.c_uint8), ("guards", GuardDef * MAX_GUARDS),
-                ("items", C.c_uint8 * ITEM_TYPES)]
+                ("items", C.c_uint8 * ITEM_TYPES),
+                ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4)]
 
 
 class Guard(C.Structure):
@@ -78,6 +80,11 @@ class GameState(C.Structure):
                 ("disguise", C.c_uint8), ("guards", Guard * MAX_GUARDS)]
 
 
+class World(C.Structure):
+    _fields_ = [("cur", C.c_uint8), ("part_count", C.c_uint8),
+                ("part_def", C.c_uint8 * MAX_PARTS), ("part", GameState * MAX_PARTS)]
+
+
 class ItemDef(C.Structure):
     _fields_ = [("name", C.c_char_p), ("range", C.c_uint8), ("noise", C.c_uint8)]
 
@@ -86,7 +93,7 @@ class SolveStep(C.Structure):
     _fields_ = [("action", C.c_uint8), ("tx", C.c_uint8), ("ty", C.c_uint8)]
 
 
-for idx, struct in [(0, GameState), (1, LevelDef), (2, GuardDef), (3, Guard)]:
+for idx, struct in [(0, GameState), (1, LevelDef), (2, GuardDef), (3, Guard), (16, World)]:
     if lib.editor_info(idx) != C.sizeof(struct):
         raise RuntimeError(
             f"{struct.__name__} layout in tools/editor/game_lib.py no longer "
@@ -98,6 +105,7 @@ for k, idx in [("ACT_COUNT", 10), ("TAKEDOWN_TURNS", 11)]:
 
 S = C.POINTER(GameState)
 L = C.POINTER(LevelDef)
+Wp = C.POINTER(World)
 _sig = {
     "game_load": (None, [L, S]),
     "game_step": (C.c_uint8, [S, C.c_uint8]),
@@ -110,7 +118,11 @@ _sig = {
     "game_uniform_here": (C.c_uint8, [S]),
     "game_body_adjacent": (C.c_uint8, [S]),
     "game_attitude": (C.c_uint8, [S, C.c_uint8]),
-    "solver_run": (C.c_int, [L, C.c_int, C.POINTER(SolveStep), C.c_int,
+    "world_load": (None, [L, C.c_uint8, Wp]),
+    "world_activate": (None, [Wp]),
+    "world_step": (C.c_uint8, [Wp, C.c_uint8]),
+    "world_throw": (C.c_uint8, [Wp, C.c_uint8, C.c_uint8, C.c_uint8]),
+    "solver_run": (C.c_int, [L, C.c_uint8, C.c_int, C.POINTER(SolveStep), C.c_int,
                              C.POINTER(C.c_int)]),
     "solver_format": (None, [C.POINTER(SolveStep), C.c_int, C.c_char_p, C.c_int]),
 }
@@ -135,76 +147,99 @@ DIRS = ["up", "right", "down", "left"]
 UNIFORMS = ["none", "guard", "officer"]
 
 
+DIRS_C = ["up", "right", "down", "left"]   # DIR_* order
+OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
+
+
 class Level:
-    """A LevelDef built from a level's JSON (keeps its strings alive)."""
+    """A level's maps as a little LevelDef table (keeps its strings alive).
+    Map 0 is where the player starts; links point within the table."""
 
     def __init__(self, data):
         self.data = data
         self._keep = []
-        d = self.c = LevelDef()
-        d.name = self._b(data["name"])
-        rows = data["map"]
-        self.width, self.height = len(rows[0]), len(rows)
-        d.width, d.height = self.width, self.height
-        d.map = self._b("".join(rows))
-        guards = data.get("guards", [])[:MAX_GUARDS]
-        d.guard_count = len(guards)
-        for i, g in enumerate(guards):
-            gd = d.guards[i]
-            gd.facing = DIRS.index(g["facing"])
-            route = g["route"][:MAX_WAYPOINTS]
-            gd.wp_count = len(route)
-            for w, (x, y) in enumerate(route):
-                gd.wp[w].x, gd.wp[w].y = x, y
-            gd.uniform = UNIFORMS.index(g.get("uniform", "none"))
-            gd.attitude = self._b(g["attitude"]) if g.get("attitude") else None
-        items = data.get("items", {})
-        for i, it in enumerate(ITEMS):
-            d.items[i] = items.get(it["name"].lower(), 0)
+        maps = data.get("maps") or [{"map": data["map"], "guards": data.get("guards", [])}]
+        self.maps = maps
+        self.table = (LevelDef * len(maps))()
+        links = {}
+        for ln in data.get("links", []):
+            links[(ln["from"], ln["edge"])] = (ln["to"], ln.get("offset", 0))
+            links[(ln["to"], OPPOSITE[ln["edge"]])] = (ln["from"], -ln.get("offset", 0))
+        name = self._b(data["name"])
+        for k, m in enumerate(maps):
+            d = self.table[k]
+            d.name = name
+            rows = m["map"]
+            d.width, d.height = len(rows[0]), len(rows)
+            d.map = self._b("".join(rows))
+            guards = m.get("guards", [])[:MAX_GUARDS]
+            d.guard_count = len(guards)
+            for i, g in enumerate(guards):
+                gd = d.guards[i]
+                gd.facing = DIRS.index(g["facing"])
+                route = g["route"][:MAX_WAYPOINTS]
+                gd.wp_count = len(route)
+                for w, (x, y) in enumerate(route):
+                    gd.wp[w].x, gd.wp[w].y = x, y
+                gd.uniform = UNIFORMS.index(g.get("uniform", "none"))
+                gd.attitude = self._b(g["attitude"]) if g.get("attitude") else None
+            if k == 0:
+                items = data.get("items", {})
+                for i, it in enumerate(ITEMS):
+                    d.items[i] = items.get(it["name"].lower(), 0)
+            d.part = k
+            for di, dname in enumerate(DIRS_C):
+                if (k, dname) in links:
+                    to, off = links[(k, dname)]
+                    d.link[di] = to + 1
+                    d.link_offset[di] = off
 
     def _b(self, s):
         b = s.encode()
         self._keep.append(b)
         return b
 
-    def activate(self):
-        """game.c keeps the current level in static variables; point them
-        at this level before any call."""
-        scratch = GameState()
-        lib.game_load(C.byref(self.c), C.byref(scratch))
-        return scratch
+    def size(self, k):
+        return self.table[k].width, self.table[k].height
 
 
-def encode(state):
-    return base64.b64encode(bytes(state)).decode()
+def encode(world):
+    return base64.b64encode(bytes(world)).decode()
 
 
 def decode(token):
-    return GameState.from_buffer_copy(base64.b64decode(token))
+    return World.from_buffer_copy(base64.b64decode(token))
 
 
-def new_game(level, disguise=None):
-    s = level.activate()
+def new_game(level, disguise=None, map_index=0):
+    """A fresh world. map_index > 0 shows another map (for the editor's
+    cone preview; the player isn't in it)."""
+    w = World()
+    lib.world_load(level.table, 0, C.byref(w))
+    if map_index:
+        w.cur = map_index
     if disguise is not None:
-        s.disguise = disguise
-    return s
+        w.part[w.cur].disguise = disguise
+    return w
 
 
-def step(level, state, code):
-    level.activate()
-    ok = lib.game_step(C.byref(state), code)
-    return bool(ok)
+def step(level, world, code):
+    lib.world_load(level.table, 0, C.byref(World()))   # point world.c at this table
+    return bool(lib.world_step(C.byref(world), code))
 
 
-def throw(level, state, item, x, y):
-    level.activate()
-    return bool(lib.game_throw(C.byref(state), item, x, y))
+def throw(level, world, item, x, y):
+    lib.world_load(level.table, 0, C.byref(World()))
+    return bool(lib.world_throw(C.byref(world), item, x, y))
 
 
-def view(level, state, aim_item=None):
+def view(level, world, aim_item=None):
     """Everything the screen needs, computed the same way as src/main.c."""
-    level.activate()
-    w, h = level.width, level.height
+    lib.world_load(level.table, 0, C.byref(World()))
+    lib.world_activate(C.byref(world))
+    state = world.part[world.cur]
+    cdef = level.table[world.cur]
+    w, h = cdef.width, cdef.height
     vis = (C.c_uint8 * (w * h))()
     lib.game_compute_vision(C.byref(state), 0, 0, w, h, vis)
     tiles, aim = [], []
@@ -239,7 +274,7 @@ def view(level, state, aim_item=None):
     noise, guards = [], []
     for i in range(state.guard_count):
         g = state.guards[i]
-        base = T["SPR_OFFICER_UP"] if level.c.guards[i].uniform == G["DISGUISE_OFFICER"] \
+        base = T["SPR_OFFICER_UP"] if cdef.guards[i].uniform == G["DISGUISE_OFFICER"] \
             else T["SPR_GUARD_UP"]
         if g.mode == G["GUARD_BODY"]:
             t = T["SPR_BODY_STRIPPED"] if g.stripped else base + 5
@@ -253,6 +288,7 @@ def view(level, state, aim_item=None):
         guards.append({"x": g.x, "y": g.y, "facing": g.facing, "mode": g.mode,
                        "attitude": lib.game_attitude(C.byref(state), i)})
     return {
+        "map": world.cur, "w": w, "h": h,
         "tiles": tiles,
         "sprites": sprites + noise,
         "aim": aim if aim_item is not None else None,
@@ -278,7 +314,7 @@ MAX_STEPS = 1024
 def solve(level, use):
     steps = (SolveStep * MAX_STEPS)()
     states = C.c_int(0)
-    n = lib.solver_run(C.byref(level.c), use, steps, MAX_STEPS, C.byref(states))
+    n = lib.solver_run(level.table, 0, use, steps, MAX_STEPS, C.byref(states))
     out = {"length": n, "states": states.value, "steps": [], "text": ""}
     if n > 0:
         k = min(n, MAX_STEPS)

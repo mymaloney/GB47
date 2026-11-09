@@ -28,6 +28,9 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
     /* 2: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
     {
@@ -55,6 +58,9 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_UP, 3, { {11, 10}, {11, 1}, {11, 13} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
     /* 3: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
     {
@@ -82,6 +88,9 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
     /* 4: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
     {
@@ -108,6 +117,9 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_LEFT, 1, { {12, 6} }, DISGUISE_NONE, 0 },
         },
         { 1, 1 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
     /* 5: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
     {
@@ -135,6 +147,9 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_RIGHT, 2, { {5, 2}, {13, 2} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
     /* 6: DRESS CODE - The hall sentry is hostile to your clothes (huge cone) but blind to his own uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
     {
@@ -163,6 +178,9 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_DOWN, 2, { {14, 1}, {14, 7} }, DISGUISE_OFFICER, "HEB" },
         },
         { 0, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
     /* 7: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
     {
@@ -207,6 +225,9 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_LEFT, 2, { {37, 4}, {29, 4} }, DISGUISE_NONE, 0 },
         },
         { 1, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
     /* 8: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
     {
@@ -234,5 +255,67 @@ const LevelDef levels[LEVEL_COUNT] = {
             { DIR_DOWN, 2, { {12, 2}, {12, 8} }, DISGUISE_NONE, 0 },
         },
         { 0, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
+    },
+    /* 9: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
+    {
+        "ANNEX",
+        20, 16,
+            "####################"
+            "#......#############"
+            "#.P....#############"
+            "#......#############"
+            "#......#############"
+            "#......#############"
+            "#......#............"
+            "#......D............"
+            "#......#............"
+            "#......#####..######"
+            "#......#####..######"
+            "####################"
+            "####################"
+            "####################"
+            "####################"
+            "####################",
+        1,
+        {
+            { DIR_RIGHT, 2, { {9, 7}, {18, 7} }, DISGUISE_NONE, 0 },
+        },
+        { 0, 0 },
+        0,   /* map 1 of 2 */
+        { 0, 10, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
+    },
+    /* 9: ANNEX, map 2 */
+    {
+        "ANNEX",
+        40, 16,
+            "########################################"
+            "########################################"
+            "###########............................#"
+            "###########.CC..........W..............#"
+            "###########.CC..........W..............#"
+            "###########.............W..............#"
+            "........................W..............#"
+            ".....................................E.#"
+            "........................W..............#"
+            "###########.............W..............#"
+            "###########.CC..........W..............#"
+            "###########.CC..........W..............#"
+            "###########............................#"
+            "########################################"
+            "########################################"
+            "########################################",
+        2,
+        {
+            { DIR_LEFT, 1, { {30, 7} }, DISGUISE_NONE, 0 },
+            { DIR_DOWN, 2, { {18, 3}, {18, 11} }, DISGUISE_NONE, 0 },
+        },
+        { 0, 0 },
+        1,   /* map 2 of 2 */
+        { 0, 0, 0, 9 },   /* up right down left */
+        { 0, 0, 0, 0 },
     },
 };

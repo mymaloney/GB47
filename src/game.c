@@ -39,6 +39,17 @@ static const int8_t dir_dy[4] = { -1, 0, 1, 0 };
 /* Level loading                                                       */
 /* ------------------------------------------------------------------ */
 
+void game_use(const LevelDef *lvl)
+{
+    uint8_t  y;
+    uint16_t at = 0;
+
+    level = lvl;
+    map_w = lvl->width;
+    map_h = lvl->height;
+    for (y = 0; y < map_h; y++, at += map_w) row_start[y] = at;
+}
+
 void game_load(const LevelDef *lvl, GameState *s)
 {
     uint8_t  x, y, i;
@@ -46,21 +57,16 @@ void game_load(const LevelDef *lvl, GameState *s)
 
     /* zero everything (incl. padding) so states compare with memcmp */
     memset(s, 0, sizeof(GameState));
-    level = lvl;
-    map_w = lvl->width;
-    map_h = lvl->height;
+    game_use(lvl);
     s->px = 1;
     s->py = 1;
 
-    for (y = 0; y < map_h; y++) {
-        row_start[y] = at;
-        for (x = 0; x < map_w; x++, at++) {
+    for (y = 0; y < map_h; y++)
+        for (x = 0; x < map_w; x++, at++)
             if (lvl->map[at] == 'P') {
                 s->px = x;
                 s->py = y;
             }
-        }
-    }
 
     s->status      = STATUS_PLAYING;
     s->guard_count = lvl->guard_count;
@@ -739,31 +745,21 @@ uint8_t game_throw(GameState *s, uint8_t item, uint8_t x, uint8_t y)
 }
 
 /* ------------------------------------------------------------------ */
-/* Undo (ring buffer of snapshots)                                     */
+/* Arriving from another map (see world.c)                             */
 /* ------------------------------------------------------------------ */
 
-static GameState history[UNDO_DEPTH];
-static uint8_t   hist_top;    /* next free slot */
-static uint8_t   hist_count;
-
-void undo_clear(void)
+uint8_t game_guard_at(const GameState *s, uint8_t x, uint8_t y)
 {
-    hist_top   = 0;
-    hist_count = 0;
+    return guard_at(s, x, y, 0xFF);
 }
 
-void undo_push(const GameState *s)
+uint8_t game_arrive(GameState *s, uint8_t x, uint8_t y)
 {
-    history[hist_top] = *s;
-    hist_top = (hist_top + 1) % UNDO_DEPTH;
-    if (hist_count < UNDO_DEPTH) hist_count++;
-}
-
-uint8_t undo_pop(GameState *s)
-{
-    if (hist_count == 0) return 0;
-    hist_top = (hist_top + UNDO_DEPTH - 1) % UNDO_DEPTH;
-    hist_count--;
-    *s = history[hist_top];
+    s->px     = x;
+    s->py     = y;
+    s->status = STATUS_PLAYING;
+    s->turn++;
+    if (game_cell(x, y) == CELL_EXIT) s->status = STATUS_WON;
+    else check_detection(s, 0);
     return 1;
 }
