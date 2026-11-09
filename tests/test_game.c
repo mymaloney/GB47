@@ -498,7 +498,8 @@ static void test_level_data(void)
         size_t cells = (size_t)lv->width * lv->height;
         CHECK(lv->width >= VIEW_W && lv->width <= MAP_MAX_W &&
               lv->height >= VIEW_H && lv->height <= MAP_MAX_H &&
-              cells <= MAP_MAX_CELLS, "level %d size %dx%d out of range",
+              cells <= MAP_MAX_CELLS && lv->width % VIEW_W == 0 &&
+              lv->height % VIEW_H == 0, "level %d size %dx%d isn't 1-3 whole screens",
               l + 1, lv->width, lv->height);
         CHECK(strlen(lv->map) == cells, "level %d map has %zu chars, expected %zu",
               l + 1, strlen(lv->map), cells);

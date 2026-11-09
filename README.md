@@ -10,7 +10,7 @@ stealth with social stealth (disguises, dialogue) and combat.
 
 ## Current state: prototype
 
-- Levels from one screen (20×16 tiles) up to 60×48, scrolling as you move
+- Levels of 1-3 screens across and down; the view cuts from screen to screen
 - Guards patrol waypoint loops, or stand still as sentries
 - Vision cones (4 tiles deep, 3 wide) blocked by walls and drawn on the map
 - Getting caught, reaching the exit, 32 turns of undo, restart
@@ -35,8 +35,9 @@ This needs only `gcc` and Python 3 (no extra packages). It builds the game
 rules into `build/libgame.so`, starts a local server, and opens
 `http://127.0.0.1:8047` in your browser. Stop it with Ctrl+C.
 
-- **Size:** set width and height, or use **+ screen →** / **+ screen ↓**.
-  Dashed lines mark screen-sized areas; **Zoom** fits big maps on screen.
+- **Size:** pick how many screens across and down (sizes that won't fit
+  in RAM are greyed out). Dashed lines are the screen boundaries; **Zoom**
+  fits big maps on screen.
 - **Paint** walls, floor and exits, and place the player start (keys `1`-`4`).
 - **Guards** (`5`): click to add one (max 4), click to select, drag to
   move. **Route** (`6`): click to add waypoints. Corners are inserted for
@@ -52,9 +53,10 @@ rules into `build/libgame.so`, starts a local server, and opens
   level actually needs (e.g. "Needs a disguise", "Optional: items").
   **Watch solution** replays it.
 - **Playtest** (or press `P`) plays the level with the real rules from
-  `src/game.c` and the same screen and scrolling camera as the ROM.
+  `src/game.c` and the same screen, screen cuts and HUD as the ROM.
   Keyboard: arrows = D-pad, `Z` = A, `X` = B, `Shift` = SELECT (hold +
-  arrows to look around), `Enter` = START, `Esc` = back to editing.
+  arrows to look at other screens), `Enter` = START, `Esc` = back to
+  editing.
 - **Undo/redo** (Ctrl+Z / Ctrl+Shift+Z) for every edit. Level list: add,
   copy, reorder, delete.
 - **Save** (Ctrl+S) writes `levels/levels.json` and regenerates
@@ -74,35 +76,36 @@ Levels live in `levels/levels.json` (format documented at the top of
 | B | Take down an adjacent guard (`B:TAKEDOWN`), or put on the uniform of the body you're standing on (`B:TAKE UNIFORM`) |
 | Hold B + D-pad | Drag a body behind you, or push one in front of you |
 | SELECT (tap) | Open inventory |
-| Hold SELECT + D-pad | Look around a big level; let go to return |
+| Hold SELECT + D-pad | Look at the neighbouring screens; let go to return |
 | START | Tap: undo. Hold about a second: restart level |
 
 In the inventory, UP/DOWN chooses an item and A starts aiming. While
 aiming, dots mark every square you can hit; move the cursor with the
 D-pad and press A to throw. B goes back, SELECT cancels.
 
-### Big levels and scrolling
+### Multi-screen levels
 
-![The camera following the player across a two-by-two-screen level](docs/scrolling.png)
+![Walking from one screen of a 2x2 level to the next: the view cuts](docs/screens.png)
 
-A level can be any size from one screen (20×16 tiles) up to 60 wide and
-48 tall, with at most 2,048 tiles in total, e.g. 40×48, 60×32 or 2×2
-screens. The limit is RAM: guard pathfinding needs one byte per tile.
+A level is 1 to 3 screens across and 1 to 3 down (each screen is 20×16
+tiles), up to 2,048 tiles in total: 1×1, 2×1, 3×1, 1×2, 2×2, 3×2, 1×3 or
+2×3 screens. The tile limit is RAM: guard pathfinding needs one byte per
+tile.
 
-- The view follows you, keeping you at least 5 tiles from the sides and
-  4 from the top and bottom, and slides one tile at a time.
-- While aiming, the view follows the cursor instead.
-- Hold SELECT and use the D-pad to look around; let go and the view goes
-  back to where it was. A quick tap of SELECT still opens the inventory
-  (it now opens when you let go).
-- Guards off screen keep moving, and can still see you if you're inside
-  their cone. Look around before committing.
-- The HUD is drawn in the window layer, so it doesn't scroll.
+- The view shows one whole screen and **cuts** to the next when you step
+  across an edge. No scrolling motion.
+- While aiming, the view shows the screen the cursor is on.
+- Hold SELECT and use the D-pad to look at the neighbouring screens; let
+  go to return. A quick tap of SELECT still opens the inventory (it opens
+  when you let go).
+- Guards on other screens keep moving, and their cones reach across screen
+  edges. Look before you step across.
+- The HUD is drawn in the window layer, so it never moves.
 
 How it works: the Game Boy's background map is 32×32 tiles and wraps, so
-`main.c` draws only the visible part of the level into it, at the level
-position modulo 32, and scrolls the hardware registers. `game.c` reads
-the map straight from ROM.
+`main.c` draws the current screen into it at the level position modulo 32
+and sets the scroll registers to match. `game.c` reads the map straight
+from ROM.
 
 ### Throwing distractions
 

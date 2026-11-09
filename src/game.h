@@ -13,13 +13,15 @@
 #include <stdint.h>
 
 /* The screen shows VIEW_W x VIEW_H map tiles (the bottom 2 of the 18 tile
- * rows are the HUD). Levels can be bigger and scroll. Their size is limited
- * by RAM: pathfinding needs one byte per tile. */
+ * rows are the HUD). Levels are 1-3 screens across and down, and the view
+ * cuts from screen to screen. Their size is limited by RAM: pathfinding
+ * needs one byte per tile. (The rules work for any size; the whole-screen
+ * rule is checked by tools/gen_levels.py and main.c relies on it.) */
 #define VIEW_W        20
 #define VIEW_H        16
 #define MAP_MAX_W     60    /* 3 screens wide */
 #define MAP_MAX_H     48    /* 3 screens tall */
-#define MAP_MAX_CELLS 2048  /* width * height, e.g. 40x48 or 60x32 */
+#define MAP_MAX_CELLS 2048  /* width * height: up to 3x2 or 2x3 screens */
 
 #define MAX_GUARDS    4
 #define MAX_WAYPOINTS 6
@@ -112,8 +114,8 @@ typedef struct {
 
 typedef struct {
     const char *name;        /* shown in the HUD, max 12 chars */
-    uint8_t     width;       /* VIEW_W..MAP_MAX_W */
-    uint8_t     height;      /* VIEW_H..MAP_MAX_H */
+    uint8_t     width;       /* a multiple of VIEW_W, up to MAP_MAX_W */
+    uint8_t     height;      /* a multiple of VIEW_H, up to MAP_MAX_H */
     /* width * height chars, row after row:
      * '#' wall, '.' floor, 'E' exit, 'P' player start */
     const char *map;

@@ -49,6 +49,8 @@ assert len(vw["tiles"][0]) == 40 and len(vw["tiles"]) == 16
 assert g.solve(lw, g.G["SOLVE_USE_ALL"])["length"] == 20
 too_big = dict(levels[0], map=[row * 3 for row in levels[0]["map"]] * 3)
 assert any("tiles" in e for e in gen_levels.validate_level(too_big))
+partial = dict(levels[0], map=[row + "#" * 5 for row in levels[0]["map"]])
+assert any("whole screens" in e for e in gen_levels.validate_level(partial))
 
 # validation catches common mistakes
 bad = dict(levels[0], map=[row.replace("P", ".") for row in levels[0]["map"]])

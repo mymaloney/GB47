@@ -9,17 +9,17 @@
  *                the body you stand on (when prompted)
  *   B + D-pad    hold B to drag a body behind you, or push one ahead
  *   SELECT       tap: open inventory
- *   SELECT+D-pad hold SELECT to look around a big level; let go to return
+ *   SELECT+D-pad hold SELECT to look at neighbouring screens; let go to return
  *   START        tap: undo    hold: restart level
  *
  * Inventory:  UP/DOWN choose, A aim, B/SELECT close
  * Aiming:     D-pad move cursor, A throw (spends a turn), B back, SELECT cancel
  *
- * Levels bigger than the screen scroll. The camera follows the player
- * (or the aiming cursor), keeping it CAM_MARGIN tiles from the edges, and
- * slides one tile at a time. The background map is 32x32 tiles and wraps,
- * so the visible part of a level of any size is drawn into it at world
- * position modulo 32. The HUD lives in the window layer so it stays still.
+ * Levels can be several screens (VIEW_W x VIEW_H tiles each). The view
+ * shows one whole screen and cuts to the next when the player (or the
+ * aiming cursor) crosses an edge: no scrolling motion. The background map
+ * is 32x32 tiles and wraps, so the current screen is drawn into it at
+ * world position modulo 32. The HUD lives in the window layer.
  */
 #include <gb/gb.h>
 #include <stdint.h>
@@ -29,9 +29,7 @@
 #include "tiles.h"
 
 #define HUD_WIN_Y  (VIEW_H * 8)   /* window top when showing the 2-row HUD */
-#define CAM_MARGIN_X 5            /* keep the player this far from the sides */
-#define CAM_MARGIN_Y 4            /* ... and from the top/bottom */
-#define SCROLL_STEP  2            /* pixels per frame when sliding */
+
 
 /* Hardware sprite slots */
 #define SPRITE_PLAYER 0
@@ -54,14 +52,14 @@
 static GameState   state;
 static GameState   before;   /* snapshot taken before each turn, for undo */
 static uint8_t     level_idx;
-static uint8_t     vision[(VIEW_W + 1) * (VIEW_H + 1)];  /* view + 1 for slides */
+static uint8_t     vision[VIEW_W * VIEW_H];
 static uint8_t     row_buf[32];
 
-static uint8_t     cam_x, cam_y;            /* camera (top-left), in tiles */
-static uint16_t    scroll_x, scroll_y;      /* camera, in pixels */
+static uint8_t     cam_x, cam_y;            /* top-left of the shown screen, tiles */
+static uint16_t    scroll_x, scroll_y;      /* the same, in pixels */
 static uint8_t     select_armed;            /* SELECT pressed while playing */
 static uint8_t     looking;                 /* SELECT held and panned */
-static uint8_t     look_x, look_y;          /* camera before looking */
+static uint8_t     look_x, look_y;          /* screen before looking */
 
 static uint8_t     ui_mode;
 static uint8_t     inv_item;     /* highlighted / chosen item type */
@@ -217,60 +215,35 @@ static void set_scroll(uint16_t px, uint16_t py)
     move_bkg((uint8_t)px, (uint8_t)py);   /* the map wraps every 256 px */
 }
 
-/* Camera position (one axis) that keeps tile t at least margin tiles inside
- * the view, moving as little as possible, and never past the level edge. */
-static uint8_t follow(uint8_t cam, uint8_t t, uint8_t margin, uint8_t view, uint8_t size)
+/* Origin (one axis) of the screen containing tile t. */
+static uint8_t screen_of(uint8_t t, uint8_t view)
 {
-    int16_t c = cam;
-    if ((int16_t)t < c + margin) c = (int16_t)t - margin;
-    if ((int16_t)t > c + view - 1 - margin) c = (int16_t)t - (view - 1 - margin);
-    if (c > (int16_t)size - view) c = (int16_t)size - view;
-    if (c < 0) c = 0;
-    return (uint8_t)c;
+    return (uint8_t)((t / view) * view);
 }
 
-/* Where the camera should be: on the aiming cursor while aiming, wherever
- * the player panned it while looking, otherwise on the player. */
+/* Which screen to show: the aiming cursor's while aiming, the one the
+ * player looked at while looking, otherwise the player's. */
 static void camera_target(uint8_t *nx, uint8_t *ny)
 {
     if (looking) {
         *nx = cam_x;
         *ny = cam_y;
     } else if (ui_mode == UI_AIM) {
-        *nx = follow(cam_x, aim_x, 1, VIEW_W, game_width());
-        *ny = follow(cam_y, aim_y, 1, VIEW_H, game_height());
+        *nx = screen_of(aim_x, VIEW_W);
+        *ny = screen_of(aim_y, VIEW_H);
     } else {
-        *nx = follow(cam_x, state.px, CAM_MARGIN_X, VIEW_W, game_width());
-        *ny = follow(cam_y, state.py, CAM_MARGIN_Y, VIEW_H, game_height());
+        *nx = screen_of(state.px, VIEW_W);
+        *ny = screen_of(state.py, VIEW_H);
     }
 }
 
-static void draw_sprites(void);
-
-/* Move the camera, redrawing the visible tiles. A one-tile move slides;
- * anything bigger (restart, undo) jumps. */
+/* Cut to another screen (no scrolling motion). */
 static void move_camera(uint8_t nx, uint8_t ny)
 {
-    int8_t  dx = (int8_t)(nx - cam_x), dy = (int8_t)(ny - cam_y);
-    uint8_t f;
-
-    if (dx < -1 || dx > 1 || dy < -1 || dy > 1 || (dx == 0 && dy == 0)) {
-        cam_x = nx;
-        cam_y = ny;
-        draw_tiles(cam_x, cam_y, VIEW_W, VIEW_H);
-        set_scroll((uint16_t)cam_x * 8, (uint16_t)cam_y * 8);
-        return;
-    }
-    /* draw old view + the new strip, then slide across */
-    draw_tiles(dx < 0 ? nx : cam_x, dy < 0 ? ny : cam_y,
-               VIEW_W + (dx != 0), VIEW_H + (dy != 0));
-    for (f = SCROLL_STEP; f <= 8; f += SCROLL_STEP) {
-        vsync();
-        set_scroll((uint16_t)cam_x * 8 + dx * f, (uint16_t)cam_y * 8 + dy * f);
-        draw_sprites();
-    }
     cam_x = nx;
     cam_y = ny;
+    draw_tiles(cam_x, cam_y, VIEW_W, VIEW_H);
+    set_scroll((uint16_t)cam_x * 8, (uint16_t)cam_y * 8);
 }
 
 /* Put a sprite on a level tile, hiding it if that tile is off screen or
@@ -440,11 +413,7 @@ static void load_level(uint8_t idx)
     select_armed = 0;
     game_load(&levels[idx], &state);
     undo_clear();
-    /* start with the player in the middle of the screen */
-    cam_x = follow(0, state.px, VIEW_W / 2 - 1, VIEW_W, game_width());
-    cam_y = follow(0, state.py, VIEW_H / 2 - 1, VIEW_H, game_height());
-    draw_tiles(cam_x, cam_y, VIEW_W, VIEW_H);
-    set_scroll((uint16_t)cam_x * 8, (uint16_t)cam_y * 8);
+    move_camera(screen_of(state.px, VIEW_W), screen_of(state.py, VIEW_H));
     redraw();
 }
 
@@ -514,13 +483,13 @@ static void input_play(uint8_t pressed, uint8_t keys)
         return;
     }
 
-    /* holding SELECT: the D-pad pans the camera to look around */
+    /* holding SELECT: the D-pad shows the neighbouring screens */
     if (keys & J_SELECT) {
         uint8_t nx = cam_x, ny = cam_y;
-        if      ((pressed & J_UP) && ny > 0)                         ny--;
-        else if ((pressed & J_DOWN) && ny < game_height() - VIEW_H)  ny++;
-        else if ((pressed & J_LEFT) && nx > 0)                       nx--;
-        else if ((pressed & J_RIGHT) && nx < game_width() - VIEW_W)  nx++;
+        if      ((pressed & J_UP) && ny > 0)                          ny -= VIEW_H;
+        else if ((pressed & J_DOWN) && ny + VIEW_H < game_height())   ny += VIEW_H;
+        else if ((pressed & J_LEFT) && nx > 0)                        nx -= VIEW_W;
+        else if ((pressed & J_RIGHT) && nx + VIEW_W < game_width())   nx += VIEW_W;
         if (pressed & (J_UP | J_DOWN | J_LEFT | J_RIGHT)) {
             if (!looking) {
                 look_x = cam_x;
@@ -607,7 +576,7 @@ static void input_aim(uint8_t pressed)
     if (game_distance(state.px, state.py, nx, ny) > item_defs[inv_item].range) return;
     aim_x = nx;
     aim_y = ny;
-    camera_target(&nx, &ny);          /* scroll if the cursor nears an edge */
+    camera_target(&nx, &ny);          /* cut to the cursor's screen */
     if (nx != cam_x || ny != cam_y) {
         move_camera(nx, ny);
         draw_sprites();

@@ -114,7 +114,7 @@ kbd {
 }
 #screen { display: block; image-rendering: pixelated; cursor: crosshair; background: #e0f8d0; }
 .size-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 10px; }
-.size-row input { width: 4.5em; }
+.size-row select { width: auto; }
 .tools { width: 100%; max-width: 640px; margin-top: 16px; }
 .toolbar { display: flex; flex-wrap: wrap; gap: 6px; }
 .toolbar button b { color: var(--muted); font-weight: 600; margin-right: 2px; }

@@ -13,10 +13,10 @@ JSON format, one object per level:
       "name":  "FIRST STEPS",              max 12 chars, HUD font only
       "notes": "Shown as a comment in levels.c",
       "map":   [rows of equal length],     '#' wall '.' floor 'E' exit
-                                           'P' player start. At least one
-                                           screen (20x16), at most 60x48
-                                           and 2048 tiles; bigger maps
-                                           scroll
+                                           'P' player start. Whole screens
+                                           of 20x16: 1-3 across, 1-3 down,
+                                           at most 2048 tiles (so not 3x3).
+                                           The view cuts screen to screen
       "items": {"stone": 0, "bottle": 0},
       "guards": [{
           "facing":   "right",             up/right/down/left
@@ -69,6 +69,10 @@ def validate_level(lv):
     if not (VIEW_W <= mw <= MAP_MAX_W and VIEW_H <= mh <= MAP_MAX_H):
         errs.append(f"Map is {mw}x{mh}; it must be {VIEW_W}-{MAP_MAX_W} wide and "
                     f"{VIEW_H}-{MAP_MAX_H} tall.")
+        return errs
+    if mw % VIEW_W or mh % VIEW_H:
+        errs.append(f"Map is {mw}x{mh}; it must be whole screens "
+                    f"({VIEW_W} wide x {VIEW_H} tall each).")
         return errs
     if mw * mh > MAP_MAX_CELLS:
         errs.append(f"Map has {mw * mh} tiles; the Game Boy has room for "

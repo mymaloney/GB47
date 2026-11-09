@@ -189,8 +189,8 @@ function renderEdit() {
   updateSizeInfo(lv);
 }
 
-/* Dashed lines every screen (20x16 tiles) so you can see how much fits on
- * the Game Boy at once. The camera scrolls freely; these are just a guide. */
+/* Dashed lines on the screen boundaries: the Game Boy shows one screen at
+ * a time and cuts to the next when you cross a line. */
 function drawScreenGuides(lv) {
   const w = mapW(lv), h = mapH(lv);
   if (w <= A.view_w && h <= A.view_h) return;
@@ -217,21 +217,30 @@ function editZoom(lv) {
 
 function updateSizeInfo(lv) {
   const w = mapW(lv), h = mapH(lv);
-  if (document.activeElement !== $("map-w")) $("map-w").value = w;
-  if (document.activeElement !== $("map-h")) $("map-h").value = h;
-  const screens = (w / A.view_w) * (h / A.view_h);
-  $("size-info").textContent = `${w}×${h} = ${w * h} of ${A.map_max_cells} tiles` +
-    ` (about ${Math.round(screens * 10) / 10} screens). Dashed lines mark screen-sized areas.`;
-  $("add-right").disabled = w + A.view_w > A.map_max_w || (w + A.view_w) * h > A.map_max_cells;
-  $("add-down").disabled = h + A.view_h > A.map_max_h || w * (h + A.view_h) > A.map_max_cells;
+  const sx = w / A.view_w, sy = h / A.view_h;
+  const fits = (x, y) => x * A.view_w <= A.map_max_w && y * A.view_h <= A.map_max_h &&
+                         x * A.view_w * y * A.view_h <= A.map_max_cells;
+  // only offer sizes that fit in RAM alongside the other dimension
+  for (const [id, n, other, isX] of [["screens-x", sx, sy, true], ["screens-y", sy, sx, false]]) {
+    const sel = $(id);
+    sel.innerHTML = "";
+    for (let k = 1; k <= 3; k++) {
+      const o = new Option(String(k), String(k));
+      o.disabled = !(isX ? fits(k, other) : fits(other, k));
+      sel.add(o);
+    }
+    sel.value = Number.isInteger(n) ? String(n) : "";
+  }
+  $("size-info").textContent = `${w}×${h} tiles = ${w * h} of ${A.map_max_cells}. ` +
+    (sx * sy > 1 ? "Dashed lines are the screen boundaries." : "");
 }
 
-/* Resize the map: new area is wall; cutting off part of the map can strand
- * the start, exits or guards, which the problems list will point out. */
+/* Resize the map (in whole screens): new area is wall; cutting off part of
+ * the map can strand the start, exits or guards, which the problems list
+ * will point out. */
 function resizeMap(w, h) {
   const lv = level();
-  w = Math.max(A.view_w, Math.min(A.map_max_w, w | 0));
-  h = Math.max(A.view_h, Math.min(A.map_max_h, h | 0));
+  if (w * h > A.map_max_cells) return;
   if (w === mapW(lv) && h === mapH(lv)) return;
   pushUndo();
   const rows = [];
@@ -629,25 +638,16 @@ let P = null;   // playtest session
 
 function newPlayUI() { return { mode: "play", item: 0, ax: 0, ay: 0, msg: null, looking: false }; }
 
-// ----- camera: same rules as follow()/camera_target()/move_camera() in main.c
-const CAM_MARGIN_X = 5, CAM_MARGIN_Y = 4, SCROLL_STEP = 2;
+// ----- camera: same rules as screen_of()/camera_target() in main.c.
+// One whole screen at a time; crossing an edge cuts to the next screen.
 
-function follow(cam, t, margin, view, size) {
-  let c = cam;
-  if (t < c + margin) c = t - margin;
-  if (t > c + view - 1 - margin) c = t - (view - 1 - margin);
-  if (c > size - view) c = size - view;
-  if (c < 0) c = 0;
-  return c;
-}
+const screenOf = (t, view) => Math.floor(t / view) * view;
 
 function cameraTarget() {
-  const W = mapW(P.lv), H = mapH(P.lv);
   if (P.ui.looking) return [P.cam.x, P.cam.y];
-  if (P.ui.mode === "aim")
-    return [follow(P.cam.x, P.ui.ax, 1, A.view_w, W), follow(P.cam.y, P.ui.ay, 1, A.view_h, H)];
+  if (P.ui.mode === "aim") return [screenOf(P.ui.ax, A.view_w), screenOf(P.ui.ay, A.view_h)];
   const [px, py] = P.view.player;
-  return [follow(P.cam.x, px, CAM_MARGIN_X, A.view_w, W), follow(P.cam.y, py, CAM_MARGIN_Y, A.view_h, H)];
+  return [screenOf(px, A.view_w), screenOf(py, A.view_h)];
 }
 
 function snapCamera(x, y) {
@@ -657,21 +657,10 @@ function snapCamera(x, y) {
 
 function centerCamera() {
   const [px, py] = P.view.player;
-  snapCamera(follow(0, px, A.view_w / 2 - 1, A.view_w, mapW(P.lv)),
-             follow(0, py, A.view_h / 2 - 1, A.view_h, mapH(P.lv)));
+  snapCamera(screenOf(px, A.view_w), screenOf(py, A.view_h));
 }
 
-/* One-tile moves slide SCROLL_STEP px per frame; bigger moves jump. */
-async function moveCamera(nx, ny) {
-  const dx = nx - P.cam.x, dy = ny - P.cam.y;
-  if (Math.abs(dx) > 1 || Math.abs(dy) > 1 || (!dx && !dy)) { snapCamera(nx, ny); return; }
-  for (let f = SCROLL_STEP; f <= 8; f += SCROLL_STEP) {
-    P.scroll = { x: P.cam.x * 8 + dx * f, y: P.cam.y * 8 + dy * f };
-    renderPlay();
-    await sleep(1000 / 60);
-  }
-  snapCamera(nx, ny);
-}
+async function moveCamera(nx, ny) { snapCamera(nx, ny); }
 
 async function followCamera() {
   const [nx, ny] = cameraTarget();
@@ -884,7 +873,7 @@ async function onPlayKey(btn, dir) {
     const d = Math.abs(nx - v.player[0]) + Math.abs(ny - v.player[1]);
     if (d > A.items[ui.item].range) return;
     ui.ax = nx; ui.ay = ny;
-    await followCamera();                  // scroll if the cursor nears an edge
+    await followCamera();                  // cut to the cursor's screen
     return;
   }
 
@@ -897,12 +886,12 @@ async function onPlayKey(btn, dir) {
     return;
   }
   if (btn === "SELECT") { P.selectArmed = true; return; }   // acted on when let go
-  if (P.keys.has("SELECT") && dir !== undefined) {           // look around
+  if (P.keys.has("SELECT") && dir !== undefined) {           // look at other screens
     let { x, y } = P.cam;
-    if (dir === 0 && y > 0) y--;
-    else if (dir === 2 && y < mapH(P.lv) - A.view_h) y++;
-    else if (dir === 3 && x > 0) x--;
-    else if (dir === 1 && x < mapW(P.lv) - A.view_w) x++;
+    if (dir === 0 && y > 0) y -= A.view_h;
+    else if (dir === 2 && y + A.view_h < mapH(P.lv)) y += A.view_h;
+    else if (dir === 3 && x > 0) x -= A.view_w;
+    else if (dir === 1 && x + A.view_w < mapW(P.lv)) x += A.view_w;
     if (!ui.looking) P.lookFrom = { ...P.cam };   // to return to on release
     ui.looking = true;
     await moveCamera(x, y);
@@ -1098,10 +1087,10 @@ function wire() {
   $("btn-solve").addEventListener("click", solve);
   $("btn-watch").addEventListener("click", watchSolution);
   $("zoom").addEventListener("change", (e) => { zoomSetting = e.target.value; renderEdit(); });
-  $("map-w").addEventListener("change", (e) => resizeMap(parseInt(e.target.value, 10), mapH(level())));
-  $("map-h").addEventListener("change", (e) => resizeMap(mapW(level()), parseInt(e.target.value, 10)));
-  $("add-right").addEventListener("click", () => resizeMap(mapW(level()) + A.view_w, mapH(level())));
-  $("add-down").addEventListener("click", () => resizeMap(mapW(level()), mapH(level()) + A.view_h));
+  $("screens-x").addEventListener("change", (e) =>
+    resizeMap(parseInt(e.target.value, 10) * A.view_w, mapH(level())));
+  $("screens-y").addEventListener("change", (e) =>
+    resizeMap(mapW(level()), parseInt(e.target.value, 10) * A.view_h));
   $("preview-disguise").addEventListener("change", (e) => {
     previewDisguise = parseInt(e.target.value, 10);
     preview = null;
