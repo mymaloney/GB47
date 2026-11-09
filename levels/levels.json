@@ -203,5 +203,32 @@
       {"facing": "down", "route": [[35, 9]], "uniform": "none", "attitude": null},
       {"facing": "left", "route": [[37, 4], [29, 4]], "uniform": "none", "attitude": null}
     ]
+  },
+  {
+    "name": "AIR DUCTS",
+    "notes": "Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to.",
+    "map": [
+      "####################",
+      "#P.......W.........#",
+      "#........W.........#",
+      "#........W.....E...#",
+      "#........W.........#",
+      "#........S.........#",
+      "#........W.........#",
+      "#CC......W.........#",
+      "#CC......W.........#",
+      "####V#########V#####",
+      "####VVVVVVVVVVV#####",
+      "####################",
+      "####################",
+      "####################",
+      "####################",
+      "####################"
+    ],
+    "items": {"stone": 0, "bottle": 0},
+    "guards": [
+      {"facing": "left", "route": [[17, 5], [2, 5]], "uniform": "none", "attitude": null},
+      {"facing": "down", "route": [[12, 2], [12, 8]], "uniform": "none", "attitude": null}
+    ]
   }
 ]

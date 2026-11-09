@@ -208,4 +208,31 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         { 1, 0 },
     },
+    /* 8: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
+    {
+        "AIR DUCTS",
+        20, 16,
+            "####################"
+            "#P.......W.........#"
+            "#........W.........#"
+            "#........W.....E...#"
+            "#........W.........#"
+            "#........S.........#"
+            "#........W.........#"
+            "#CC......W.........#"
+            "#CC......W.........#"
+            "####V#########V#####"
+            "####VVVVVVVVVVV#####"
+            "####################"
+            "####################"
+            "####################"
+            "####################"
+            "####################",
+        2,
+        {
+            { DIR_LEFT, 2, { {17, 5}, {2, 5} }, DISGUISE_NONE, 0 },
+            { DIR_DOWN, 2, { {12, 2}, {12, 8} }, DISGUISE_NONE, 0 },
+        },
+        { 0, 0 },
+    },
 };

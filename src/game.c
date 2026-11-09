@@ -76,14 +76,40 @@ void game_load(const LevelDef *lvl, GameState *s)
     }
 }
 
+/* What each kind of cell blocks; see the table in game.h. */
+const uint8_t cell_blocks[CELL_TYPES] = {
+    0,                                          /* floor    */
+    BLOCK_ALL,                                  /* wall     */
+    0,                                          /* exit     */
+    BLOCK_SIGHT | BLOCK_THROW,                  /* door     */
+    BLOCK_PLAYER | BLOCK_GUARD | BLOCK_THROW,   /* window   */
+    BLOCK_PLAYER | BLOCK_GUARD,                 /* railing  */
+    BLOCK_PLAYER | BLOCK_SIGHT | BLOCK_THROW,   /* security */
+    BLOCK_SIGHT,                                /* curtain  */
+    BLOCK_THROW,                                /* mesh     */
+    BLOCK_GUARD | BLOCK_SIGHT | BLOCK_THROW,    /* vent     */
+};
+
 uint8_t game_cell(uint8_t x, uint8_t y)
 {
-    char c;
     if (x >= map_w || y >= map_h) return CELL_WALL;
-    c = level->map[row_start[y] + x];
-    if (c == '#') return CELL_WALL;
-    if (c == 'E') return CELL_EXIT;
-    return CELL_FLOOR;
+    switch (level->map[row_start[y] + x]) {
+    case '#': return CELL_WALL;
+    case 'E': return CELL_EXIT;
+    case 'D': return CELL_DOOR;
+    case 'W': return CELL_WINDOW;
+    case 'R': return CELL_RAILING;
+    case 'S': return CELL_SECURITY;
+    case 'C': return CELL_CURTAIN;
+    case 'M': return CELL_MESH;
+    case 'V': return CELL_VENT;
+    default:  return CELL_FLOOR;       /* '.' and 'P' */
+    }
+}
+
+uint8_t game_blocks(uint8_t x, uint8_t y, uint8_t what)
+{
+    return cell_blocks[game_cell(x, y)] & what;
 }
 
 uint8_t game_width(void)  { return map_w; }
@@ -99,9 +125,9 @@ uint8_t game_distance(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1)
 /* Line of sight / vision                                              */
 /* ------------------------------------------------------------------ */
 
-/* Bresenham walk from (x0,y0) to (x1,y1); 1 if no wall in between.
- * The endpoints themselves are not tested. */
-static uint8_t line_of_sight(int8_t x0, int8_t y0, int8_t x1, int8_t y1)
+/* Bresenham walk from (x0,y0) to (x1,y1); 1 if no tile in between blocks
+ * `what` (BLOCK_SIGHT or BLOCK_THROW). The endpoints are not tested. */
+static uint8_t line_of_sight(int8_t x0, int8_t y0, int8_t x1, int8_t y1, uint8_t what)
 {
     int8_t dx = x1 > x0 ? x1 - x0 : x0 - x1;
     int8_t dy = y1 > y0 ? y1 - y0 : y0 - y1;
@@ -116,7 +142,7 @@ static uint8_t line_of_sight(int8_t x0, int8_t y0, int8_t x1, int8_t y1)
         if (e2 > -dy) { err -= dy; x0 += sx; }
         if (e2 <  dx) { err += dx; y0 += sy; }
         if (x0 == x1 && y0 == y1) return 1;
-        if (game_cell((uint8_t)x0, (uint8_t)y0) == CELL_WALL) return 0;
+        if (game_blocks((uint8_t)x0, (uint8_t)y0, what)) return 0;
     }
 }
 
@@ -170,9 +196,10 @@ static uint8_t cone_sees(const Guard *g, uint8_t x, uint8_t y, uint8_t cone)
     if (fwd < 1 || fwd > (int8_t)cone_range(cone)) return 0;
     if (side < 0) side = -side;
     if (side > cone_half(cone, fwd)) return 0;
-    if (game_cell(x, y) == CELL_WALL) return 0;
+    /* a sight-blocking tile hides whatever stands on it */
+    if (game_blocks(x, y, BLOCK_SIGHT)) return 0;
 
-    return line_of_sight((int8_t)g->x, (int8_t)g->y, (int8_t)x, (int8_t)y);
+    return line_of_sight((int8_t)g->x, (int8_t)g->y, (int8_t)x, (int8_t)y, BLOCK_SIGHT);
 }
 
 uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y)
@@ -291,7 +318,7 @@ static void distances_to(uint8_t x, uint8_t y)
         for (d = 0; d < 4; d++) {
             nx = cx + dir_dx[d];
             ny = cy + dir_dy[d];
-            if (game_cell(nx, ny) == CELL_WALL) continue;
+            if (game_blocks(nx, ny, BLOCK_GUARD)) continue;
             if (DIST(nx, ny) != NO_PATH) continue;
             DIST(nx, ny) = nd;
             queue_x[tail] = nx;
@@ -351,6 +378,7 @@ static uint8_t dir_look(uint8_t x, uint8_t y, uint8_t tx, uint8_t ty)
 #define STEP_OK     0
 #define STEP_BUMP   1   /* walked into the player */
 #define STEP_NOPATH 2
+#define STEP_BESIDE 3   /* target is a tile guards can't enter; now next to it */
 
 /* Move guard one tile along a shortest path to (x, y). */
 static uint8_t step_toward(GameState *s, uint8_t idx, uint8_t x, uint8_t y)
@@ -367,11 +395,13 @@ static uint8_t step_toward(GameState *s, uint8_t idx, uint8_t x, uint8_t y)
     for (d = 0; d < 4; d++) {
         nx = g->x + dir_dx[d];
         ny = g->y + dir_dy[d];
-        if (game_cell(nx, ny) != CELL_WALL && DIST(nx, ny) == here - 1) break;
+        if (nx >= map_w || ny >= map_h) continue;   /* off the map */
+        if (DIST(nx, ny) == here - 1) break;
     }
     if (d == 4) return STEP_NOPATH;   /* path too long to track: stay put */
 
     g->facing = d;
+    if (game_blocks(nx, ny, BLOCK_GUARD)) return STEP_BESIDE;   /* e.g. railing */
     if (nx == s->px && ny == s->py) {
         if (game_attitude(s, idx) == ATT_BLIND) return STEP_OK;  /* waits */
         return STEP_BUMP;
@@ -403,7 +433,7 @@ static uint8_t guard_patrol(GameState *s, uint8_t idx)
 
     if (nx == s->px && ny == s->py)
         return game_attitude(s, idx) != ATT_BLIND;  /* blind guards wait */
-    if (game_cell(nx, ny) == CELL_WALL || guard_at(s, nx, ny, idx))
+    if (game_blocks(nx, ny, BLOCK_GUARD) || guard_at(s, nx, ny, idx))
         return 0;   /* blocked: wait this turn */
 
     g->x = nx;
@@ -445,7 +475,7 @@ static uint8_t guard_act(GameState *s, uint8_t idx)
         } else {
             r = step_toward(s, idx, g->tx, g->ty);
             if (r == STEP_BUMP) return 1;
-            if (r == STEP_NOPATH) {
+            if (r == STEP_NOPATH || r == STEP_BESIDE) {   /* as close as it gets */
                 g->mode = GUARD_RETURN;
                 g->tx = g->ty = 0;
             }
@@ -597,7 +627,7 @@ uint8_t game_body_adjacent(const GameState *s)
 /* Can something (player or pushed body) be moved onto this tile? */
 static uint8_t tile_free(const GameState *s, uint8_t x, uint8_t y)
 {
-    return game_cell(x, y) != CELL_WALL && !guard_at(s, x, y, 0xFF);
+    return !game_blocks(x, y, BLOCK_PLAYER) && !guard_at(s, x, y, 0xFF);
 }
 
 /* Work out a drag/push in direction dir. Returns the body index (0xFF if
@@ -692,10 +722,10 @@ uint8_t game_can_throw(const GameState *s, uint8_t item, uint8_t x, uint8_t y)
     uint8_t d;
 
     if (item >= ITEM_TYPES || s->items[item] == 0) return 0;
-    if (game_cell(x, y) == CELL_WALL) return 0;   /* also bounds-checks */
+    if (game_blocks(x, y, BLOCK_THROW)) return 0;   /* also bounds-checks */
     d = game_distance(s->px, s->py, x, y);
     if (d == 0 || d > item_defs[item].range) return 0;
-    return line_of_sight((int8_t)s->px, (int8_t)s->py, (int8_t)x, (int8_t)y);
+    return line_of_sight((int8_t)s->px, (int8_t)s->py, (int8_t)x, (int8_t)y, BLOCK_THROW);
 }
 
 uint8_t game_throw(GameState *s, uint8_t item, uint8_t x, uint8_t y)

@@ -120,6 +120,11 @@ kbd {
 .toolbar button b { color: var(--muted); font-weight: 600; margin-right: 2px; }
 .toolbar button.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .toolbar button.active b { color: inherit; }
+.toolbar + .toolbar { margin-top: 6px; }
+.toolbar-label { color: var(--muted); font-size: 12px; text-transform: uppercase;
+  letter-spacing: .08em; align-self: center; min-width: 3.6em; }
+.palette button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 8px 3px 4px; }
+.palette canvas { width: 24px; height: 24px; image-rendering: pixelated; border-radius: 3px; }
 table.keys { border-collapse: collapse; margin-top: 10px; color: var(--muted); }
 table.keys td { padding: 3px 10px 3px 0; }
 

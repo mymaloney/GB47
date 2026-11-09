@@ -68,6 +68,11 @@ def assets():
         "max_guards": g.MAX_GUARDS, "max_waypoints": g.MAX_WAYPOINTS,
         "name_max": gen_levels.NAME_MAX,
         "font_chars": "".join(sorted(gen_levels.FONT_CHARS)),
+        # building blocks: map char, name, background tile, what it blocks
+        "tiles": [{"char": ch, "name": name,
+                   "tile": g.CELL_TILES[g.G["CELL_" + g.CELL_CHARS[ch]]],
+                   "blocks": {"player": bp, "guards": bg, "sight": bs, "throws": bt}}
+                  for ch, (name, bp, bg, bs, bt) in gen_levels.TILES.items()],
     }
 
 

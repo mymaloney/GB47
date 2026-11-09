@@ -13,7 +13,8 @@ JSON format, one object per level:
       "name":  "FIRST STEPS",              max 12 chars, HUD font only
       "notes": "Shown as a comment in levels.c",
       "map":   [rows of equal length],     '#' wall '.' floor 'E' exit
-                                           'P' player start. Whole screens
+                                           'P' player start, and the
+                                           building blocks in TILES below. Whole screens
                                            of 20x16: 1-3 across, 1-3 down,
                                            at most 2048 tiles (so not 3x3).
                                            The view cuts screen to screen
@@ -45,6 +46,22 @@ DIRS = ["up", "right", "down", "left"]
 UNIFORMS = ["none", "guard", "officer"]
 ITEMS = ["stone", "bottle"]
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
+
+# Map characters: (name, blocks player+bodies, guards, sight, throws).
+# Must match the table in src/game.h.
+TILES = {
+    "#": ("wall",          True,  True,  True,  True),
+    ".": ("floor",         False, False, False, False),
+    "P": ("player start",  False, False, False, False),
+    "E": ("exit",          False, False, False, False),
+    "D": ("door",          False, False, True,  True),
+    "W": ("window",        True,  True,  False, True),
+    "R": ("railing",       True,  True,  False, False),
+    "S": ("security door", True,  False, True,  True),
+    "C": ("curtain",       False, False, True,  False),
+    "M": ("mesh",          False, False, False, True),
+    "V": ("vent",          False, True,  True,  True),
+}
 
 
 def validate_level(lv):
@@ -78,16 +95,23 @@ def validate_level(lv):
         errs.append(f"Map has {mw * mh} tiles; the Game Boy has room for "
                     f"{MAP_MAX_CELLS} (e.g. 40x48 or 60x32).")
         return errs
-    if any(c not in "#.EP" for r in rows for c in r):
-        errs.append("Map may only contain # . E P.")
+    bad_chars = sorted({c for r in rows for c in r} - set(TILES))
+    if bad_chars:
+        errs.append(f"Map has unknown tiles: {' '.join(bad_chars)} "
+                    f"(allowed: {' '.join(TILES)}).")
+        return errs
     starts = [(x, y) for y, r in enumerate(rows) for x, c in enumerate(r) if c == "P"]
     if len(starts) != 1:
         errs.append(f"Map needs exactly one player start (has {len(starts)}).")
     if not any("E" in r for r in rows):
         errs.append("Map needs at least one exit.")
 
-    def wall(x, y):
-        return not (0 <= x < mw and 0 <= y < mh) or rows[y][x] == "#"
+    def guard_blocked(x, y):
+        """Off the map, or a tile guards can't walk on. Returns its name."""
+        if not (0 <= x < mw and 0 <= y < mh):
+            return "the edge of the map"
+        name, _, blocks_guard, _, _ = TILES[rows[y][x]]
+        return name if blocks_guard else None
 
     items = lv.get("items", {})
     for k in ITEMS:
@@ -113,8 +137,10 @@ def validate_level(lv):
         if att is not None and (len(att) != len(UNIFORMS) or set(att) - set("HEB")):
             errs.append(f"{tag}: attitude must be {len(UNIFORMS)} letters of H, E, B.")
         for w, (x, y) in enumerate(route):
-            if wall(x, y):
-                errs.append(f"{tag}: point {w + 1} ({x},{y}) is in a wall.")
+            what = guard_blocked(x, y)
+            if what:
+                errs.append(f"{tag}: point {w + 1} ({x},{y}) is on a {what}, "
+                            "which guards can't stand on.")
         start = tuple(route[0])
         if start in seen_starts:
             errs.append(f"{tag} starts on the same tile as guard {seen_starts[start] + 1}.")
@@ -135,8 +161,9 @@ def validate_level(lv):
                     x, y = ax, ay
                     while (x, y) != (bx, by):
                         x, y = x + sx, y + sy
-                        if wall(x, y):
-                            errs.append(f"{leg} walks through a wall at ({x},{y}).")
+                        what = guard_blocked(x, y)
+                        if what:
+                            errs.append(f"{leg} walks through a {what} at ({x},{y}).")
                             break
     return errs
 

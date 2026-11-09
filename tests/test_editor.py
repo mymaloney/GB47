@@ -52,6 +52,13 @@ assert any("tiles" in e for e in gen_levels.validate_level(too_big))
 partial = dict(levels[0], map=[row + "#" * 5 for row in levels[0]["map"]])
 assert any("whole screens" in e for e in gen_levels.validate_level(partial))
 
+# the tile table in gen_levels.py matches cell_blocks[] in game.c
+for ch, (name, b_player, b_guard, b_sight, b_throw) in gen_levels.TILES.items():
+    blocks = g.CELL_BLOCKS[g.G["CELL_" + g.CELL_CHARS[ch]]]
+    want = (b_player * g.G["BLOCK_PLAYER"] | b_guard * g.G["BLOCK_GUARD"] |
+            b_sight * g.G["BLOCK_SIGHT"] | b_throw * g.G["BLOCK_THROW"])
+    assert blocks == want, f"tile {ch} ({name}): C says {blocks}, Python says {want}"
+
 # validation catches common mistakes
 bad = dict(levels[0], map=[row.replace("P", ".") for row in levels[0]["map"]])
 assert any("player start" in e for e in gen_levels.validate_level(bad))

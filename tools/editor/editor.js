@@ -13,9 +13,6 @@ let zoomSetting = "fit";         // edit view zoom: "fit" or 1-3
 const PALETTE = ["#e0f8d0", "#88c070", "#346856", "#081820"];
 const GUARD_COLORS = ["#e4572e", "#2e86ab", "#c23bd4", "#f2b705"];
 const TOOL_HINTS = {
-  wall: "Click or drag to paint walls.",
-  floor: "Click or drag to paint floor.",
-  exit: "Click or drag to place exits. Reaching any exit wins.",
   start: "Click to place the player's start.",
   guard: "Click an empty tile to add a guard (max 4), or click a guard to select it. Drag to move it.",
   route: "Click to add waypoints to the selected guard (corners are added for you). Drag a point to move it; right-click to remove it.",
@@ -26,7 +23,7 @@ let levels = [];
 let cur = 0;
 let dirty = false;
 let mode = "edit";
-let tool = "wall";
+let tool = "tile:#";
 let selGuard = -1;
 let undoStack = [];
 let redoStack = [];
@@ -150,9 +147,43 @@ function hudRows(lv, idx, v, ui) {
 // =================================================================== EDIT
 
 function localTiles(lv) {
-  const T = A.T;
-  return lv.map.map((r) => [...r].map((c) =>
-    c === "#" ? T.TILE_WALL : c === "E" ? T.TILE_EXIT : T.TILE_FLOOR));
+  const byChar = Object.fromEntries(A.tiles.map((t) => [t.char, t.tile]));
+  return lv.map.map((r) => [...r].map((c) => byChar[c] ?? A.T.TILE_WALL));
+}
+
+// ---- tile palette: built from the server's table (tools/gen_levels.py)
+
+/* Paint keys: 1-3 as before, then each building block's map letter. */
+const TILE_KEYS = { "#": "1", ".": "2", "E": "3" };
+const tileKey = (ch) => TILE_KEYS[ch] || ch;
+
+function tileHint(t) {
+  const b = t.blocks;
+  const what = { player: "the player (and bodies)", guards: "guards", sight: "sight", throws: "throws" };
+  const blocked = Object.keys(what).filter((k) => b[k]).map((k) => what[k]);
+  const passes = Object.keys(what).filter((k) => !b[k]).map((k) => what[k]);
+  const cap = t.name[0].toUpperCase() + t.name.slice(1);
+  if (!blocked.length) return `${cap}: nothing is blocked. Click or drag to paint.`;
+  if (!passes.length) return `${cap}: blocks everything. Click or drag to paint.`;
+  return `${cap}: blocks ${blocked.join(", ")}; lets ${passes.join(", ")} through.` +
+    (b.sight && !b.player ? " Anything standing on it is hidden." : "") + " Click or drag to paint.";
+}
+
+function buildPalette() {
+  const box = $("palette");
+  A.tiles.filter((t) => t.char !== "P").forEach((t) => {
+    const b = document.createElement("button");
+    b.dataset.tool = "tile:" + t.char;
+    b.title = tileHint(t) + ` (key ${tileKey(t.char)})`;
+    const c = document.createElement("canvas");
+    c.width = c.height = 8;
+    c.getContext("2d").drawImage(bkgTiles[t.tile], 0, 0);
+    const label = document.createElement("span");
+    label.innerHTML = `<b>${tileKey(t.char)}</b> ${t.name[0].toUpperCase() + t.name.slice(1)}`;
+    b.append(c, label);
+    b.addEventListener("click", () => setTool(b.dataset.tool));
+    box.appendChild(b);
+  });
 }
 
 function guardBase(g) {
@@ -376,7 +407,7 @@ function addWaypoint(g, x, y) {
 
 function applyTool(x, y, e, first) {
   const lv = level();
-  const paint = { wall: "#", floor: ".", exit: "E" }[tool];
+  const paint = tool.startsWith("tile:") ? tool.slice(5) : null;
   if (paint) return setCell(x, y, paint);
   if (tool === "start") return first ? setCell(x, y, "P") : false;
 
@@ -450,9 +481,10 @@ function hint(msg) { $("tool-hint").textContent = msg; }
 
 function setTool(t) {
   tool = t;
-  document.querySelectorAll("#toolbar button").forEach((b) =>
+  document.querySelectorAll("#toolbar button, #palette button").forEach((b) =>
     b.classList.toggle("active", b.dataset.tool === t));
-  hint(TOOL_HINTS[t]);
+  const tile = t.startsWith("tile:") && A.tiles.find((x) => x.char === t.slice(5));
+  hint(tile ? tileHint(tile) : TOOL_HINTS[t]);
 }
 
 // ------------------------------------------------------------- panels
@@ -988,8 +1020,11 @@ window.addEventListener("keydown", async (e) => {
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redoEdit(); return; }
-    const tools = { 1: "wall", 2: "floor", 3: "exit", 4: "start", 5: "guard", 6: "route" };
+    const tools = { 4: "start", 5: "guard", 6: "route" };
     if (tools[e.key]) { setTool(tools[e.key]); return; }
+    const tile = !e.ctrlKey && !e.metaKey &&
+      A.tiles.find((x) => x.char !== "P" && tileKey(x.char) === e.key.toUpperCase().replace(/^([123])$/, "$1"));
+    if (tile) { setTool("tile:" + tile.char); return; }
     if ((e.key === "Delete" || e.key === "Backspace") && selGuard >= 0) {
       deleteGuard();
       e.preventDefault();
@@ -1172,7 +1207,8 @@ async function init() {
   levels = (await api("/api/levels")).levels;
   levels.forEach((lv) => { lv.items = lv.items || {}; lv.guards = lv.guards || []; });
   wire();
-  setTool("wall");
+  buildPalette();
+  setTool("tile:#");
   setDirty(false);
   renderAll();
   checkLevel();

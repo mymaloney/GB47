@@ -20,7 +20,10 @@ stealth with social stealth (disguises, dialogue) and combat.
   push the body out of sight
 - **Disguises:** take a uniform from a body; each guard is hostile,
   an enforcer, or blind to what you're wearing, which sets its vision cone
-- 7 levels, each checked solvable by an automated solver
+- **Building blocks:** doors, windows, railings, security doors, curtains,
+  mesh screens and vents, each blocking a different mix of movement,
+  sight and throws
+- 8 levels, each checked solvable by an automated solver
 - **Level editor** with in-editor playtesting and a built-in solver
 
 ## Level editor
@@ -38,7 +41,10 @@ rules into `build/libgame.so`, starts a local server, and opens
 - **Size:** pick how many screens across and down (sizes that won't fit
   in RAM are greyed out). Dashed lines are the screen boundaries; **Zoom**
   fits big maps on screen.
-- **Paint** walls, floor and exits, and place the player start (keys `1`-`4`).
+- **Paint** any tile from the palette: `1` wall, `2` floor, `3` exit, or a
+  building block by its map letter (`D` door, `W` window, `R` railing,
+  `S` security door, `C` curtain, `M` mesh, `V` vent). The hint line says
+  what the selected tile blocks. Place the player start with `4`.
 - **Guards** (`5`): click to add one (max 4), click to select, drag to
   move. **Route** (`6`): click to add waypoints. Corners are inserted for
   you, so legs stay straight. Drag a point to move it; right-click removes
@@ -82,6 +88,36 @@ Levels live in `levels/levels.json` (format documented at the top of
 In the inventory, UP/DOWN chooses an item and A starts aiming. While
 aiming, dots mark every square you can hit; move the cursor with the
 D-pad and press A to throw. B goes back, SELECT cancels.
+
+### Building blocks
+
+Every tile blocks some combination of four things:
+
+| Tile | Map | Player & bodies | Guards | Sight | Throws | Use it for |
+|---|---|---|---|---|---|---|
+| Wall | `#` | ✕ | ✕ | ✕ | ✕ | |
+| Floor | `.` | | | | | |
+| Exit | `E` | | | | | reaching any exit wins |
+| Door | `D` | | | ✕ | ✕ | breaking line of sight between rooms |
+| Window | `W` | ✕ | ✕ | | ✕ | guards watching between rooms |
+| Railing | `R` | ✕ | ✕ | | | balconies, pits: see and throw across |
+| Security door | `S` | ✕ | | ✕ | ✕ | guard-only routes |
+| Curtain | `C` | | | ✕ | | hiding spots you can throw through |
+| Mesh | `M` | | | | ✕ | see-through screens that stop throws |
+| Vent | `V` | | ✕ | ✕ | ✕ | player-only routes |
+
+- Anything standing on a tile that blocks sight is **hidden**: you in a
+  vent, curtain or doorway, or a body you've pushed there.
+- Bodies move wherever the player can.
+- A throw needs a clear path and must land on a tile that doesn't block
+  throws. A stone on a railing still draws a guard, who walks up to the
+  railing, looks, and goes back.
+- Hearing still ignores walls of every kind.
+
+The table lives in `cell_blocks[]` in `src/game.c` (and `TILES` in
+`tools/gen_levels.py`, which a test keeps in step). Adding a tile means a
+new `CELL_*`, a map letter, a row in both tables, and a graphic in
+`tools/gen_tiles.py`.
 
 ### Multi-screen levels
 
@@ -219,7 +255,8 @@ throws, takedowns and drags. It prints each level's shortest solution
 if any level is unsolvable. A table in `tests/test_game.c` lists what each
 level teaches (level 4 needs items; level 5 needs a takedown and moving
 the body; level 6 needs a disguise; level 7, the 2×2-screen level, needs
-the stone). The solver re-runs with that mechanic switched off and fails if
+the stone; level 8 needs the vent, checked by turning every vent into
+wall). The solver re-runs with that mechanic switched off and fails if
 the level can still be beaten. **Run it after every level edit.** The solver uses A* search (the
 walking distance to the nearest exit guides it), so even big levels solve
 in seconds while still finding a shortest solution. Proving a level

@@ -172,6 +172,12 @@ static void draw_hud(void)
 /* Map + sprites                                                       */
 /* ------------------------------------------------------------------ */
 
+/* Background tile for each kind of cell (CELL_*) when no cone is on it. */
+static const uint8_t cell_tile[CELL_TYPES] = {
+    TILE_FLOOR, TILE_WALL, TILE_EXIT, TILE_DOOR, TILE_WINDOW,
+    TILE_RAILING, TILE_SECURITY, TILE_CURTAIN, TILE_MESH, TILE_VENT,
+};
+
 /* Draw the w x h block of the level at (x0, y0) into the background map
  * (wrapping at 32 tiles), with vision cones and the aiming overlay. */
 static void draw_tiles(uint8_t x0, uint8_t y0, uint8_t w, uint8_t h)
@@ -187,16 +193,18 @@ static void draw_tiles(uint8_t x0, uint8_t y0, uint8_t w, uint8_t h)
             wx   = x0 + x;
             cell = game_cell(wx, wy);
             seen = *v;
-            if (cell == CELL_WALL) {
-                row_buf[x] = TILE_WALL;
-            } else if (cell == CELL_EXIT) {
-                row_buf[x] = seen == VIS_SEEN ? TILE_EXIT_SEEN : TILE_EXIT;
-            } else {
+            if (cell == CELL_FLOOR) {
                 aim = (ui_mode == UI_AIM) && game_can_throw(&state, inv_item, wx, wy);
                 if (aim)                    row_buf[x] = seen == VIS_SEEN ? TILE_AIM_SEEN : TILE_AIM;
                 else if (seen == VIS_SEEN)  row_buf[x] = TILE_SEEN;
                 else if (seen)              row_buf[x] = TILE_WATCH;  /* blind guard */
                 else                        row_buf[x] = TILE_FLOOR;
+            } else if (cell == CELL_EXIT) {
+                row_buf[x] = seen == VIS_SEEN ? TILE_EXIT_SEEN : TILE_EXIT;
+            } else if (cell == CELL_MESH) {   /* the only other tile a cone shows on */
+                row_buf[x] = seen == VIS_SEEN ? TILE_MESH_SEEN : seen ? TILE_MESH_WATCH : TILE_MESH;
+            } else {
+                row_buf[x] = cell_tile[cell];
             }
         }
         /* the row may wrap past the right edge of the 32-tile map */

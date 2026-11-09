@@ -118,6 +118,17 @@ for name, (res, args) in _sig.items():
     f = getattr(lib, name)
     f.restype, f.argtypes = res, args
 
+# Map character, CELL_* number and tile graphic for each kind of cell.
+CELL_NAMES = ["FLOOR", "WALL", "EXIT", "DOOR", "WINDOW", "RAILING", "SECURITY",
+              "CURTAIN", "MESH", "VENT"]
+CELL_CHARS = {".": "FLOOR", "P": "FLOOR", "#": "WALL", "E": "EXIT", "D": "DOOR",
+              "W": "WINDOW", "R": "RAILING", "S": "SECURITY", "C": "CURTAIN",
+              "M": "MESH", "V": "VENT"}
+assert all(G["CELL_" + n] == i for i, n in enumerate(CELL_NAMES)) and \
+    G["CELL_TYPES"] == len(CELL_NAMES), "CELL_* in game.h changed: update game_lib.py"
+CELL_TILES = [T["TILE_" + n] for n in CELL_NAMES]
+CELL_BLOCKS = list((C.c_uint8 * len(CELL_NAMES)).in_dll(lib, "cell_blocks"))
+
 ITEM_DEFS = (ItemDef * ITEM_TYPES).in_dll(lib, "item_defs")
 ITEMS = [{"name": d.name.decode(), "range": d.range, "noise": d.noise} for d in ITEM_DEFS]
 DIRS = ["up", "right", "down", "left"]
@@ -203,18 +214,23 @@ def view(level, state, aim_item=None):
             cell, seen = lib.game_cell(x, y), vis[y * w + x]
             can = aim_item is not None and lib.game_can_throw(C.byref(state), aim_item, x, y)
             arow.append(1 if can else 0)
-            if cell == G["CELL_WALL"]:
-                t = T["TILE_WALL"]
+            # same choices as draw_tiles() in src/main.c
+            if cell == G["CELL_FLOOR"]:
+                if can:
+                    t = T["TILE_AIM_SEEN"] if seen == G["VIS_SEEN"] else T["TILE_AIM"]
+                elif seen == G["VIS_SEEN"]:
+                    t = T["TILE_SEEN"]
+                elif seen:
+                    t = T["TILE_WATCH"]
+                else:
+                    t = T["TILE_FLOOR"]
             elif cell == G["CELL_EXIT"]:
                 t = T["TILE_EXIT_SEEN"] if seen == G["VIS_SEEN"] else T["TILE_EXIT"]
-            elif can:
-                t = T["TILE_AIM_SEEN"] if seen == G["VIS_SEEN"] else T["TILE_AIM"]
-            elif seen == G["VIS_SEEN"]:
-                t = T["TILE_SEEN"]
-            elif seen:
-                t = T["TILE_WATCH"]
+            elif cell == G["CELL_MESH"]:
+                t = T["TILE_MESH_SEEN"] if seen == G["VIS_SEEN"] else \
+                    T["TILE_MESH_WATCH"] if seen else T["TILE_MESH"]
             else:
-                t = T["TILE_FLOOR"]
+                t = CELL_TILES[cell]
             row.append(t)
         tiles.append(row)
         aim.append(arow)

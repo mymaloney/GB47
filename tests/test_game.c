@@ -487,6 +487,136 @@ static void test_big_map(void)
     CHECK(s.guards[0].x == 24 && s.guards[0].y == 4, "and walked back to its post");
 }
 
+/* ---- Tile types. One open room whose map is a writable buffer, so each
+ * test can build a column of some tile at x=7. Guard 0 stands at (10,8)
+ * facing left, toward the column. ---- */
+static char tile_map[20 * 16 + 1];
+static const LevelDef tile_level = {
+    "TILES", 20, 16, tile_map,
+    1,
+    { { DIR_LEFT, 1, { {10, 8} }, DISGUISE_NONE, 0 } },
+    { 2, 0 },
+};
+
+static void tiles_reset(char column, char gap)
+{
+    int x, y;
+    for (y = 0; y < 16; y++)
+        for (x = 0; x < 20; x++)
+            tile_map[y * 20 + x] = (x == 0 || y == 0 || x == 19 || y == 15) ? '#' : '.';
+    if (column)
+        for (y = 1; y < 15; y++) tile_map[y * 20 + 7] = column;
+    if (gap) tile_map[8 * 20 + 7] = gap;
+}
+
+static void tiles_load(GameState *s, int px, int py)
+{
+    game_load(&tile_level, s);
+    s->px = (uint8_t)px;
+    s->py = (uint8_t)py;
+}
+
+static void test_tile_types(void)
+{
+    GameState s;
+    const Guard *g;
+    int i;
+
+    /* door: walk through, can't see or throw through, hides you */
+    tiles_reset('#', 'D');
+    tiles_load(&s, 6, 8);
+    g = &s.guards[0];
+    CHECK(game_cell(7, 8) == CELL_DOOR, "door parsed");
+    CHECK(game_guard_sees(g, 8, 8) && !game_guard_sees(g, 6, 8), "door blocks sight");
+    CHECK(!game_can_throw(&s, ITEM_STONE, 8, 8), "door blocks throws");
+    CHECK(game_step(&s, ACT_RIGHT) && s.px == 7, "walk into the doorway");
+    CHECK(s.status == STATUS_PLAYING && !game_guard_sees(g, 7, 8),
+          "standing in a doorway 3 tiles from a guard: hidden");
+
+    /* window: see through, can't walk or throw through */
+    tiles_reset('#', 'W');
+    tiles_load(&s, 6, 8);
+    CHECK(game_guard_sees(&s.guards[0], 6, 8), "window lets sight through");
+    CHECK(!game_can_throw(&s, ITEM_STONE, 8, 8), "window blocks throws");
+    CHECK(game_step(&s, ACT_RIGHT) == 0, "can't walk through a window");
+
+    /* curtain: walk in, it hides you, throws pass */
+    tiles_reset(0, 0);
+    tile_map[8 * 20 + 8] = 'C';
+    tiles_load(&s, 6, 8);
+    g = &s.guards[0];
+    CHECK(!game_guard_sees(g, 8, 8) && !game_guard_sees(g, 7, 8),
+          "curtain hides what's in and behind it");
+    CHECK(game_can_throw(&s, ITEM_STONE, 9, 8), "throws pass curtains");
+    s.px = 8;
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING, "hidden in the curtain");
+
+    /* mesh: walk and see through, throws stop */
+    tiles_reset(0, 0);
+    tile_map[8 * 20 + 8] = 'M';
+    tiles_load(&s, 6, 8);
+    g = &s.guards[0];
+    CHECK(game_guard_sees(g, 8, 8) && game_guard_sees(g, 7, 8), "mesh lets sight through");
+    CHECK(!game_can_throw(&s, ITEM_STONE, 9, 8) && !game_can_throw(&s, ITEM_STONE, 8, 8),
+          "mesh blocks throws (through it and onto it)");
+    CHECK(game_can_throw(&s, ITEM_STONE, 7, 8), "but not short of it");
+
+    /* railing: see and throw over it, nobody walks through; a guard sent to
+     * a noise on the railing stops beside it and goes back */
+    tiles_reset('R', 0);
+    tiles_load(&s, 6, 3);
+    g = &s.guards[0];
+    CHECK(game_step(&s, ACT_RIGHT) == 0, "can't climb the railing");
+    CHECK(game_can_throw(&s, ITEM_STONE, 9, 3), "throw over the railing");
+    CHECK(game_throw(&s, ITEM_STONE, 7, 8), "throw onto the railing");
+    CHECK(s.guards[0].mode == GUARD_INVESTIGATE, "guard heard it");
+    for (i = 0; i < 3; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 8 && s.guards[0].y == 8, "guard stopped beside the railing");
+    CHECK(s.guards[0].mode == GUARD_RETURN, "and gave up");
+    for (i = 0; i < 3; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 10 && s.guards[0].mode == GUARD_PATROL, "then went back");
+    CHECK(s.status == STATUS_PLAYING, "player unseen throughout");
+
+    /* security door: guards walk through, the player can't, sight blocked */
+    tiles_reset('#', 'S');
+    tiles_load(&s, 6, 8);
+    CHECK(game_step(&s, ACT_RIGHT) == 0, "player can't open a security door");
+    CHECK(!game_guard_sees(&s.guards[0], 6, 8), "security door blocks sight");
+    tiles_load(&s, 3, 5);
+    CHECK(game_throw(&s, ITEM_STONE, 5, 8), "noise on the far side");
+    for (i = 0; i < 8 && !(s.guards[0].x == 5 && s.guards[0].y == 8); i++)
+        game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 5 && s.guards[0].y == 8, "guard came through the security door");
+    CHECK(s.status == STATUS_PLAYING, "player unseen");
+
+    /* vent: the player crawls through, guards can't, it hides you */
+    tiles_reset('V', 0);
+    tiles_load(&s, 6, 8);
+    g = &s.guards[0];
+    CHECK(!game_guard_sees(g, 7, 8) && !game_guard_sees(g, 6, 8), "vents block sight");
+    CHECK(game_step(&s, ACT_RIGHT) && s.px == 7, "player crawls into the vent");
+    tiles_load(&s, 3, 5);
+    CHECK(game_throw(&s, ITEM_STONE, 5, 8), "noise across the vent");
+    for (i = 0; i < 6; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x >= 8, "guard can't get through the vent");
+    CHECK(s.guards[0].mode == GUARD_PATROL && s.guards[0].x == 10, "and stays at its post");
+
+    /* bodies move like the player: one can be pushed into a vent, where
+     * it can't be seen */
+    tiles_reset(0, 0);
+    tile_map[8 * 20 + 8] = 'V';
+    tiles_load(&s, 6, 8);
+    s.guards[0].x = 15; s.guards[0].y = 8;   /* guard further right, facing left */
+    s.guard_count = 2;
+    s.guards[1].mode = GUARD_BODY;
+    s.guards[1].x = 7; s.guards[1].y = 8;
+    s.guards[1].facing = DIR_LEFT;
+    s.px = 6; s.py = 8;
+    CHECK(game_step(&s, ACT_DRAG + DIR_RIGHT) == 1, "push the body into the vent");
+    CHECK(s.guards[1].x == 8 && s.status == STATUS_PLAYING,
+          "body in the vent isn't spotted (guard 4 tiles away)");
+}
+
 /* Validate level data: row lengths, waypoints on floor and axis aligned. */
 static void test_level_data(void)
 {
@@ -571,6 +701,34 @@ static const struct {
     { 7, SOLVE_USE_ITEMS,    "the stone (multi-screen level)" },
 };
 
+/* Levels built around a tile must need it: with every such tile turned
+ * into wall, the solver must fail. */
+static const struct {
+    int  level;        /* 1-based */
+    char tile;
+    const char *what;
+} required_tiles[] = {
+    { 8, 'V', "the vent" },
+};
+
+static void test_tiles_needed(void)
+{
+    static char map[MAP_MAX_CELLS + 1];
+    unsigned r;
+    size_t i;
+    char sol[1024];
+    for (r = 0; r < sizeof required_tiles / sizeof required_tiles[0]; r++) {
+        LevelDef copy = levels[required_tiles[r].level - 1];
+        for (i = 0; copy.map[i]; i++)
+            map[i] = copy.map[i] == required_tiles[r].tile ? '#' : copy.map[i];
+        map[i] = 0;
+        copy.map = map;
+        CHECK(solve(&copy, SOLVE_USE_ALL, sol, sizeof sol) == 0,
+              "level %d (%s) can be beaten without %s: %s",
+              required_tiles[r].level, copy.name, required_tiles[r].what, sol);
+    }
+}
+
 static void test_mechanics_needed(void)
 {
     unsigned r;
@@ -599,10 +757,12 @@ int main(void)
     test_disguise_suspicious();
     test_take_uniform();
     test_big_map();
+    test_tile_types();
     test_level_data();
     if (failures == 0) {
         test_solvable();
         test_mechanics_needed();
+        test_tiles_needed();
     }
 
     if (failures) {

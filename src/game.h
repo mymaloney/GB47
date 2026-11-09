@@ -84,10 +84,42 @@ extern const ItemDef item_defs[ITEM_TYPES];
 /* Guards in these modes see, hear and move. */
 #define GUARD_ACTIVE(g) ((g)->mode <= GUARD_RETURN)
 
-/* Map cells. */
-#define CELL_FLOOR 0
-#define CELL_WALL  1
-#define CELL_EXIT  2
+/* Map cells. Each kind blocks some of four things (cell_blocks[]):
+ *
+ *   char  cell       player+bodies guards  sight  throws
+ *   '#'   wall           x           x       x      x
+ *   '.'   floor
+ *   'E'   exit
+ *   'D'   door                               x      x
+ *   'W'   window         x           x              x
+ *   'R'   railing        x           x
+ *   'S'   security       x                   x      x   (guards only)
+ *   'C'   curtain                            x
+ *   'M'   mesh                                      x
+ *   'V'   vent                       x       x      x   (player only)
+ *
+ * Anything standing on a sight-blocking tile can't be seen, so vents,
+ * curtains and doorways hide the player and bodies. 'P' (player start) is
+ * floor. */
+#define CELL_FLOOR    0
+#define CELL_WALL     1
+#define CELL_EXIT     2
+#define CELL_DOOR     3
+#define CELL_WINDOW   4
+#define CELL_RAILING  5
+#define CELL_SECURITY 6
+#define CELL_CURTAIN  7
+#define CELL_MESH     8
+#define CELL_VENT     9
+#define CELL_TYPES    10
+
+#define BLOCK_PLAYER 1   /* the player walking, and bodies being moved */
+#define BLOCK_GUARD  2   /* guards walking (patrols and pathfinding) */
+#define BLOCK_SIGHT  4   /* vision cones */
+#define BLOCK_THROW  8   /* thrown items: their path and where they land */
+#define BLOCK_ALL    15
+
+extern const uint8_t cell_blocks[CELL_TYPES];
 
 /* Game status. */
 #define STATUS_PLAYING 0
@@ -193,6 +225,8 @@ uint8_t game_distance(uint8_t x0, uint8_t y0, uint8_t x1, uint8_t y1);
 /* Map queries for the current level. Outside the map counts as wall. */
 uint8_t game_cell(uint8_t x, uint8_t y);
 uint8_t game_width(void);
+/* Does tile (x, y) block any of the BLOCK_* bits in what? */
+uint8_t game_blocks(uint8_t x, uint8_t y, uint8_t what);
 uint8_t game_height(void);
 
 /* Can this guard see tile (x, y) with the normal cone (+ line of sight)? */

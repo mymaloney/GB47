@@ -13,16 +13,25 @@
 #define TILE_EXIT_SEEN 6
 #define TILE_AIM 7
 #define TILE_AIM_SEEN 8
-#define TILE_WIN_EDGE 9
+#define TILE_DOOR 9
+#define TILE_WINDOW 10
+#define TILE_RAILING 11
+#define TILE_SECURITY 12
+#define TILE_CURTAIN 13
+#define TILE_MESH 14
+#define TILE_MESH_SEEN 15
+#define TILE_MESH_WATCH 16
+#define TILE_VENT 17
+#define TILE_WIN_EDGE 18
 
-#define FONT_BASE   10   /* '0'-'9', then 'A'-'Z' */
-#define FONT_COLON  46
-#define FONT_BANG   47
-#define FONT_DASH   48
-#define FONT_PERIOD 49
-#define FONT_GT     50
-#define FONT_QMARK  51
-#define BKG_TILE_COUNT 52
+#define FONT_BASE   19   /* '0'-'9', then 'A'-'Z' */
+#define FONT_COLON  55
+#define FONT_BANG   56
+#define FONT_DASH   57
+#define FONT_PERIOD 58
+#define FONT_GT     59
+#define FONT_QMARK  60
+#define BKG_TILE_COUNT 61
 
 #define SPR_PLAYER_NONE 0
 #define SPR_PLAYER_GUARD 1

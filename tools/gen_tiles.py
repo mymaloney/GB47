@@ -16,6 +16,33 @@ ROOT = Path(__file__).resolve().parent.parent
 PIX = {".": 0, ":": 1, "x": 2, "#": 3}
 
 # ---------------------------------------------------------------- background
+MESH = [
+    "x.x.x.x.",
+    ".x...x..",
+    "x.x.x.x.",
+    "...x...x",
+    "x.x.x.x.",
+    ".x...x..",
+    "x.x.x.x.",
+    "...x...x",
+]
+WATCH = [   # same pattern as TILE_WATCH below
+    "........",
+    ".:...:..",
+    "........",
+    "...:...:",
+    "........",
+    ".:...:..",
+    "........",
+    "...:...:",
+]
+
+
+def overlay(top, bottom):
+    """Pixels of top that aren't '.', drawn over bottom."""
+    return ["".join(a if a != "." else b for a, b in zip(r1, r2)) for r1, r2 in zip(top, bottom)]
+
+
 BKG = [
     ("TILE_BLANK", [
         "........",
@@ -67,16 +94,7 @@ BKG = [
         "::::::::",
         "::::::::",
     ]),
-    ("TILE_WATCH", [  # floor only a blind guard watches (bodies, suspicious acts)
-        "........",
-        ".:...:..",
-        "........",
-        "...:...:",
-        "........",
-        ".:...:..",
-        "........",
-        "...:...:",
-    ]),
+    ("TILE_WATCH", WATCH),  # floor only a blind guard watches (bodies, suspicious acts)
     ("TILE_EXIT_SEEN", [
         "########",
         "#::::::#",
@@ -106,6 +124,70 @@ BKG = [
         "::x:::x:",
         "::::::::",
         "::::::::",
+    ]),
+    # --- building blocks (see the table in src/game.h) ---
+    ("TILE_DOOR", [       # walk through; blocks sight and throws
+        "########",
+        "#xxxxxx#",
+        "#x::::x#",
+        "#xxxxxx#",
+        "#xxxx:x#",
+        "#x::::x#",
+        "#xxxxxx#",
+        "#xxxxxx#",
+    ]),
+    ("TILE_WINDOW", [     # see through; blocks walking and throws
+        "########",
+        "#:..#..#",
+        "#.:.#..#",
+        "########",
+        "#...#:.#",
+        "#...#.:#",
+        "#...#..#",
+        "########",
+    ]),
+    ("TILE_RAILING", [    # see and throw over; blocks walking
+        "........",
+        "xxxxxxxx",
+        "#..#..#.",
+        "#..#..#.",
+        "xxxxxxxx",
+        "#..#..#.",
+        "#..#..#.",
+        "........",
+    ]),
+    ("TILE_SECURITY", [   # guards only; blocks sight and throws
+        "########",
+        "#x#x#x##",
+        "##x#x#x#",
+        "#x#x#x##",
+        "########",
+        "#xx::xx#",
+        "#xx::xx#",
+        "########",
+    ]),
+    ("TILE_CURTAIN", [    # walk in and hide; throws pass
+        "########",
+        "x:x:x:x:",
+        "x:x:x:x:",
+        "x:x:x:x:",
+        "x:x:x:x:",
+        "x:x:x:x:",
+        ":x:x:x:x",
+        "x.x.x.x.",
+    ]),
+    ("TILE_MESH", MESH),  # walk and see through; blocks throws
+    ("TILE_MESH_SEEN", [r.replace(".", ":") for r in MESH]),
+    ("TILE_MESH_WATCH", overlay(MESH, WATCH)),
+    ("TILE_VENT", [       # player only; hides you; blocks sight and throws
+        "########",
+        "#......#",
+        "########",
+        "#......#",
+        "########",
+        "#......#",
+        "########",
+        "#......#",
     ]),
     ("TILE_WIN_EDGE", [   # top border of the inventory window
         "........",
