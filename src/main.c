@@ -64,7 +64,6 @@ static uint8_t     cam_x, cam_y;            /* top-left of the shown screen, til
 static uint16_t    scroll_x, scroll_y;      /* the same, in pixels */
 static uint8_t     select_armed;            /* SELECT pressed while playing */
 static uint8_t     looking;                 /* SELECT held and panned */
-static uint8_t     look_x, look_y;          /* screen before looking */
 
 /* Painted art (art.h). Its tiles go into VRAM after the built-in ones. */
 #define ART_SLOT0 BKG_TILE_COUNT
@@ -146,7 +145,10 @@ static uint8_t next_item(uint8_t from, uint8_t step)
 
 static void draw_hud(void)
 {
-    if (ui_mode == UI_INVENTORY) return;   /* the window shows the inventory */
+    if (ui_mode == UI_INVENTORY) {   /* the window shows the inventory */
+        hud_msg = 0;                 /* don't show a stale message later */
+        return;
+    }
 
     /* Row 1: "1 FIRST STEPS   T012" or "THROW STONE     T012" */
     clear_row_buf();
@@ -415,9 +417,8 @@ static void select_released(void)
 {
     if (!select_armed) return;
     select_armed = 0;
-    if (looking) {             /* put the camera back where it was */
+    if (looking) {             /* back to the player's screen */
         looking = 0;
-        move_camera(look_x, look_y);
         redraw();
         return;
     }
@@ -569,10 +570,6 @@ static void input_play(uint8_t pressed, uint8_t keys)
         else if ((pressed & J_LEFT) && nx > 0)                        nx -= VIEW_W;
         else if ((pressed & J_RIGHT) && nx + VIEW_W < game_width())   nx += VIEW_W;
         if (pressed & (J_UP | J_DOWN | J_LEFT | J_RIGHT)) {
-            if (!looking) {
-                look_x = cam_x;
-                look_y = cam_y;
-            }
             looking = 1;
             move_camera(nx, ny);
             draw_sprites();

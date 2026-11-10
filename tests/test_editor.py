@@ -8,6 +8,7 @@ import if not), that a level round-trips through the JSON generator, and
 that playtest steps and the solver work through the shared library.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -221,6 +222,17 @@ before = ts.parse_art(base)
 assert after[8][10] is not None and after[8][10] != before[8][10], "pillar drawn"
 changed = {(x, y) for y in range(16) for x in range(20) if after[y][x] != before[y][x]}
 assert changed and all(abs(x - 10) <= 1 and abs(y - 8) <= 1 for x, y in changed), changed
+
+# a malformed link is reported, not a crash
+bad_edge = json.loads(json.dumps(two))
+bad_edge["links"][0]["edge"] = "sideways"
+assert any("edge must be" in e for e in gen_levels.validate_level(bad_edge))
+
+# the editor's Solve says which mechanics a level needs (level 5: CLEANUP)
+os.environ["EDITOR_NO_BROWSER"] = "1"
+import server   # noqa: E402
+needs = server.analyze(g.Level(levels[4]))["needs"]
+assert needs.get("takedown") == "yes" and needs.get("drag") == "yes", needs
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])

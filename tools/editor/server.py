@@ -100,14 +100,14 @@ def analyze(level):
     result = {"solve": full, "needs": {}}
     if full["length"] <= 0:
         return result
-    data = level.data
+    guards = [gd for m in level.maps for gd in m.get("guards", [])]
     checks = []
-    if any(data.get("items", {}).values()):
+    if any(level.data.get("items", {}).values()):
         checks.append(("items", G["SOLVE_USE_ITEMS"]))
-    if data.get("guards"):
+    if guards:
         checks.append(("takedown", G["SOLVE_USE_TAKEDOWN"]))
         checks.append(("drag", G["SOLVE_USE_DRAG"]))
-    if any(gd.get("uniform", "none") != "none" for gd in data.get("guards", [])):
+    if any(gd.get("uniform", "none") != "none" for gd in guards):
         checks.append(("uniform", G["SOLVE_USE_UNIFORM"]))
     for name, bit in checks:
         r = g.solve(level, G["SOLVE_USE_ALL"] & ~bit)

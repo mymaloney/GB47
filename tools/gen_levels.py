@@ -265,6 +265,7 @@ def validate_links(lv):
     errs = []
     maps = lv["maps"]
     used = {}
+    good = []      # links that are well-formed enough to follow
     for n, ln in enumerate(lv.get("links", [])):
         tag = f"Link {n + 1}"
         a, e, b = ln.get("from"), ln.get("edge"), ln.get("to")
@@ -282,6 +283,7 @@ def validate_links(lv):
         if not isinstance(off, int):
             errs.append(f"{tag}: offset must be a whole number.")
             continue
+        good.append(ln)
         for key in ((a, e), (b, OPPOSITE[e])):
             if key in used:
                 errs.append(f"Map {key[0] + 1}'s {key[1]} edge is linked twice "
@@ -310,10 +312,11 @@ def validate_links(lv):
                             f"{'nothing' if other is None else 'a ' + TILES[other][0]} "
                             f"in map {a + 1}.")
     # every map reachable from the first
+    table = link_table({"links": good})
     reach, todo = {0}, [0]
     while todo:
         m = todo.pop()
-        for (src, _), (dst, _) in link_table(lv).items():
+        for (src, _), (dst, _) in table.items():
             if src == m and dst not in reach:
                 reach.add(dst)
                 todo.append(dst)

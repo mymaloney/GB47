@@ -198,6 +198,6 @@ def set_tile(index, shades, path=DEFAULT):
 
 def add_row(path=DEFAULT):
     """Add a row of blank tiles at the bottom (existing numbers don't move)."""
-    cfg, img, w, h, px = _image(path)
+    _, img, w, h, px = _image(path)
     px += [[(0, 0, 0, 0)] * w for _ in range(8)]
     write_png(img, w, h + 8, px)

@@ -646,6 +646,11 @@ static uint8_t plan_drag(const GameState *s, uint8_t dir, uint8_t *bx, uint8_t *
 
     if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
 
+    /* either way the player steps to (nx,ny): it must be enterable (a body
+     * can lie where the player can't go, e.g. a guard taken down on a
+     * security door) */
+    if (!tile_free(s, nx, ny)) return 0xFF;
+
     /* push: body straight ahead moves one further */
     b = body_at(s, nx, ny);
     if (b != 0xFF) {
@@ -658,7 +663,6 @@ static uint8_t plan_drag(const GameState *s, uint8_t dir, uint8_t *bx, uint8_t *
     /* drag: an adjacent body follows into the tile we leave. Prefer the
      * one directly behind, then up/right/down/left. Not while standing on
      * a body (the two would end up stacked). */
-    if (!tile_free(s, nx, ny)) return 0xFF;
     if (body_at(s, s->px, s->py) != 0xFF) return 0xFF;
     b = body_at(s, s->px - dir_dx[dir], s->py - dir_dy[dir]);
     for (d = 0; b == 0xFF && d < 4; d++)

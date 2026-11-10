@@ -150,7 +150,6 @@ DIRS = ["up", "right", "down", "left"]
 UNIFORMS = ["none", "guard", "officer"]
 
 
-DIRS_C = ["up", "right", "down", "left"]   # DIR_* order
 OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
 
 
@@ -207,7 +206,7 @@ class Level:
                 for i, it in enumerate(ITEMS):
                     d.items[i] = items.get(it["name"].lower(), 0)
             d.part = k
-            for di, dname in enumerate(DIRS_C):
+            for di, dname in enumerate(DIRS):   # DIR_* order
                 if (k, dname) in links:
                     to, off = links[(k, dname)]
                     d.link[di] = to + 1

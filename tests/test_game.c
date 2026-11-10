@@ -3,7 +3,7 @@
  *
  *   make test
  *
- * Besides unit checks, this runs a breadth-first solver over every level to
+ * Besides unit checks, this runs the A* solver over every level to
  * prove it can be completed, and prints the shortest solution. Run it every
  * time you edit a level.
  */
@@ -61,6 +61,9 @@ static void test_movement(void)
 {
     GameState s;
     game_load(&test_level, &s);
+    for (int i = 0; i < ITEM_TYPES; i++)
+        CHECK(item_defs[i].range <= SOLVE_MAX_RANGE,
+              "%s out-ranges the solver: raise SOLVE_MAX_RANGE", item_defs[i].name);
     CHECK(s.px == 1 && s.py == 1, "player start parsed");
     CHECK(game_step(&s, ACT_UP) == 0, "walking into wall is not a turn");
     CHECK(s.turn == 0, "turn not spent");
@@ -626,6 +629,15 @@ static void test_tile_types(void)
         game_step(&s, ACT_WAIT);
     CHECK(s.guards[0].x == 5 && s.guards[0].y == 8, "guard came through the security door");
     CHECK(s.status == STATUS_PLAYING, "player unseen");
+    /* a body lying in the security door can't be pushed: the player would
+     * have to step into the doorway */
+    tiles_load(&s, 6, 8);
+    s.guards[0].mode = GUARD_BODY;
+    s.guards[0].x = 7; s.guards[0].y = 8;
+    CHECK(!game_can_drag(&s, DIR_RIGHT) && game_step(&s, ACT_DRAG + DIR_RIGHT) == 0 &&
+          s.px == 6, "can't push a body through a security door");
+    CHECK(game_step(&s, ACT_DRAG + DIR_LEFT) == 1 && s.guards[0].x == 6,
+          "but can drag it out of the doorway");
 
     /* vent: the player crawls through, guards can't, it hides you */
     tiles_reset('V', 0);

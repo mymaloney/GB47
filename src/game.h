@@ -3,7 +3,7 @@
  *
  * Everything in game.c is deterministic and depends only on the level data
  * and the GameState passed in. That gives us:
- *   - cheap undo (a GameState is ~30 bytes; just snapshot it),
+ *   - cheap undo (a GameState is ~50 bytes; just snapshot it),
  *   - puzzles that always play out the same way,
  *   - the ability to compile and test the rules on a PC (see tests/).
  */

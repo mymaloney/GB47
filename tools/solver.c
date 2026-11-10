@@ -186,8 +186,8 @@ int solver_run(const LevelDef *tbl, uint8_t first, int use, SolveStep *steps,
             int cur = entry_node[e];
             World cw;
             const GameState *cs;
-            int a, item, dx, dy, ncand = 0;
-            SolveStep cand[ACT_COUNT + ITEM_TYPES * 13 * 13];
+            int a, item, dx, dy, r, ncand = 0;
+            SolveStep cand[ACT_COUNT + ITEM_TYPES * (2 * SOLVE_MAX_RANGE + 1) * (2 * SOLVE_MAX_RANGE + 1)];
 
             memcpy(&cw, WORLD(cur), world_bytes);
             cs = &cw.part[cw.cur];
@@ -209,8 +209,10 @@ int solver_run(const LevelDef *tbl, uint8_t first, int use, SolveStep *steps,
             world_activate(&cw);
             for (item = 0; item < ITEM_TYPES; item++) {
                 if (!cs->items[item]) continue;
-                for (dy = -6; dy <= 6; dy++)
-                    for (dx = -6; dx <= 6; dx++) {
+                r = item_defs[item].range;
+                if (r > SOLVE_MAX_RANGE) r = SOLVE_MAX_RANGE;
+                for (dy = -r; dy <= r; dy++)
+                    for (dx = -r; dx <= r; dx++) {
                         int tx = cs->px + dx, ty = cs->py + dy;
                         if (tx < 0 || ty < 0 || tx >= game_width() || ty >= game_height()) continue;
                         if (!game_can_throw(cs, (uint8_t)item, (uint8_t)tx, (uint8_t)ty)) continue;
