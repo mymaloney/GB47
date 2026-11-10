@@ -240,6 +240,10 @@ FONT = {
 FONT_ORDER = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ:!-.>?"
 
 # ------------------------------------------------------------------- sprites
+# Characters (guards, dogs...) aren't drawn here: their looks are
+# tilesets/characters.png, editable in the level editor, and go into ROM
+# with the levels (tools/gen_levels.py). These guard drawings were the first
+# two looks there.
 # Guards differ only by where the eyes are, so facing reads at a glance
 # (the vision cone shows it too). Each uniform style changes hat and body.
 GUARD_STYLES = {
@@ -281,7 +285,7 @@ SPRITES = [
     ("SPR_PLAYER_NONE",    player("...##...", "..####..", ".##.")),
     ("SPR_PLAYER_GUARD",   player("..####..", ".######.", "xxxx")),
     ("SPR_PLAYER_OFFICER", player("..####..", "#::::::#", "x##x")),
-] + guard_set("GUARD") + guard_set("OFFICER") + [
+] + [
     ("SPR_BODY_STRIPPED", rotate_ccw([   # uniform taken
         "...::...", "..::::..", ".:x::x:.", ".::::::.",
         "..::::..", ".:::::..", ".::::::.", ".::..::.",
@@ -369,7 +373,7 @@ def main():
     for i, (n, _) in enumerate(SPRITES):
         h.append(f"#define {n} {i}")
     h += ["#define SPR_PLAYER  SPR_PLAYER_NONE   /* + DISGUISE_* */",
-          "#define SPR_GUARD_STYLE_TILES 6  /* up right down left subdued body */"]
+          "/* Character looks (levels.h) are loaded after these. */"]
     h += [f"#define SPRITE_TILE_COUNT {len(spr)}", "",
           "extern const uint8_t bkg_tile_data[];",
           "extern const uint8_t sprite_tile_data[];", "", "#endif", ""]

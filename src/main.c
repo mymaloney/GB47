@@ -6,8 +6,8 @@
  *   D-pad        move one tile (spends a turn); you can walk over bodies
  *   A            wait one turn            (after escaping: next level,
  *                through the level's transition)
- *   B            take down an adjacent guard, talk to (pet, ...) an NPC
- *                next to you, or take the uniform of the body you stand
+ *   B            talk to (pet, ...) a character next to you, take down an
+ *                adjacent guard, or take the uniform of the body you stand
  *                on (when prompted)
  *   B + D-pad    hold B to drag a body behind you, or push one ahead
  *   SELECT       tap: open inventory
@@ -194,9 +194,9 @@ static void draw_hud(void)
     else if (state.status == STATUS_ALARM)  put_text(0, "BODY SEEN START:UNDO");
     else if (state.status == STATUS_WON)    put_text(0, "ESCAPED!   A:NEXT");
     else if (ui_mode == UI_AIM)          put_text(0, "A:THROW B:BACK");
-    else if (game_takedown_target(&state) != 0xFF) put_text(0, "B:TAKEDOWN");
     else if ((n = game_talk_target(&state)) != 0xFF)
-        put_text(put_text(0, "B:"), world_def(&world)->npcs[n].verb);
+        put_text(put_text(0, "B:"), world_def(&world)->guards[n].verb);
+    else if (game_takedown_target(&state) != 0xFF) put_text(0, "B:TAKEDOWN");
     else if (game_uniform_here(&state) != 0xFF)    put_text(0, "B:TAKE UNIFORM");
     else if (game_body_adjacent(&state)) put_text(0, "HOLD B:DRAG");
     else if (looking)                    put_text(0, "LOOKING AROUND");
@@ -338,11 +338,11 @@ static void draw_cursor(void)
     place_sprite(SPRITE_CURSOR, aim_x, aim_y);
 }
 
-/* First sprite tile of a guard's uniform style (see SPR_GUARD_STYLE_TILES). */
+/* First sprite tile of a character's look: LOOK_FRAMES tiles (up right
+ * down left subdued body), loaded after the built-in sprites. */
 static uint8_t guard_tiles(uint8_t i)
 {
-    if (world_def(&world)->guards[i].uniform == DISGUISE_OFFICER) return SPR_OFFICER_UP;
-    return SPR_GUARD_UP;
+    return SPRITE_TILE_COUNT + world_def(&world)->guards[i].look * LOOK_FRAMES;
 }
 
 static void draw_sprites(void)
@@ -447,7 +447,7 @@ static void back_to_play(void)
 }
 
 /* ------------------------------------------------------------------ */
-/* Message box: what an NPC said this turn (same window)               */
+/* Message box: what a character said this turn (same window)         */
 /* ------------------------------------------------------------------ */
 
 static void draw_dialogue(void)
@@ -755,12 +755,12 @@ static void input_play(uint8_t pressed, uint8_t keys)
     if (state.status != STATUS_PLAYING) return;   /* START to undo */
 
     if (pressed & J_B) {
-        if (game_takedown_target(&state) != 0xFF) do_takedown();
-        else if (game_talk_target(&state) != 0xFF) {
+        if (game_talk_target(&state) != 0xFF) {
             /* the turn is drawn first (a switch cell may have changed),
              * then what was said goes up over it */
             if (do_action(ACT_TALK) && game_said_count()) open_dialogue();
         }
+        else if (game_takedown_target(&state) != 0xFF) do_takedown();
         else if (game_uniform_here(&state) != 0xFF) do_action(ACT_UNIFORM);
         return;   /* otherwise B only matters while held (dragging) */
     }
@@ -910,6 +910,7 @@ void main(void)
     OBP0_REG = PAL_NORMAL;
     set_bkg_data(0, BKG_TILE_COUNT, bkg_tile_data);
     set_sprite_data(0, SPRITE_TILE_COUNT, sprite_tile_data);
+    set_sprite_data(SPRITE_TILE_COUNT, LOOK_COUNT * LOOK_FRAMES, look_tile_data);
     move_win(7, HUD_WIN_Y);   /* the HUD: bottom two rows, never scrolls */
     load_level(0);
     SHOW_BKG;

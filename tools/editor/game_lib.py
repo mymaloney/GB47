@@ -52,7 +52,8 @@ VIEW_W, VIEW_H = lib.editor_info(14), lib.editor_info(15)
 MAX_PARTS = lib.editor_info(17)
 MAX_GUARDS, MAX_WAYPOINTS = lib.editor_info(6), lib.editor_info(7)
 ITEM_TYPES, DISGUISE_TYPES = lib.editor_info(8), lib.editor_info(9)
-MAX_NPCS, MAX_SWITCHES = lib.editor_info(20), lib.editor_info(21)
+MAX_SWITCHES = lib.editor_info(21)
+LOOK_FRAMES = ts.LOOK_FRAMES
 
 
 class Point(C.Structure):
@@ -62,11 +63,7 @@ class Point(C.Structure):
 class GuardDef(C.Structure):
     _fields_ = [("facing", C.c_uint8), ("wp_count", C.c_uint8),
                 ("wp", Point * MAX_WAYPOINTS), ("uniform", C.c_uint8),
-                ("attitude", C.c_char_p)]
-
-
-class NpcDef(C.Structure):
-    _fields_ = [("x", C.c_uint8), ("y", C.c_uint8), ("blocks", C.c_uint8),
+                ("attitude", C.c_char_p), ("flags", C.c_uint8), ("look", C.c_uint8),
                 ("verb", C.c_char_p), ("script", C.POINTER(C.c_uint8))]
 
 
@@ -81,7 +78,6 @@ class LevelDef(C.Structure):
                 ("items", C.c_uint8 * ITEM_TYPES),
                 ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4),
                 ("transition", C.c_uint8),
-                ("npc_count", C.c_uint8), ("npcs", NpcDef * MAX_NPCS),
                 ("switch_count", C.c_uint8), ("switches", SwitchDef * MAX_SWITCHES)]
 
 
@@ -113,7 +109,7 @@ class SolveStep(C.Structure):
 
 
 for idx, struct in [(0, GameState), (1, LevelDef), (2, GuardDef), (3, Guard), (16, World),
-                    (18, NpcDef), (19, SwitchDef)]:
+                    (19, SwitchDef)]:
     if lib.editor_info(idx) != C.sizeof(struct):
         raise RuntimeError(
             f"{struct.__name__} layout in tools/editor/game_lib.py no longer "
@@ -217,19 +213,6 @@ class Level:
             d.width, d.height = len(rows[0]), len(rows)
             d.map = self._b("".join(gen_levels.cell_rows(m)))
             local = sorted(gen_levels.art_usage(m))
-            npcs = m.get("npcs", [])[:MAX_NPCS]
-            d.npc_count = len(npcs)
-            for i, n in enumerate(npcs):
-                nd = d.npcs[i]
-                nd.x, nd.y = n["x"], n["y"]
-                nd.blocks = {"move": G["BLOCK_PLAYER"] | G["BLOCK_GUARD"], "none": 0,
-                             "all": G["BLOCK_ALL"]}[n.get("blocks", "move")]
-                nd.verb = self._b(n["verb"])
-                if n.get("script"):
-                    code = gen_levels.compile_script(n["script"], self.flags, self.texts)
-                    buf = (C.c_uint8 * len(code))(*code)
-                    self._keep.append(buf)
-                    nd.script = C.cast(buf, C.POINTER(C.c_uint8))
             switches = m.get("switches", [])[:MAX_SWITCHES]
             d.switch_count = len(switches)
             for i, sw in enumerate(switches):
@@ -250,6 +233,17 @@ class Level:
                     gd.wp[w].x, gd.wp[w].y = x, y
                 gd.uniform = UNIFORMS.index(g.get("uniform", "none"))
                 gd.attitude = self._b(g["attitude"]) if g.get("attitude") else None
+                names = gen_levels.looks()["looks"]
+                look = gen_levels.guard_look(g)
+                gd.look = names.index(look) if look in names else 0
+                talk = gen_levels.can_talk(g)
+                gd.flags = G["CHAR_NO_TAKEDOWN"] if talk or g.get("takedown") is False else 0
+                if talk:
+                    gd.verb = self._b(g.get("verb") or "TALK")
+                    code = gen_levels.compile_script(g.get("script", []), self.flags, self.texts)
+                    buf = (C.c_uint8 * len(code))(*code)
+                    self._keep.append(buf)
+                    gd.script = C.cast(buf, C.POINTER(C.c_uint8))
             if k == 0:
                 items = data.get("items", {})
                 for i, it in enumerate(ITEMS):
@@ -367,8 +361,7 @@ def view(level, world, aim_item=None):
     noise, guards = [], []
     for i in range(state.guard_count):
         g = state.guards[i]
-        base = T["SPR_OFFICER_UP"] if cdef.guards[i].uniform == G["DISGUISE_OFFICER"] \
-            else T["SPR_GUARD_UP"]
+        base = T["SPRITE_TILE_COUNT"] + cdef.guards[i].look * LOOK_FRAMES
         if g.mode == G["GUARD_BODY"]:
             t = T["SPR_BODY_STRIPPED"] if g.stripped else base + 5
         elif g.mode == G["GUARD_SUBDUED"]:
@@ -396,7 +389,7 @@ def view(level, world, aim_item=None):
             "takedown": lib.game_takedown_target(C.byref(state)) != 0xFF,
             "uniform": lib.game_uniform_here(C.byref(state)) != 0xFF,
             "body_adjacent": bool(lib.game_body_adjacent(C.byref(state))),
-            "talk": cdef.npcs[talk].verb.decode() if talk != 0xFF else None,
+            "talk": cdef.guards[talk].verb.decode() if talk != 0xFF else None,
         },
         "flags": [f for i, f in enumerate(level.flags) if state.flags & (1 << i)],
         "guards": guards,

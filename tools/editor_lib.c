@@ -31,9 +31,7 @@ int editor_info(int what)
     case 15: return VIEW_H;
     case 16: return sizeof(World);
     case 17: return MAX_PARTS;
-    case 18: return sizeof(NpcDef);
     case 19: return sizeof(SwitchDef);
-    case 20: return MAX_NPCS;
     case 21: return MAX_SWITCHES;
     case 22: return MAX_SAID;
     default: return -1;

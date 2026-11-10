@@ -26,10 +26,12 @@ stealth with social stealth (disguises, dialogue) and combat.
 - **Linked maps:** a level can be up to 4 maps joined at their edges
 - **Tileset painting:** paint a level's look from a tileset image
   (`tilesets/`), separately from what each cell does
-- **NPCs and scripts:** walk up to someone (or something) and press B to
-  talk; a message box shows what they say, and a small script can change
-  the level, like making the stairs appear. On level 3 you have to pet
-  the dog
+- **Characters and scripts:** guards, dogs and anyone else are one kind
+  of character, each with its own look (sprites you can paint in the
+  editor). Any of them can patrol, see you (or not), be taken down, and
+  be talked to: walk up, press B, and a message box shows what they say;
+  a small script can change the level, like making the stairs appear. On
+  level 3 you have to pet the dog
 - **Level transitions:** finishing a level dips to black and back in the
   style chosen for that level: fade, wipe, curtain, iris (a circle closing
   on you), dissolve, diagonal wipe, blinds, interlace, or a plain cut
@@ -67,22 +69,31 @@ rules into `build/libgame.so`, starts a local server, and opens
   building block by its map letter (`D` door, `W` window, `R` railing,
   `S` security door, `C` curtain, `M` mesh, `V` vent). The hint line says
   what the selected tile blocks. Place the player start with `4`.
-- **Guards** (`5`): click to add one (max 4), click to select, drag to
-  move. **Route** (`6`): click to add waypoints. Corners are inserted for
+- **Character** (`5`): click to add one (max 4 per map), click to select,
+  drag to move. Guards, dogs, cleaners and so on are all characters; the
+  **Characters** panel sets what each one is:
+  - **Look**: which sprites draw it (guard, officer, dog, ...). **Edit
+    look…** paints its six frames pixel by pixel (facing up, right, down,
+    left, being taken down, lying as a body); **New look…** starts a new
+    one from a copy. Looks are saved to `tilesets/characters.png` straight
+    away, like tileset tiles, and every level can use them.
+  - **Facing**, and the **uniform** you get from its body.
+  - **Sees you**: like a guard (normal cone), never (no cone at all: it
+    doesn't catch you or notice bodies, like the dog), or depending on
+    your clothes (hostile, enforcer, blind or ignores, per disguise).
+  - **Can be taken down**.
+  - **Can be talked to (B)**: its prompt word (`PET` shows as `B:PET`)
+    and its script. Someone you can talk to can't be taken down: B talks.
+- **Route** (`6`): click to add waypoints to the selected character, who
+  walks the loop (one point = stands still). Corners are inserted for
   you, so legs stay straight. Drag a point to move it; right-click removes
   it. **Close loop** adds the corner needed to walk back to the start.
-- Per guard: facing, uniform, and attitude to each disguise.
-- **NPC** (`7`): click a tile to add something to talk to, click one to
-  select it, drag to move it. An NPC looks like whatever you paint on its
-  cell (it has no sprite of its own), so paint it with the tileset. Per
-  NPC: the prompt word (`PET` shows as `B:PET`), what it blocks, and its
-  script.
 - **Scripts** are a list of steps, run top to bottom when the player
   talks: **Say** (with a live preview of the Game Boy's message box: 3
   lines of 18 characters, upper case), **Set flag**, **Clear flag**, and
   **If flag** with steps for "then" and "otherwise". Flags are names you
   make up; a level can use 8, shared by all its maps.
-- **Switch cell** (`8`): a cell that turns into something else when a
+- **Switch cell** (`7`): a cell that turns into something else when a
   flag is set, e.g. floor that becomes the exit. It is drawn with a dashed
   outline and a faint picture of what it becomes. Per switch cell: the
   flag, what it turns into, and the tileset tile it then shows.
@@ -119,7 +130,7 @@ Levels live in `levels/levels.json` (format documented at the top of
 |---|---|
 | D-pad | Move one tile (spends a turn); you can walk over bodies |
 | A | Wait one turn / next level after escaping (through the level's transition) |
-| B | Take down an adjacent guard (`B:TAKEDOWN`), talk to an NPC next to you (`B:PET`, `B:TALK`, ...), or put on the uniform of the body you're standing on (`B:TAKE UNIFORM`). In a message box, A or B continues |
+| B | Take down an adjacent guard (`B:TAKEDOWN`), talk to a character next to you (`B:PET`, `B:TALK`, ...), or put on the uniform of the body you're standing on (`B:TAKE UNIFORM`). In a message box, A or B continues |
 | Hold B + D-pad | Drag a body behind you, or push one in front of you |
 | SELECT (tap) | Open inventory |
 | Hold SELECT + D-pad | Look at the neighbouring screens; let go to return |
@@ -342,12 +353,29 @@ levels 1-5 have no uniform and are enforcers to everything. Disguise
 types are `DISGUISE_*` in `src/game.h` (own clothes, GUARD, OFFICER).
 Cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and `HOSTILE_HALF`.
 
-### NPCs, scripts and switch cells
+### Characters, talking, scripts and switch cells
 
-Stand next to an NPC and the HUD shows its prompt (`B:PET`). Pressing B
-talks: its script runs, a message box shows what it says, and guards take
-their turn as after any other action. Talking isn't suspicious. An NPC
-can block walking (for you and for guards) or be walked over.
+Everyone in a map is a character: guards, the dog, anyone. They all work
+the same way. Each walks a route or stands still, blocks walking while
+standing, hears noises (the closest one goes to look), and sees you by
+its attitude to your disguise. One more attitude, **ignores**, means no
+cone at all: it never catches you, notices bodies or raises the alarm.
+The dog ignores every disguise. A character can also be made impossible
+to take down.
+
+A character with a script can be talked to. Stand next to it and the HUD
+shows its prompt (`B:PET`). Pressing B talks: its script runs, a message
+box shows what it says, and the other characters take their turn as
+after any other action. Talking isn't suspicious. While someone you can
+talk to is next to you, B talks rather than taking anyone down, and a
+character you can talk to can't be taken down at all. Characters keep
+talking while they patrol: talk to them wherever they are.
+
+Each character has a **look**: six 8×8 sprites (facing up, right, down,
+left, being taken down, a body) in `tilesets/characters.png`, one row
+per look, named in `tilesets/characters.json`. Paint them in the editor.
+With no look set, a character in an officer's uniform looks like an
+officer and anyone else like a guard. The Game Boy has room for 41 looks.
 
 Scripts set and clear the level's flags, and switch cells follow them at
 once. Undo takes flags back like everything else. In Playtest, the line
@@ -447,7 +475,7 @@ gives up after 2 million and reports "too big to tell".
 | `src/art.c`, `tools/tileset.py` | Painted art: map art layers, shaded copies for cones and aiming, and the tileset loader (with a standard-library PNG reader, `tools/png.py`). |
 | `src/trans.c`, `trans.h` | Level transition patterns (which screen tile changes at which step). No hardware access: `main.c` plays them, the editor previews them. |
 | `src/main.c` | Game Boy side: input, drawing the map/sprites/HUD. Only reads `GameState`. |
-| `tools/gen_tiles.py` | Turns ASCII pixel art into `src/tiles.c`/`tiles.h`. Run `make tiles` after editing the art. |
+| `tools/gen_tiles.py` | Turns ASCII pixel art into `src/tiles.c`/`tiles.h` (built-in graphics, font, the player). Run `make tiles` after editing the art. Character looks are `tilesets/characters.png` instead. |
 | `tests/test_game.c` | Unit tests, plus solver checks for every level. |
 | `tests/test_editor.py` | Checks the editor's bridge and that `src/levels.c` matches the JSON (`make test-editor`). |
 

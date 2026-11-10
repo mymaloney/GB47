@@ -1,0 +1,23 @@
+{
+  "image": "characters.png",
+  "license": "CC0",
+  "notes": "Character looks: one row per look, 6 frames of 8x8 sprites each. Edit them in the level editor (a character's Look: Edit).",
+  "thresholds": [
+    0.72,
+    0.5,
+    0.3
+  ],
+  "frames": [
+    "up",
+    "right",
+    "down",
+    "left",
+    "subdued",
+    "body"
+  ],
+  "looks": [
+    "guard",
+    "officer",
+    "dog"
+  ]
+}

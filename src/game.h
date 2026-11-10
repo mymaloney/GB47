@@ -46,7 +46,7 @@
 #define ACT_DRAG      5   /* ACT_DRAG + dir: move while pushing/dragging */
 #define ACT_TAKEDOWN  9   /* grab an adjacent guard */
 #define ACT_UNIFORM   10  /* put on the uniform of the body you stand on */
-#define ACT_TALK      11  /* talk to (pet, ...) an NPC next to you */
+#define ACT_TALK      11  /* talk to (pet, ...) the character next to you */
 #define ACT_COUNT     12
 
 /* Throwables. Stats live in item_defs[] (game.c), so items can differ
@@ -74,6 +74,8 @@ extern const ItemDef item_defs[ITEM_TYPES];
 #define ATT_ENFORCER 1   /* normal cone */
 #define ATT_BLIND    2   /* ignores you, but the normal cone still spots
                             bodies, takedowns and suspicious actions */
+#define ATT_IGNORE   3   /* no cone at all: never catches you or raises the
+                            alarm (a dog, a cleaner...). Still hears noises. */
 
 /* What a guard is doing. */
 #define GUARD_PATROL      0  /* following its route (or standing post) */
@@ -132,9 +134,9 @@ typedef struct {
     uint8_t x, y;
 } Point;
 
-/* ---- NPCs, scripts and switch cells ----
+/* ---- Talking, scripts and switch cells ----
  *
- * An NPC is something that stands on a cell of a map and can be talked to
+ * Any character (GuardDef) can have a script: then it can be talked to
  * (ACT_TALK from a neighbouring cell). Talking runs its script and costs
  * a turn. A script is a few bytes of the ops below; it can show messages
  * and set or clear the level's flags (GameState.flags, eight per level,
@@ -144,7 +146,6 @@ typedef struct {
  *
  * In the map, a switch cell is the character '0' + its index in
  * LevelDef.switches. */
-#define MAX_NPCS     4    /* per map */
 #define MAX_SWITCHES 8    /* per map */
 #define MAX_FLAGS    8    /* per level */
 #define MAX_SAID     4    /* messages one turn can show */
@@ -157,13 +158,6 @@ typedef struct {
 #define OP_JUMP  5        /* JUMP n: skip the next n bytes */
 
 typedef struct {
-    uint8_t        x, y;
-    uint8_t        blocks;   /* BLOCK_* it adds to its cell */
-    const char    *verb;     /* HUD prompt, "PET" -> B:PET; max 8 chars */
-    const uint8_t *script;   /* OP_* bytes; 0 = can't be talked to */
-} NpcDef;
-
-typedef struct {
     uint8_t x, y;
     uint8_t flag;            /* mask in GameState.flags */
     uint8_t off, on;         /* CELL_* while the flag is clear / set */
@@ -174,15 +168,29 @@ typedef struct {
 
 /* ---- Static level data (lives in ROM) ---- */
 
+/* A character: a guard, or anyone else in the map (a dog, a cleaner...).
+ * They all patrol a route (or stand still), see with a cone that depends
+ * on their attitude to your disguise (or not at all), hear noises, block
+ * walking while standing, and can be taken down and/or talked to. The
+ * code calls them all guards. */
+#define CHAR_NO_TAKEDOWN 1   /* GuardDef.flags: B can't take it down */
+
 typedef struct {
     uint8_t facing;          /* initial facing; only matters if wp_count == 1 */
     uint8_t wp_count;        /* 1 = stationary sentry */
     Point   wp[MAX_WAYPOINTS]; /* patrol loop; guard starts on wp[0] */
     uint8_t uniform;         /* DISGUISE_* worn; NONE = nothing to take */
     /* Attitude to each disguise, indexed by DISGUISE_*: 'H' hostile,
-     * 'E' enforcer, 'B' blind. e.g. "HBE" = hostile to your own clothes,
-     * blind to GUARD, enforcer to OFFICER. 0 = enforcer to everything. */
+     * 'E' enforcer, 'B' blind, 'I' ignores you. e.g. "HBE" = hostile to
+     * your own clothes, blind to GUARD, enforcer to OFFICER. 0 = enforcer
+     * to everything. */
     const char *attitude;
+    uint8_t     flags;       /* CHAR_* */
+    uint8_t     look;        /* which sprites draw it (levels.h LOOK_*);
+                                only looks, the rules never read it */
+    const char    *verb;     /* talking: HUD prompt, "PET" -> B:PET (max 8
+                                chars); 0 = can't be talked to */
+    const uint8_t *script;   /* OP_* bytes, when verb is set */
 } GuardDef;
 
 typedef struct {
@@ -209,8 +217,6 @@ typedef struct {
     /* TRANS_* (trans.h): how the screen dips to black when this level is
      * finished. Only looks, and only read from a level's first map. */
     uint8_t     transition;
-    uint8_t     npc_count;
-    NpcDef      npcs[MAX_NPCS];
     uint8_t     switch_count;
     SwitchDef   switches[MAX_SWITCHES];
 } LevelDef;
@@ -274,15 +280,17 @@ uint8_t game_guard_at(const GameState *s, uint8_t x, uint8_t y);
  *
  *   ACT_UNIFORM: standing on a body, swap into its uniform.
  *
- *   ACT_TALK: next to an NPC, run its script (messages, flags). Costs a
- *     turn like anything else; it isn't suspicious.
+ *   ACT_TALK: next to a character with a script, run it (messages,
+ *     flags). Costs a turn like anything else; it isn't suspicious.
+ *     While someone next to you can be talked to, B talks: ACT_TAKEDOWN
+ *     is illegal then, and nobody with a script can be taken down.
  *
  * A guard that sees a body (or a takedown in progress) raises the alarm.
  * Takedowns, dragging, throwing and changing clothes are suspicious: even
  * guards blind to your disguise catch you doing them in their normal cone. */
 uint8_t game_step(GameState *s, uint8_t action);
 
-/* Index (in the map's npcs[]) of the NPC ACT_TALK would talk to, or 0xFF. */
+/* Index of the character ACT_TALK would talk to, or 0xFF. */
 uint8_t game_talk_target(const GameState *s);
 
 /* The messages the last action showed, in order: game_said(i) for

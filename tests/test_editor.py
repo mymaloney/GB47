@@ -183,6 +183,26 @@ with tempfile.TemporaryDirectory() as tmp:
     ts.add_row(copy)
     grown = ts.load(copy)["tiles"]
     assert len(grown) == len(before) + 16 and grown[7] == pattern and not any(map(any, grown[-16:]))
+# looks: a new look copies another (or starts blank), frames round-trip
+with tempfile.TemporaryDirectory() as tmp:
+    for f in ("characters.json", "characters.png"):
+        shutil.copy(ROOT / "tilesets" / f, tmp)
+    copy = Path(tmp) / "characters.json"
+    before = ts.load_looks(copy)
+    assert ts.add_look("cat", 2, copy) == len(before["looks"])
+    assert ts.add_look("ghost", None, copy) == len(before["looks"]) + 1
+    after = ts.load_looks(copy)
+    assert after["looks"][-2:] == ["cat", "ghost"] and after["frames_of"][-2] == before["frames_of"][2]
+    assert not any(map(any, after["frames_of"][-1]))
+    pattern = [random.randrange(4) for _ in range(64)]
+    ts.set_tile(after["looks"].index("cat") * ts.LOOK_FRAMES + 3, pattern, copy)
+    again = ts.load_looks(copy)
+    assert again["frames_of"][-2][3] == pattern and again["frames_of"][2] == before["frames_of"][2]
+    try:
+        ts.add_look("cat", None, copy)
+        raise AssertionError("duplicate look name")
+    except ValueError:
+        pass
 
 # auto-paint: the wall rules, checked against a hand-painted level 1
 import autopaint   # noqa: E402
@@ -257,9 +277,10 @@ pat = g.transition("iris", 2, 3)
 assert pat["in"][3][2] == 0 and pat["out"][3][2] == pat["steps"] - 1
 assert g.transition("fade", 0, 0)["steps"] == 0
 
-# NPCs, scripts and switch cells: level 3's dog
+# characters you talk to, scripts and switch cells: level 3's dog
 dog = levels[2]
-npc, sw = dog["maps"][0]["npcs"][0], dog["maps"][0]["switches"][0]
+npc, sw = dog["maps"][0]["guards"][2], dog["maps"][0]["switches"][0]
+assert npc["look"] == "dog" and npc["attitude"] == "III" and npc["route"] == [[11, 5]]
 assert gen_levels.level_flags(dog) == ["dog"]
 texts = []
 code = gen_levels.compile_script(npc["script"], ["dog"], texts)
@@ -268,7 +289,9 @@ assert code == [OP["IF"], 1, 4, OP["SAY"], 0, OP["JUMP"], 4, OP["SAY"], 1, OP["S
 assert texts == ["THE DOG WAGS ITS\nTAIL.", "YOU PET THE DOG."]
 assert gen_levels.cell_rows(dog["maps"][0])[sw["y"]][sw["x"]] == "0", "switch cells are digits to the rules"
 c3 = gen_levels.generate_c(levels)
-assert '{ 11, 5, BLOCK_PLAYER | BLOCK_GUARD, "PET", script2_0 },' in c3
+assert ('{ DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, "III", CHAR_NO_TAKEDOWN, LOOK_DOG, '
+        '"PET", script2_2 },') in c3, "the dog in levels.c"
+assert "LOOK_DOG 2" in gen_levels.generate_h(levels) and "look_tile_data" in c3
 assert "CELL_FLOOR, CELL_EXIT," in c3 and '"YOU PET THE DOG.",' in c3
 assert gen_levels.dumps(levels) == (ROOT / "levels" / "levels.json").read_text(), "levels.json round-trips"
 # played through the real rules: pet the dog, the stairs appear
@@ -284,6 +307,9 @@ vd = g.view(ld, wd)
 assert vd["flags"] == ["dog"] and vd["tiles"][sw["y"]][sw["x"]] == stairs, vd["tiles"][sw["y"]][sw["x"]]
 assert g.step(ld, wd, g.G["ACT_TALK"]) and g.said(ld) == [["THE DOG WAGS ITS", "TAIL."]]
 assert not g.step(ld, wd, g.G["ACT_RIGHT"]), "the dog is in the way"
+dog_sprite = [sp for sp in vd["sprites"] if sp.get("guard") == 2][0]
+assert dog_sprite["base"] == g.T["SPRITE_TILE_COUNT"] + 2 * g.LOOK_FRAMES, "drawn with its look"
+assert not vd["prompt"]["takedown"], "and it can't be taken down"
 needs = server.analyze(ld)
 assert needs["needs"].get("talk") == "yes" and "TALK" in needs["solve"]["text"], needs
 # text: wrapped to the box, upper-cased, and refused in plain words
@@ -304,27 +330,54 @@ def scripted(change):
     return gen_levels.validate_level(lv)
 
 
-assert any("nothing sets the flag" in e for e in scripted(lambda m: m["npcs"].clear()))
+def talker(m):
+    return m["guards"][2]
+
+
+def drop_dog(m):
+    m["guards"].pop(2)
+
+
+assert any("nothing sets the flag" in e for e in scripted(drop_dog))
 assert any("needs at least one exit" in e
-           for e in scripted(lambda m: (m["npcs"].clear(), m["switches"].clear())))
-assert any("inside a wall" in e for e in scripted(lambda m: m["npcs"][0].update(x=0, y=0)))
-assert any("guard's route" in e for e in scripted(lambda m: m["npcs"][0].update(
-    x=m["guards"][0]["route"][0][0], y=m["guards"][0]["route"][0][1])))
+           for e in scripted(lambda m: (drop_dog(m), m["switches"].clear())))
+assert any("on a wall" in e for e in scripted(lambda m: talker(m).update(route=[[0, 0]])))
 assert any("can't say" in e for e in scripted(
-    lambda m: m["npcs"][0]["script"].append({"say": "don't"})))
-assert any("prompt word" in e for e in scripted(lambda m: m["npcs"][0].update(verb="pet the dog")))
-assert any("shares its cell" in e for e in scripted(lambda m: m["switches"][0].update(x=11, y=5)))
+    lambda m: talker(m)["script"].append({"say": "don't"})))
+assert any("prompt word" in e for e in scripted(lambda m: talker(m).update(verb="pet the dog")))
+assert any("no look called" in e for e in scripted(lambda m: talker(m).update(look="cat")))
+assert any("attitude must be" in e for e in scripted(lambda m: talker(m).update(attitude="IIX")))
+assert any("shares its cell" in e for e in scripted(
+    lambda m: m["switches"].append(dict(m["switches"][0]))))
 assert any("turns into" in e for e in scripted(lambda m: m["switches"][0].update(on="?")))
-assert any("At most 4 NPCs" in e for e in scripted(lambda m: m["npcs"].extend(
-    [dict(m["npcs"][0], x=6 + i, y=1) for i in range(4)])))
-assert any("8 flags" in e for e in scripted(lambda m: m["npcs"][0]["script"].extend(
+assert any("At most 4 characters" in e for e in scripted(lambda m: m["guards"].extend(
+    [dict(talker(m), route=[[6 + i, 1]]) for i in range(2)])))
+assert any("8 flags" in e for e in scripted(lambda m: talker(m)["script"].extend(
     [{"set": f"f{i}"} for i in range(8)])))
-# auto-paint leaves the dog and the hidden stairs as painted
+# a guard can talk too (and then can't be taken down); a dog can walk
+walker = scripted(lambda m: m["guards"][1].update(verb="ASK", script=[{"say": "Move along."}]))
+assert walker == [], walker
+assert scripted(lambda m: talker(m).update(route=[[11, 5], [11, 6]])) == []
+# old levels with "npcs" still load, as characters that ignore you
+old = json.loads(json.dumps(dog))
+old["maps"][0]["guards"].pop(2)
+old["maps"][0]["npcs"] = [{"x": 11, "y": 5, "verb": "PET", "blocks": "move", "script": npc["script"]}]
+up = gen_levels.upgrade(old)["maps"][0]
+assert "npcs" not in up and up["guards"][2]["route"] == [[11, 5]] and up["guards"][2]["attitude"] == "III"
+# auto-paint leaves the hidden stairs as painted
 import autopaint as ap   # noqa: E402
 m3 = dog["maps"][0]
-assert sorted(ap.scripted_cells(m3)) == [(11, 5), (16, 13)]
+assert sorted(ap.scripted_cells(m3)) == [(16, 13)]
 repainted = ap.keep_art(ap.autopaint_rows(m3["map"], tset), m3["art"], ap.scripted_cells(m3))
-assert repainted[5][22:24] == "15" and repainted[13][32:34] == ".."
+assert repainted[13][32:34] == ".."
+# character looks: a sheet of LOOK_FRAMES sprites per look; the first two
+# are the old built-in guard and officer drawings
+lk = ts.load_looks()
+assert lk["looks"][:3] == ["guard", "officer", "dog"] and lk["columns"] == g.LOOK_FRAMES
+assert gen_levels.guard_look({"uniform": "officer"}) == "officer"
+assert gen_levels.guard_look({"uniform": "guard"}) == "guard"
+assets = server.looks_assets()
+assert assets["first_tile"] == g.T["SPRITE_TILE_COUNT"] and len(assets["frames"][2]) == 6
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])

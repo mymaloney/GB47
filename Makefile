@@ -38,7 +38,7 @@ build:
 # Game rules compiled natively; includes a solver that proves every level
 # can be finished.
 test: | build
-	gcc -std=c99 -Wall -Wextra -O2 -o build/test_game \
+	gcc -std=c99 -Wall -Wextra -Wno-missing-field-initializers -O2 -o build/test_game \
 		tests/test_game.c $(RULES) src/levels.c src/levels_maps.c src/levels_art.c tools/solver.c
 	./build/test_game
 

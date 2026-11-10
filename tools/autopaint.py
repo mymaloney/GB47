@@ -207,9 +207,9 @@ def autotile(rows, art_rows, changed, cfg, learned=None):
 
 
 def scripted_cells(m):
-    """Cells with an NPC or a switch cell: their look is painted by hand
-    (the dog, the stairs that appear), so auto-paint leaves them alone."""
-    return [(d["x"], d["y"]) for key in ("npcs", "switches") for d in m.get(key, [])]
+    """Switch cells: their look is painted by hand (the stairs that
+    appear), so auto-paint leaves them alone."""
+    return [(d["x"], d["y"]) for d in m.get("switches", [])]
 
 
 def keep_art(new_rows, old_rows, cells):

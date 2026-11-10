@@ -29,6 +29,10 @@ from png import read_png, write_png
 ROOT = Path(__file__).resolve().parent.parent
 TILESET_DIR = ROOT / "tilesets"
 DEFAULT = TILESET_DIR / "dungeon.json"
+# Character looks: same format, one row per look of LOOK_FRAMES sprites,
+# plus "looks" (their names, one per row) and "frames".
+CHARACTERS = TILESET_DIR / "characters.json"
+LOOK_FRAMES = 6     # up right down left subdued body
 
 # Variants, in the order their VRAM slots follow the base tile.
 BASE, SEEN, WATCH, AIM, AIM_SEEN = range(5)
@@ -201,3 +205,49 @@ def add_row(path=DEFAULT):
     _, img, w, h, px = _image(path)
     px += [[(0, 0, 0, 0)] * w for _ in range(8)]
     write_png(img, w, h + 8, px)
+
+
+# ------------------------------------------------------ character looks
+
+def load_looks(path=CHARACTERS):
+    """The looks sheet: load() plus "looks" (names) and, per look, its
+    LOOK_FRAMES tiles of 64 shades ("frames_of": [[tile, ...], ...])."""
+    cfg = load(path)
+    if cfg["columns"] != LOOK_FRAMES:
+        raise ValueError(f"{path}: the image must be {LOOK_FRAMES} tiles wide")
+    looks = cfg.get("looks", [])
+    if len(cfg["tiles"]) < len(looks) * LOOK_FRAMES:
+        raise ValueError(f"{path}: {len(looks)} looks but the image has "
+                         f"{len(cfg['tiles']) // LOOK_FRAMES} rows")
+    cfg["frames_of"] = [cfg["tiles"][i * LOOK_FRAMES:(i + 1) * LOOK_FRAMES]
+                        for i in range(len(looks))]
+    return cfg
+
+
+def add_look(name, copy_from=None, path=CHARACTERS):
+    """Add a look at the bottom (a copy of look number copy_from, or
+    blank). Returns its index."""
+    path = Path(path)
+    cfg, img, w, h, px = _image(path)
+    looks = cfg.setdefault("looks", [])
+    if name in looks:
+        raise ValueError(f"there is already a look called {name}")
+    row = len(looks)
+    while len(px) < (row + 1) * 8:
+        px.append([(0, 0, 0, 0)] * w)
+    for y in range(8):
+        px[row * 8 + y] = (list(px[copy_from * 8 + y]) if copy_from is not None
+                           else [(0, 0, 0, 0)] * w)
+    write_png(img, w, len(px), px)
+    looks.append(name)
+    path.write_text(json.dumps(cfg, indent=2) + "\n")
+    return row
+
+
+def rename_look(index, name, path=CHARACTERS):
+    path = Path(path)
+    cfg = json.loads(path.read_text())
+    if name in cfg["looks"] and cfg["looks"].index(name) != index:
+        raise ValueError(f"there is already a look called {name}")
+    cfg["looks"][index] = name
+    path.write_text(json.dumps(cfg, indent=2) + "\n")

@@ -31,22 +31,25 @@ JSON format, one object per level:
                                            digits per cell = tileset tile
                                            (tilesets/), ".." = built-in
                                            graphic for the cell's kind
-        "guards": [{
+        "guards": [{                       the map's characters: guards,
+                                           dogs, ... (at most 4)
           "facing":   "right",             up/right/down/left
           "route":    [[1, 5], [18, 5]],   patrol loop, starts at the first
-                                           point; one point = sentry
+                                           point; one point = stands still
           "uniform":  "none",              none/guard/officer (from body)
-          "attitude": null                 or e.g. "HBE": hostile/enforcer/
-                                           blind to own clothes, GUARD,
-                                           OFFICER; null = enforcer to all
-        }],
-        "npcs": [{                         optional: things to talk to (B)
-          "x": 11, "y": 5,
-          "verb": "PET",                   HUD prompt: B:PET (max 8 chars)
-          "blocks": "move",                move: nobody walks through it;
-                                           none: walk over; all: also
-                                           blocks sight and throws
-          "script": [ ... ]                what talking does: see below
+          "attitude": null,                or e.g. "HBE": hostile/enforcer/
+                                           blind/ignores (I) to own clothes,
+                                           GUARD, OFFICER; null = enforcer
+                                           to all; "III" = no cone at all
+          "look":     "guard",             optional: which sprites draw it
+                                           (a name in tilesets/
+                                           characters.json); default guard,
+                                           or officer in an officer uniform
+          "takedown": true,                optional: false = can't be taken
+                                           down (always so if it talks)
+          "verb":     "PET",               optional: talking to it with B,
+          "script":   [ ... ]              HUD prompt B:PET (max 8 chars),
+                                           and what it does: see below
         }],
         "switches": [{                     optional: cells that change when
           "x": 16, "y": 13,                a flag is set
@@ -107,10 +110,10 @@ ITEMS = ["stone", "bottle"]
 TRANSITIONS = ["cut", "fade", "wipe", "curtain", "iris", "dissolve", "diagonal",
                "blinds", "interlace"]
 DEFAULT_TRANSITION = "fade"
-MAX_NPCS, MAX_SWITCHES, MAX_FLAGS = 4, 8, 8
+MAX_SWITCHES, MAX_FLAGS = 8, 8
 VERB_MAX = 8
 TEXT_COLS, TEXT_ROWS = 18, 3          # the message box (src/main.c)
-NPC_BLOCKS = {"move": "BLOCK_PLAYER | BLOCK_GUARD", "none": "0", "all": "BLOCK_ALL"}
+ATTITUDES = "HEBI"                    # hostile, enforcer, blind, ignores
 # script ops, as in src/game.h
 OP_END, OP_SAY, OP_SET, OP_CLEAR, OP_IF, OP_JUMP = range(6)
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
@@ -124,6 +127,7 @@ def art_slots_available():
 
 
 _tileset = None
+_looks = None
 
 
 def tileset():
@@ -131,6 +135,40 @@ def tileset():
     if _tileset is None:
         _tileset = ts.load()
     return _tileset
+
+
+def looks():
+    """The character looks sheet (tilesets/characters.json)."""
+    global _looks
+    if _looks is None:
+        _looks = ts.load_looks()
+    return _looks
+
+
+def forget_tilesets():
+    """Re-read the tileset and looks next time (after the editor changed
+    them)."""
+    global _tileset, _looks
+    _tileset = _looks = None
+
+
+def sprite_slots_available():
+    """Sprite tiles left for character looks: 256 minus the built-in ones."""
+    m = re.search(r"#define SPRITE_TILE_COUNT (\d+)", (ROOT / "src" / "tiles.h").read_text())
+    return 256 - int(m.group(1))
+
+
+def guard_look(g):
+    """A character's look name: its own, or by its uniform."""
+    if g.get("look"):
+        return g["look"]
+    names = looks()["looks"]
+    want = "officer" if g.get("uniform") == "officer" else "guard"
+    return want if want in names else names[0]
+
+
+def can_talk(g):
+    return bool(g.get("verb")) or bool(g.get("script"))
 
 # Map characters: (name, blocks player+bodies, guards, sight, throws).
 # Must match the table in src/game.h.
@@ -156,11 +194,18 @@ CELL_OF = {".": "FLOOR", "P": "FLOOR", "#": "WALL", "E": "EXIT", "D": "DOOR",
 
 
 def upgrade(lv):
-    """Old one-map levels had map/guards at the top level."""
+    """Old one-map levels had map/guards at the top level; old maps had
+    "npcs" next to their guards (now characters like any other)."""
     if "maps" not in lv:
         lv = dict(lv)
         lv["maps"] = [{"map": lv.pop("map", []), "guards": lv.pop("guards", [])}]
         lv.setdefault("links", [])
+    for m in lv["maps"]:
+        for n in m.pop("npcs", []):
+            m.setdefault("guards", []).append({
+                "facing": "down", "route": [[n.get("x"), n.get("y")]], "uniform": "none",
+                "attitude": "I" * len(UNIFORMS), "takedown": False,
+                "verb": n.get("verb", "TALK"), "script": n.get("script", [])})
     lv.setdefault("links", [])
     lv.setdefault("items", {})
     lv.setdefault("transition", DEFAULT_TRANSITION)
@@ -204,10 +249,10 @@ def validate_map(m):
 
     guards = m.get("guards", [])
     if len(guards) > MAX_GUARDS:
-        errs.append(f"At most {MAX_GUARDS} guards (has {len(guards)}).")
+        errs.append(f"At most {MAX_GUARDS} characters (has {len(guards)}).")
     seen_starts = {}
     for i, g in enumerate(guards):
-        tag = f"Guard {i + 1}"
+        tag = f"Character {i + 1}"
         route = g.get("route", [])
         if not 1 <= len(route) <= MAX_WAYPOINTS:
             errs.append(f"{tag}: route needs 1-{MAX_WAYPOINTS} points (has {len(route)}).")
@@ -217,8 +262,20 @@ def validate_map(m):
         if g.get("uniform", "none") not in UNIFORMS:
             errs.append(f"{tag}: uniform must be one of {', '.join(UNIFORMS)}.")
         att = g.get("attitude")
-        if att is not None and (len(att) != len(UNIFORMS) or set(att) - set("HEB")):
-            errs.append(f"{tag}: attitude must be {len(UNIFORMS)} letters of H, E, B.")
+        if att is not None and (len(att) != len(UNIFORMS) or set(att) - set(ATTITUDES)):
+            errs.append(f"{tag}: attitude must be {len(UNIFORMS)} letters of "
+                        f"{', '.join(ATTITUDES)}.")
+        if g.get("look") is not None and g["look"] not in looks()["looks"]:
+            errs.append(f"{tag}: there is no look called \"{g['look']}\" "
+                        f"(tilesets/characters.json has {', '.join(looks()['looks'])}).")
+        if not isinstance(g.get("takedown", True), bool):
+            errs.append(f"{tag}: takedown must be true or false.")
+        if can_talk(g):
+            verb = g.get("verb", "")
+            if not isinstance(verb, str) or not 1 <= len(verb) <= VERB_MAX or set(verb) - FONT_CHARS:
+                errs.append(f"{tag}: the prompt word needs 1-{VERB_MAX} characters of "
+                            "A-Z, 0-9 and : ! - . > ? (e.g. TALK).")
+            errs += validate_script(g.get("script", []), tag)
         for w, (x, y) in enumerate(route):
             what = guard_blocked(x, y)
             if what:
@@ -226,7 +283,7 @@ def validate_map(m):
                             "which guards can't stand on.")
         start = tuple(route[0])
         if start in seen_starts:
-            errs.append(f"{tag} starts on the same tile as guard {seen_starts[start] + 1}.")
+            errs.append(f"{tag} starts on the same tile as character {seen_starts[start] + 1}.")
         seen_starts[start] = i
         if starts and start == starts[0]:
             errs.append(f"{tag} starts on the player.")
@@ -315,7 +372,7 @@ def script_steps(script):
 
 
 def level_scripts(lv):
-    return [n.get("script", []) for m in lv["maps"] for n in m.get("npcs", [])]
+    return [g.get("script", []) for m in lv["maps"] for g in m.get("guards", []) if can_talk(g)]
 
 
 def level_flags(lv):
@@ -420,14 +477,13 @@ def route_cells(g):
 
 
 def validate_scripting(m, set_flags):
-    """Problems with a map's NPCs and switch cells. set_flags: the flags
-    some script in the level sets."""
+    """Problems with a map's switch cells. set_flags: the flags some
+    script in the level sets. (Characters' scripts are checked with the
+    rest of the character, in validate_map.)"""
     errs = []
     rows = m["map"]
     mw, mh = map_size(m)
-    npcs, switches = m.get("npcs", []), m.get("switches", [])
-    if len(npcs) > MAX_NPCS:
-        errs.append(f"At most {MAX_NPCS} NPCs in a map (has {len(npcs)}).")
+    switches = m.get("switches", [])
     if len(switches) > MAX_SWITCHES:
         errs.append(f"At most {MAX_SWITCHES} switch cells in a map (has {len(switches)}).")
     routes = set()
@@ -449,23 +505,6 @@ def validate_scripting(m, set_flags):
         taken[(x, y)] = what[0].lower() + what[1:]
         return x, y
 
-    for i, n in enumerate(npcs[:MAX_NPCS]):
-        tag = f"NPC {i + 1}"
-        at = place(tag, n)
-        blocks = n.get("blocks", "move")
-        if blocks not in NPC_BLOCKS:
-            errs.append(f"{tag}: blocks must be one of {', '.join(NPC_BLOCKS)}.")
-        verb = n.get("verb", "")
-        if not isinstance(verb, str) or not 1 <= len(verb) <= VERB_MAX or set(verb) - FONT_CHARS:
-            errs.append(f"{tag}: the prompt word needs 1-{VERB_MAX} characters of "
-                        "A-Z, 0-9 and : ! - . > ? (e.g. TALK).")
-        errs += validate_script(n.get("script", []), tag)
-        if at:
-            x, y = at
-            if rows[y][x] == "#":
-                errs.append(f"{tag} at ({x},{y}) is inside a wall.")
-            if blocks in ("move", "all") and (x, y) in routes:
-                errs.append(f"{tag} at ({x},{y}) stands on a guard's route and would block it.")
     for i, sw in enumerate(switches[:MAX_SWITCHES]):
         tag = f"Switch cell {i + 1}"
         at = place(tag, sw)
@@ -474,7 +513,7 @@ def validate_scripting(m, set_flags):
             errs.append(f"{tag}: needs the name of the flag that changes it.")
         elif flag not in set_flags:
             errs.append(f"{tag}: nothing sets the flag \"{flag}\", so it would never change. "
-                        "Give an NPC a \"set\" step for it.")
+                        "Give a character a \"set\" step for it.")
         if on not in TILES or on == "P":
             errs.append(f"{tag}: what it turns into must be one of "
                         f"{' '.join(c for c in TILES if c != 'P')}.")
@@ -636,7 +675,7 @@ def validate_level(lv):
     if map_errs:
         return errs
 
-    # NPCs, scripts and switch cells (the maps themselves are sound by now)
+    # scripts and switch cells (the maps themselves are sound by now)
     set_flags = {st["set"] for sc in level_scripts(lv) for st in script_steps(sc)
                  if isinstance(st.get("set"), str)}
     script_errs = []
@@ -672,21 +711,25 @@ def validate_all(levels):
         errs.append("Too many maps in total (max 250).")
     for n, lv in enumerate(levels):
         errs += [f"Level {n + 1} ({lv.get('name', '?')}): {e}" for e in validate_level(lv)]
+    need = len(looks()["looks"]) * ts.LOOK_FRAMES
+    if need > sprite_slots_available():
+        errs.append(f"The character looks need {need} sprite tiles; the Game Boy has room "
+                    f"for {sprite_slots_available()} ({sprite_slots_available() // ts.LOOK_FRAMES} looks).")
     if not errs and len(compile_all(levels)[1]) > 255:
         errs.append("Too many different messages in total (max 255).")
     return errs
 
 
 def compile_all(levels):
-    """Every NPC's script as bytes, and the text they say:
-    ({(map index in the table, npc index): bytes}, [messages])."""
+    """Every character's script as bytes, and the text they say:
+    ({(map index in the table, character index): bytes}, [messages])."""
     scripts, texts, base = {}, [], 0
     for lv in map(upgrade, levels):
         flags = level_flags(lv)
         for k, m in enumerate(lv["maps"]):
-            for i, n in enumerate(m.get("npcs", [])):
-                if n.get("script"):
-                    scripts[(base + k, i)] = compile_script(n["script"], flags, texts)
+            for i, g in enumerate(m.get("guards", [])):
+                if can_talk(g):
+                    scripts[(base + k, i)] = compile_script(g.get("script", []), flags, texts)
         base += len(lv["maps"])
     return scripts, texts
 
@@ -729,7 +772,7 @@ def generate_c(levels):
     out += [f"extern const char level_map{k}[];" for k in range(count)]
     scripts, texts = compile_all(levels)
     if scripts:
-        out += ["", "/* NPC scripts (OP_* in game.h). */"]
+        out += ["", "/* Characters' scripts (OP_* in game.h). */"]
         out += [f"static const uint8_t script{k}_{i}[] = {{ {', '.join(map(str, code))} }};"
                 for (k, i), code in scripts.items()]
     out += ["", "const LevelDef levels[LEVEL_COUNT] = {"]
@@ -749,11 +792,16 @@ def generate_c(levels):
             guards = m.get("guards", [])
             out.append(f"        {len(guards)},")
             out.append("        {")
-            for g in guards:
+            for i, g in enumerate(guards):
                 pts = ", ".join(f"{{{x}, {y}}}" for x, y in g["route"])
                 att = c_string(g["attitude"]) if g.get("attitude") else "0"
+                talk = can_talk(g)
+                flags_c = "CHAR_NO_TAKEDOWN" if talk or g.get("takedown") is False else "0"
+                verb = c_string(g["verb"]) if talk else "0"
+                script = f"script{base + k}_{i}" if talk else "0"
                 out.append(f"            {{ DIR_{g['facing'].upper()}, {len(g['route'])}, "
-                           f"{{ {pts} }}, DISGUISE_{g.get('uniform', 'none').upper()}, {att} }},")
+                           f"{{ {pts} }}, DISGUISE_{g.get('uniform', 'none').upper()}, {att}, "
+                           f"{flags_c}, LOOK_{guard_look(g).upper()}, {verb}, {script} }},")
             out.append("        },")
             items = lv.get("items", {}) if k == 0 else {}
             out.append("        { " + ", ".join(str(items.get(i, 0)) for i in ITEMS) + " },")
@@ -765,16 +813,7 @@ def generate_c(levels):
             out.append(f"        TRANS_{lv['transition'].upper()},")
             flags = level_flags(lv)
             local = sorted(art_usage(m))          # as generate_art numbers them
-            npcs, switches = m.get("npcs", []), m.get("switches", [])
-            out.append(f"        {len(npcs)},")
-            out.append("        {")
-            for i, n in enumerate(npcs):
-                script = f"script{base + k}_{i}" if (base + k, i) in scripts else "0"
-                out.append(f"            {{ {n['x']}, {n['y']}, {NPC_BLOCKS[n.get('blocks', 'move')]}, "
-                           f"{c_string(n['verb'])}, {script} }},")
-            if not npcs:
-                out.append("            { 0, 0, 0, 0, 0 },")
-            out.append("        },")
+            switches = m.get("switches", [])
             out.append(f"        {len(switches)},")
             out.append("        {")
             for sw in switches:
@@ -789,13 +828,27 @@ def generate_c(levels):
         base += len(lv["maps"])
     out.append("};")
     out.append("")
-    out.append("/* What NPCs say (OP_SAY n shows level_text[n]); lines end in \\n. */")
+    out.append("/* What characters say (OP_SAY n shows level_text[n]); lines end in \\n. */")
     out.append("const char *const level_text[] = {")
     out += [f"    {c_string(t)}," for t in texts] or ["    0,"]
     out.append("};")
     out.append("")
     out += generate_art(levels)[0]
+    out += generate_looks()
     return "\n".join(out)
+
+
+def generate_looks():
+    """Character looks (sprites, 16 bytes per tile): LOOK_FRAMES tiles per
+    look, loaded into sprite VRAM after the built-in ones."""
+    out = ["/* Character looks, from tilesets/characters.png: up right down left",
+           " * subdued body. */", "const uint8_t look_tile_data[] = {"]
+    for name, frames in zip(looks()["looks"], looks()["frames_of"]):
+        out.append(f"    /* {name} */")
+        for px in frames:
+            out.append("    " + ", ".join(f"0x{b:02X}" for b in ts.to_2bpp(px)) + ",")
+    out += ["};", ""]
+    return out
 
 
 def generate_art_data(levels):
@@ -869,7 +922,13 @@ def generate_h(levels):
         "/* 16 bytes per tile; in ROM bank BANK_ART (far.h): read with far_read */",
         "extern const uint8_t art_tile_data[];",
         "extern const MapArt *const level_art[LEVEL_COUNT];",
-        "extern const char *const level_text[];        /* what NPCs say */",
+        "extern const char *const level_text[];        /* what characters say */",
+        "",
+        "/* Character looks (GuardDef.look), from tilesets/characters.json. */",
+        f"#define LOOK_COUNT {len(looks()['looks'])}",
+        f"#define LOOK_FRAMES {ts.LOOK_FRAMES}   /* up right down left subdued body */",
+    ] + [f"#define LOOK_{n.upper()} {i}" for i, n in enumerate(looks()["looks"])] + [
+        "extern const uint8_t look_tile_data[];         /* LOOK_COUNT * LOOK_FRAMES tiles */",
         "",
         "#endif",
         "",
@@ -897,11 +956,17 @@ def dumps(levels):
                 ml.append("        ],")
             gl = []
             for g in m.get("guards", []):
-                gl.append("          " + json.dumps({
-                    "facing": g["facing"], "route": g["route"],
-                    "uniform": g.get("uniform", "none"), "attitude": g.get("attitude")}))
+                d = {"facing": g["facing"], "route": g["route"],
+                     "uniform": g.get("uniform", "none"), "attitude": g.get("attitude")}
+                if g.get("look"):
+                    d["look"] = g["look"]
+                if g.get("takedown") is False and not can_talk(g):
+                    d["takedown"] = False
+                if can_talk(g):
+                    d["verb"], d["script"] = g.get("verb", ""), g.get("script", [])
+                gl.append("          " + json.dumps(d))
             ml.append('        "guards": [' + ("\n" + ",\n".join(gl) + "\n        ]" if gl else "]"))
-            for key in ("npcs", "switches"):       # only where there are any
+            for key in ("switches",):              # only where there are any
                 if m.get(key):
                     ml[-1] += ","
                     ml.append(f'        "{key}": [\n' +

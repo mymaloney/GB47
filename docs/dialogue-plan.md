@@ -3,6 +3,13 @@
 Status: **done.** Kept as the record of what was asked for and why it was
 built this way; `CLAUDE.md` and `README.md` describe how it works now.
 
+Since then NPCs and guards have been merged into one kind of character
+(`GuardDef`): any character can talk, patrol, see you or not (the
+"ignores" attitude), and be taken down or not, and each is drawn with a
+sprite look from `tilesets/characters.png`. The dog is a character now,
+not painted art, and `"npcs"` in old `levels.json` files is read as
+characters.
+
 What was decided along the way:
 
 - **Banking** (step 1): a simpler variant of approach A. All code stays

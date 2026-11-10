@@ -14,12 +14,11 @@ const PALETTE = ["#e0f8d0", "#88c070", "#346856", "#081820"];
 const GUARD_COLORS = ["#e4572e", "#2e86ab", "#c23bd4", "#f2b705"];
 const TOOL_HINTS = {
   start: "Click to place the player's start.",
-  guard: "Click an empty tile to add a guard (max 4), or click a guard to select it. Drag to move it.",
-  route: "Click to add waypoints to the selected guard (corners are added for you). Drag a point to move it; right-click to remove it.",
-  npc: "Click a tile to add something to talk to (paint its look with the tileset), or click one to select it. Drag to move it.",
+  guard: "Click an empty tile to add a character (max 4): a guard, a dog, anyone. Click one to select it; drag to move it. Its panel on the right sets its look, how it sees you, and what talking to it does.",
+  route: "Click to add waypoints to the selected character (corners are added for you). Drag a point to move it; right-click to remove it.",
   switch: "Click a tile to make it a switch cell: it changes (e.g. into the exit) when a script sets its flag. Click one to select it; drag to move it.",
 };
-const NPC_COLOR = "#00a6a6";
+const TALK_COLOR = "#00a6a6";
 const SWITCH_COLOR = "#f2b705";
 
 let A = null;                    // assets from /api/assets
@@ -30,8 +29,7 @@ let dirty = false;
 let mode = "edit";
 let tool = "tile:#";
 let selGuard = -1;
-let selNpc = -1;                 // selected NPC / switch cell of the map being edited
-let selSwitch = -1;
+let selSwitch = -1;              // selected switch cell of the map being edited
 let undoStack = [];
 let redoStack = [];
 let preview = null;              // {key, view} for the current level
@@ -126,6 +124,22 @@ function updateTaughtInfo() {
 const tileImg = (t) => t < 0 ? artImgs[Math.floor((-t - 1) / 5)][(-t - 1) % 5] : bkgTiles[t];
 
 function drawBkg(t, tx, ty) { ctx.drawImage(tileImg(t), tx * TILE, ty * TILE, TILE, TILE); }
+/* Sprite tiles as in the Game Boy's sprite memory: the built-in ones, then
+ * each character look's frames (up right down left subdued body). */
+function buildSprites() {
+  sprTiles = [...A.spr, ...A.looks.frames.flat()].map((px) => makeTile(px, true));
+}
+
+/* A character's look: its own, or by its uniform (gen_levels.guard_look). */
+function lookName(g) {
+  const names = A.looks.names;
+  if (g.look && names.includes(g.look)) return g.look;
+  const want = g.uniform === "officer" ? "officer" : "guard";
+  return names.includes(want) ? want : names[0];
+}
+const lookIndex = (g) => A.looks.names.indexOf(lookName(g));
+const talks = (g) => !!(g.verb || (g.script && g.script.length));
+
 function drawSpr(t, tx, ty) { ctx.drawImage(sprTiles[t], tx * TILE, ty * TILE, TILE, TILE); }
 /* draw at a pixel offset (playtest camera), in Game Boy pixels */
 function drawBkgPx(t, gx, gy) {
@@ -181,8 +195,8 @@ function hudRows(lv, idx, v, ui) {
   else if (v.status === G.STATUS_ALARM) msg = "BODY SEEN START:UNDO";
   else if (v.status === G.STATUS_WON) msg = "ESCAPED!   A:NEXT";
   else if (ui.mode === "aim") msg = "A:THROW B:BACK";
-  else if (v.prompt.takedown) msg = "B:TAKEDOWN";
   else if (v.prompt.talk) msg = "B:" + v.prompt.talk;
+  else if (v.prompt.takedown) msg = "B:TAKEDOWN";
   else if (v.prompt.uniform) msg = "B:TAKE UNIFORM";
   else if (v.prompt.body_adjacent) msg = "HOLD B:DRAG";
   else if (ui.looking) msg = "LOOKING AROUND";
@@ -239,7 +253,7 @@ function buildPalette() {
 }
 
 function guardBase(g) {
-  return g.uniform === "officer" ? A.T.SPR_OFFICER_UP : A.T.SPR_GUARD_UP;
+  return A.looks.first_tile + lookIndex(g) * A.looks.frame_count;
 }
 
 function renderEdit() {
@@ -268,6 +282,7 @@ function renderEdit() {
     ctx.lineWidth = 3;
     ctx.strokeRect(x * TILE + 1.5, y * TILE + 1.5, TILE - 3, TILE - 3);
   }
+  drawTalkLabels(lv);
 
   drawScripted(lv);
   drawLinkMarkers();
@@ -276,10 +291,27 @@ function renderEdit() {
   updateArtBudget(lv);
 }
 
-/* NPCs and switch cells. An NPC's look is whatever is painted on its cell,
- * so it gets an outline and its prompt word. A switch cell shows what it
- * turns into, faintly, inside a dashed outline: stairs that aren't there
- * yet are still visible to the designer. */
+/* Characters you can talk to get their prompt word above them. */
+function drawTalkLabels(lv) {
+  ctx.save();
+  ctx.font = `bold ${Math.max(8, TILE * 0.4)}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  lv.guards.forEach((g) => {
+    if (!talks(g)) return;
+    const [x, y] = g.route[0], verb = g.verb || "?";
+    const w = ctx.measureText(verb).width + 4, h = Math.max(9, TILE * 0.45);
+    ctx.fillStyle = TALK_COLOR;
+    ctx.fillRect(x * TILE + TILE / 2 - w / 2, y * TILE - h, w, h);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(verb, x * TILE + TILE / 2, y * TILE - h / 2 + 0.5);
+  });
+  ctx.restore();
+}
+
+/* Switch cells show what they turn into, faintly, inside a dashed
+ * outline: stairs that aren't there yet are still visible to the
+ * designer. */
 function drawScripted(lv) {
   ctx.save();
   ctx.font = `bold ${Math.max(8, TILE * 0.4)}px ui-monospace, monospace`;
@@ -298,17 +330,6 @@ function drawScripted(lv) {
     ctx.setLineDash([4, 3]);
     ctx.strokeRect(sw.x * TILE + 1.5, sw.y * TILE + 1.5, TILE - 3, TILE - 3);
     ctx.setLineDash([]);
-  });
-  (lv.npcs || []).forEach((n, i) => {
-    ctx.strokeStyle = NPC_COLOR;
-    ctx.lineWidth = i === selNpc ? 3 : 2;
-    ctx.strokeRect(n.x * TILE + 1.5, n.y * TILE + 1.5, TILE - 3, TILE - 3);
-    const w = ctx.measureText(n.verb).width + 4, h = Math.max(9, TILE * 0.45);
-    ctx.fillStyle = NPC_COLOR;
-    ctx.fillRect(n.x * TILE + TILE / 2 - w / 2, n.y * TILE - h, w, h);
-    ctx.fillStyle = "#fff";
-    ctx.textBaseline = "middle";
-    ctx.fillText(n.verb, n.x * TILE + TILE / 2, n.y * TILE - h / 2 + 0.5);
   });
   ctx.restore();
 }
@@ -600,8 +621,8 @@ function applyTool(x, y, e, first) {
       const i = guardAt(x, y);
       if (i >= 0) { selGuard = i; stroke.drag = { guard: i, point: 0 }; renderGuards(); return false; }
       const here = A.tiles.find((d) => d.char === lv.map[y][x]);
-      if (here && here.blocks.guards) { hint(`Guards can't stand on a ${here.name}.`); return false; }
-      if (lv.guards.length >= A.max_guards) { hint(`At most ${A.max_guards} guards per level.`); return false; }
+      if (here && here.blocks.guards) { hint(`Characters can't stand on a ${here.name}.`); return false; }
+      if (lv.guards.length >= A.max_guards) { hint(`At most ${A.max_guards} characters in a map.`); return false; }
       lv.guards.push({ facing: "down", route: [[x, y]], uniform: "none", attitude: null });
       selGuard = lv.guards.length - 1;
       stroke.drag = { guard: selGuard, point: 0 };
@@ -610,31 +631,24 @@ function applyTool(x, y, e, first) {
     return moveDragged(x, y);
   }
 
-  if (tool === "npc" || tool === "switch") {
-    const isNpc = tool === "npc";
-    const key = isNpc ? "npcs" : "switches";
+  if (tool === "switch") {
+    const key = "switches";
     if (!first) return moveDragged(x, y);
     const list = lv[key] || [];
     const i = list.findIndex((d) => d.x === x && d.y === y);
     if (i >= 0) {
-      if (isNpc) selNpc = i; else selSwitch = i;
+      selSwitch = i;
       stroke.drag = { thing: key, index: i };
       renderScripting();
       renderEdit();
       return false;
     }
-    const max = isNpc ? A.max_npcs : A.max_switches;
-    if (list.length >= max) { hint(`At most ${max} ${isNpc ? "NPCs" : "switch cells"} in a map.`); return false; }
-    if (isNpc) {
-      list.push({ x, y, verb: "TALK", blocks: "move", script: [{ say: "Hello." }] });
-      selNpc = list.length - 1;
-    } else {
-      // stairs that appear are the usual case: an exit, with the tileset's
-      // exit tile if this map is painted
-      const exitArt = lv.art && A.tileset.autopaint ? A.tileset.autopaint.exit : null;
-      list.push({ x, y, flag: levelFlags()[0] || "open", on: "E", on_art: exitArt ?? null });
-      selSwitch = list.length - 1;
-    }
+    if (list.length >= A.max_switches) { hint(`At most ${A.max_switches} switch cells in a map.`); return false; }
+    // stairs that appear are the usual case: an exit, with the tileset's
+    // exit tile if this map is painted
+    const exitArt = lv.art && A.tileset.autopaint ? A.tileset.autopaint.exit : null;
+    list.push({ x, y, flag: levelFlags()[0] || "open", on: "E", on_art: exitArt ?? null });
+    selSwitch = list.length - 1;
     lv[key] = list;
     stroke.drag = { thing: key, index: list.length - 1 };
     return true;
@@ -642,7 +656,7 @@ function applyTool(x, y, e, first) {
 
   if (tool === "route") {
     const g = lv.guards[selGuard];
-    if (!g) { if (first) hint("Select a guard first (Guard tool, or click a guard chip)."); return false; }
+    if (!g) { if (first) hint("Select a character first (Character tool, or click a character chip)."); return false; }
     if (!first) return moveDragged(x, y);
     const w = waypointAt(g, x, y);
     if (e.button === 2) {
@@ -657,7 +671,7 @@ function applyTool(x, y, e, first) {
 
 function moveDragged(x, y) {
   if (!stroke.drag) return false;
-  if (stroke.drag.thing) {                 // an NPC or a switch cell
+  if (stroke.drag.thing) {                 // a switch cell
     const d = cmap()[stroke.drag.thing][stroke.drag.index];
     if (d.x === x && d.y === y) return false;
     d.x = x; d.y = y;
@@ -793,12 +807,14 @@ function renderGuards() {
   lv.guards.forEach((g, i) => {
     const b = document.createElement("button");
     b.className = "guard-chip" + (i === selGuard ? " active" : "");
-    b.innerHTML = `<span class="dot" style="background:${GUARD_COLORS[i]}"></span>Guard ${i + 1}`;
-    b.title = g.route.length === 1 ? "Sentry" : `Patrol, ${g.route.length} points`;
+    b.innerHTML = `<span class="dot" style="background:${GUARD_COLORS[i]}"></span>${i + 1} ${lookName(g)}` +
+      (talks(g) ? ` <span class="muted">B:${g.verb || "?"}</span>` : "");
+    b.title = (g.route.length === 1 ? "Stands still" : `Patrols, ${g.route.length} points`) +
+      (g.attitude === "III" ? "; never sees you" : "");
     b.addEventListener("click", () => { selGuard = i; renderAll(); });
     list.appendChild(b);
   });
-  if (!lv.guards.length) list.innerHTML = '<span class="muted">None yet: use the Guard tool (5).</span>';
+  if (!lv.guards.length) list.innerHTML = '<span class="muted">None yet: use the Character tool (5).</span>';
   const g0 = lv.guards[selGuard];
   if (g0) {
     const [fx, fy] = g0.route[0], [lx, ly] = g0.route[g0.route.length - 1];
@@ -808,16 +824,47 @@ function renderGuards() {
   const g = lv.guards[selGuard];
   $("guard-props").hidden = !g;
   if (!g) return;
+  // look: the name, and the four facings as the Game Boy draws them
+  const lsel = $("g-look");
+  lsel.innerHTML = "";
+  A.looks.names.forEach((n) => lsel.add(new Option(n + (g.look ? "" : n === lookName(g) ? " (from uniform)" : ""), n)));
+  lsel.value = lookName(g);
+  const frames = $("g-look-frames");
+  frames.innerHTML = "";
+  for (let f = 0; f < 4; f++) {
+    const c = document.createElement("canvas");
+    c.width = c.height = 8;
+    const cg = c.getContext("2d");
+    cg.fillStyle = PALETTE[0];
+    cg.fillRect(0, 0, 8, 8);
+    cg.drawImage(sprTiles[guardBase(g) + f], 0, 0);
+    c.title = A.dirs[f];
+    frames.appendChild(c);
+  }
   $("g-facing").value = g.facing;
   $("g-uniform").value = g.uniform || "none";
-  $("g-custom").checked = !!g.attitude;
+  $("g-sees").value = !g.attitude ? "normal" : g.attitude === "III" ? "never" : "custom";
+  const talking = talks(g);
+  $("g-takedown").checked = !talking && g.takedown !== false;
+  $("g-takedown").disabled = talking;
+  $("g-takedown").parentElement.title = talking
+    ? "B talks to it instead, so it can't be taken down" : "";
+  $("g-talks").checked = talking;
+  $("g-talk").hidden = !talking;
+  if (talking && !scriptTyping) {
+    if (document.activeElement !== $("n-verb")) $("n-verb").value = g.verb || "";
+    g.script = g.script || [];
+    $("n-script").replaceChildren(scriptEditor(g.script));
+  }
   const att = $("g-attitudes");
   att.innerHTML = "";
+  att.hidden = $("g-sees").value !== "custom";
   ["own clothes", "GUARD", "OFFICER"].forEach((label, k) => {
     const s = document.createElement("span");
     s.textContent = "To " + label;
     const sel = document.createElement("select");
-    [["H", "Hostile (big cone)"], ["E", "Enforcer (normal)"], ["B", "Blind (watches bodies)"]]
+    [["H", "Hostile (big cone)"], ["E", "Enforcer (normal)"], ["B", "Blind (watches bodies)"],
+     ["I", "Ignores (no cone at all)"]]
       .forEach(([v, t]) => sel.add(new Option(t, v)));
     sel.value = g.attitude ? g.attitude[k] : "E";
     sel.disabled = !g.attitude;
@@ -846,10 +893,10 @@ function renderGuards() {
   });
 }
 
-// ---- NPCs, their scripts, and switch cells
+// ---- characters' scripts, and switch cells
 
 /* Cells whose art auto-paint must leave alone (painted by hand). */
-const scriptedCells = (m) => [...(m.npcs || []), ...(m.switches || [])].map((d) => [d.x, d.y]);
+const scriptedCells = (m) => (m.switches || []).map((d) => [d.x, d.y]);
 
 /* Every step of a script, including those inside "if" steps. */
 function* scriptSteps(script) {
@@ -863,7 +910,7 @@ function* scriptSteps(script) {
 function levelFlags() {
   const names = [];
   level().maps.forEach((m) => (m.switches || []).forEach((sw) => names.push(sw.flag)));
-  level().maps.forEach((m) => (m.npcs || []).forEach((n) => {
+  level().maps.forEach((m) => m.guards.filter(talks).forEach((n) => {
     for (const st of scriptSteps(n.script))
       for (const k of ["set", "clear", "if"]) if (k in st) names.push(st[k]);
   }));
@@ -956,8 +1003,7 @@ function scriptEditor(steps, depth = 0) {
 
 function renderScripting() {
   const m = cmap();
-  const npcs = m.npcs || [], switches = m.switches || [];
-  if (selNpc >= npcs.length) selNpc = -1;
+  const switches = m.switches || [];
   if (selSwitch >= switches.length) selSwitch = -1;
   $("flag-names").innerHTML = "";
   levelFlags().forEach((f) => $("flag-names").appendChild(new Option(f)));
@@ -974,22 +1020,11 @@ function renderScripting() {
     });
     if (!list.length) box.innerHTML = `<span class="muted">${none}</span>`;
   };
-  $("npc-count").textContent = `${npcs.length}/${A.max_npcs}`;
-  chips("npc-list", npcs, selNpc, (n) => `${n.verb} (${n.x},${n.y})`, (i) => { selNpc = i; },
-        "None yet: use the NPC tool (7).");
   $("sw-count").textContent = `${switches.length}/${A.max_switches}`;
   chips("sw-list", switches, selSwitch, (s) => `${s.flag} (${s.x},${s.y})`, (i) => { selSwitch = i; },
-        "None yet: use the Switch cell tool (8).");
+        "None yet: use the Switch cell tool (7).");
 
   if (scriptTyping) return;     // the lists above are enough while typing
-  const n = npcs[selNpc];
-  $("npc-props").hidden = !n;
-  if (n) {
-    if (document.activeElement !== $("n-verb")) $("n-verb").value = n.verb;
-    $("n-blocks").value = n.blocks || "move";
-    n.script = n.script || [];
-    $("n-script").replaceChildren(scriptEditor(n.script));
-  }
   const sw = switches[selSwitch];
   $("sw-props").hidden = !sw;
   if (sw) {
@@ -1000,14 +1035,13 @@ function renderScripting() {
   }
 }
 
-function deleteScripted(key) {
+function deleteSwitch() {
   const m = cmap();
-  const i = key === "npcs" ? selNpc : selSwitch;
-  if (!m[key] || i < 0) return;
+  if (!m.switches || selSwitch < 0) return;
   pushUndo();
-  m[key].splice(i, 1);
-  if (!m[key].length) delete m[key];
-  if (key === "npcs") selNpc = -1; else selSwitch = -1;
+  m.switches.splice(selSwitch, 1);
+  if (!m.switches.length) delete m.switches;
+  selSwitch = -1;
   changed();
 }
 
@@ -1015,7 +1049,7 @@ function selectLevel(i) {
   cur = i;
   curMap = 0;
   selGuard = -1;
-  selNpc = selSwitch = -1;
+  selSwitch = -1;
   preview = null;
   if (mode === "play") enterEdit();
   changed(false);
@@ -1056,7 +1090,7 @@ function renderMapTabs() {
     b.className = "tab" + (k === curMap ? " active" : "");
     b.textContent = `Map ${k + 1}`;
     b.title = `${mapW(m) / A.view_w}×${mapH(m) / A.view_h} screens` + (k === 0 ? "; the level starts here" : "");
-    b.addEventListener("click", () => { curMap = k; selGuard = selNpc = selSwitch = -1; preview = null; changed(false); });
+    b.addEventListener("click", () => { curMap = k; selGuard = selSwitch = -1; preview = null; changed(false); });
     box.appendChild(b);
   });
   const add = document.createElement("button");
@@ -1179,7 +1213,7 @@ const checkLevel = debounce(async () => {
 // ------------------------------------------------------------- solving
 
 const NEED_NAMES = { items: "items", takedown: "a takedown", drag: "moving a body", uniform: "a disguise",
-                     talk: "talking to an NPC" };
+                     talk: "talking to a character" };
 
 async function solve() {
   const out = $("solve-result");
@@ -1295,18 +1329,77 @@ function drawTileset() {
 
 // ---------------------------------------------------------- tile painter
 
-const TP = { index: 0, px: [], shade: 3, tool: "pencil", undo: [], redo: [], clip: null,
-             drawing: false, stroke: null };
+/* The painter edits a tileset tile, or a character look's 6 sprite
+ * frames (kind "look": frames holds them all, px is the one shown). */
+const TP = { kind: "tile", index: 0, px: [], shade: 3, tool: "pencil", undo: [], redo: [],
+             clip: null, drawing: false, stroke: null, look: 0, frame: 0, frames: null, orig: null };
+
+function tpShowLookParts(look) {
+  $("tile-frames").hidden = !look;
+  $("tile-prev3").nextElementSibling.textContent = look ? "On the floor" : "Tiled 3×3";
+  $("tile-save").textContent = look ? "Save look" : "Save tile";
+}
 
 function tpOpen(n) {
+  TP.kind = "tile";
   TP.index = n;
   TP.px = [...A.tileset.tiles[n][0]];
   TP.undo = [];
   TP.redo = [];
   $("tile-title").textContent = `Edit tile ${n}`;
   $("tile-status").textContent = "";
+  tpShowLookParts(false);
   tpRender();
   $("tile-dialog").showModal();
+}
+
+const FRAME_LABELS = ["Up", "Right", "Down", "Left", "Taken down", "Body"];
+
+/* Paint a character look: pick a frame from the strip, paint it; Save
+ * writes every changed frame to tilesets/characters.png. */
+function tpOpenLook(look) {
+  TP.kind = "look";
+  TP.look = look;
+  TP.frames = A.looks.frames[look].map((f) => [...f]);
+  TP.orig = A.looks.frames[look].map((f) => [...f]);
+  TP.frame = 2;                                    // facing down: the usual view
+  TP.px = TP.frames[TP.frame];
+  TP.undo = [];
+  TP.redo = [];
+  $("tile-title").textContent = `Edit look: ${A.looks.names[look]}`;
+  $("tile-status").textContent = "";
+  tpShowLookParts(true);
+  tpRender();
+  $("tile-dialog").showModal();
+}
+
+function tpPickFrame(f) {
+  TP.frames[TP.frame] = TP.px;
+  TP.frame = f;
+  TP.px = TP.frames[f];
+  TP.undo = [];
+  TP.redo = [];
+  tpRender();
+}
+
+async function newLook() {
+  const g = cmap().guards[selGuard];
+  const from = g ? lookIndex(g) : 0;
+  const name = prompt(`Name for the new look (it starts as a copy of "${A.looks.names[from]}"):`, "");
+  if (name === null) return;
+  const res = await api("/api/looks/add", { name, copy_from: from });
+  if (res.error) { hint(res.error); return; }
+  looksUpdated(res.looks);
+  if (g) { pushUndo(); g.look = res.looks.names[res.looks.names.length - 1]; changed(); }
+  tpOpenLook(res.looks.names.length - 1);
+}
+
+function looksUpdated(looks) {
+  A.looks = looks;
+  buildSprites();
+  preview = null;
+  renderAll();
+  checkLevel();
 }
 
 function tpPush() {
@@ -1328,17 +1421,46 @@ function tpRender() {
     g.beginPath(); g.moveTo(k * s + 0.5, 0); g.lineTo(k * s + 0.5, c.height); g.stroke();
     g.beginPath(); g.moveTo(0, k * s + 0.5); g.lineTo(c.width, k * s + 0.5); g.stroke();
   }
-  const tile = makeTile(TP.px, false);
-  const seen = makeTile(TP.px.map((v) => (v === 0 ? 1 : v)), false);   // cone: lightest -> light grey
-  const draw = (id, img, n) => {
+  const draw = (id, img, n, under) => {
     const cv = $(id), gg = cv.getContext("2d");
     gg.imageSmoothingEnabled = false;
     const t = cv.width / n;
-    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) gg.drawImage(img, x * t, y * t, t, t);
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+      if (under) gg.drawImage(under, x * t, y * t, t, t);
+      if (!under || (x === Math.floor(n / 2) && y === Math.floor(n / 2))) gg.drawImage(img, x * t, y * t, t, t);
+    }
   };
-  draw("tile-prev1", tile, 1);
-  draw("tile-prev3", tile, 3);
-  draw("tile-prevseen", seen, 3);
+  if (TP.kind === "look") {
+    // a sprite: the lightest shade is see-through; show it on floor and in a cone
+    TP.frames[TP.frame] = TP.px;
+    const spr = makeTile(TP.px, true);
+    draw("tile-prev1", spr, 1, bkgTiles[A.T.TILE_FLOOR]);
+    draw("tile-prev3", spr, 3, bkgTiles[A.T.TILE_FLOOR]);
+    draw("tile-prevseen", spr, 3, bkgTiles[A.T.TILE_SEEN]);
+    const strip = $("tile-frames");
+    strip.innerHTML = "";
+    TP.frames.forEach((f, k) => {
+      const b = document.createElement("button");
+      b.className = "frame" + (k === TP.frame ? " active" : "");
+      b.title = FRAME_LABELS[k] + (f.join() !== TP.orig[k].join() ? " (changed)" : "");
+      const cv = document.createElement("canvas");
+      cv.width = cv.height = 8;
+      const cg = cv.getContext("2d");
+      cg.drawImage(bkgTiles[A.T.TILE_FLOOR], 0, 0);
+      cg.drawImage(makeTile(f, true), 0, 0);
+      const lab = document.createElement("span");
+      lab.textContent = FRAME_LABELS[k] + (f.join() !== TP.orig[k].join() ? " *" : "");
+      b.append(cv, lab);
+      b.addEventListener("click", () => tpPickFrame(k));
+      strip.appendChild(b);
+    });
+  } else {
+    const tile = makeTile(TP.px, false);
+    const seen = makeTile(TP.px.map((v) => (v === 0 ? 1 : v)), false);   // cone: lightest -> light grey
+    draw("tile-prev1", tile, 1);
+    draw("tile-prev3", tile, 3);
+    draw("tile-prevseen", seen, 3);
+  }
   document.querySelectorAll("#shade-row button").forEach((b) =>
     b.classList.toggle("active", Number(b.dataset.shade) === TP.shade));
   document.querySelectorAll("[data-ptool]").forEach((b) =>
@@ -1400,6 +1522,21 @@ function tilesetUpdated(tset) {
 
 async function tpSave() {
   $("tile-status").textContent = "Saving…";
+  if (TP.kind === "look") {
+    TP.frames[TP.frame] = TP.px;
+    let res = null;
+    for (let f = 0; f < TP.frames.length; f++) {
+      if (TP.frames[f].join() === TP.orig[f].join()) continue;
+      res = await api("/api/looks/tile", { look: TP.look, frame: f, pixels: TP.frames[f] });
+      if (res.error) { $("tile-status").textContent = res.error; return; }
+    }
+    $("tile-dialog").close();
+    if (!res) { hint("Nothing changed."); return; }
+    looksUpdated(res.looks);
+    hint(`Saved the look "${A.looks.names[TP.look]}" to tilesets/characters.png` +
+         (res.regenerated ? " and updated src/levels.c." : ". Save the levels to update src/levels.c."));
+    return;
+  }
   const res = await api("/api/tileset/tile", { index: TP.index, pixels: TP.px });
   if (res.error) { $("tile-status").textContent = res.error; return; }
   tilesetUpdated(res.tileset);
@@ -1603,7 +1740,7 @@ function drawInventory() {
   row(textRow([[1, "A:AIM  B:BACK"]]), top + rows - 1);
 }
 
-/* The message box (draw_dialogue in main.c): what an NPC said this turn. */
+/* The message box (draw_dialogue in main.c): what a character said this turn. */
 function drawDialogue() {
   const T = A.T;
   const top = 18 - 5;
@@ -1865,13 +2002,13 @@ async function onPlayKey(btn, dir) {
   if (v.status === G.STATUS_WON) { if (btn === "A") await finishPlay(); return; }
   if (v.status !== G.STATUS_PLAYING) return;
   if (btn === "B") {
-    if (v.prompt.takedown) await doTakedown();
-    else if (v.prompt.talk) {
+    if (v.prompt.talk) {
       if (await act({ type: "step", code: G.ACT_TALK }) && P.said.length) {
         ui.mode = "dialogue";
         ui.sayAt = 0;
       }
     }
+    else if (v.prompt.takedown) await doTakedown();
     else if (v.prompt.uniform) await act({ type: "step", code: G.ACT_UNIFORM });
     return;
   }
@@ -1979,7 +2116,7 @@ window.addEventListener("keydown", async (e) => {
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redoEdit(); return; }
-    const tools = { 4: "start", 5: "guard", 6: "route", 7: "npc", 8: "switch", 0: "art-erase" };
+    const tools = { 4: "start", 5: "guard", 6: "route", 7: "switch", 0: "art-erase" };
     if (tools[e.key]) { setTool(tools[e.key]); return; }
     const tile = !e.ctrlKey && !e.metaKey &&
       A.tiles.find((x) => x.char !== "P" && tileKey(x.char) === e.key.toUpperCase().replace(/^([123])$/, "$1"));
@@ -2152,36 +2289,52 @@ function wire() {
   A.uniforms.forEach((u) => $("g-uniform").add(new Option(u === "none" ? "none" : u.toUpperCase(), u)));
   $("g-facing").addEventListener("change", (e) => { pushUndo(); cmap().guards[selGuard].facing = e.target.value; changed(); });
   $("g-uniform").addEventListener("change", (e) => { pushUndo(); cmap().guards[selGuard].uniform = e.target.value; changed(); });
-  $("g-custom").addEventListener("change", (e) => {
+  const ch = () => cmap().guards[selGuard];
+  $("g-sees").addEventListener("change", (e) => {
     pushUndo();
-    cmap().guards[selGuard].attitude = e.target.checked ? "EEE" : null;
+    ch().attitude = { normal: null, never: "III", custom: "EEE" }[e.target.value];
     changed();
   });
+  $("g-look").addEventListener("change", (e) => { pushUndo(); ch().look = e.target.value; changed(); });
+  $("g-takedown").addEventListener("change", (e) => {
+    pushUndo();
+    if (e.target.checked) delete ch().takedown; else ch().takedown = false;
+    changed();
+  });
+  $("g-talks").addEventListener("change", (e) => {
+    pushUndo();
+    const g = ch();
+    if (e.target.checked) {
+      g.verb = g.verb || "TALK";
+      g.script = g.script && g.script.length ? g.script : [{ say: "Hello." }];
+    } else {
+      delete g.verb;
+      delete g.script;
+    }
+    changed();
+  });
+  $("g-look-edit").addEventListener("click", () => tpOpenLook(lookIndex(ch())));
+  $("g-look-new").addEventListener("click", newLook);
   $("g-route-clear").addEventListener("click", () => {
     pushUndo(); const g = cmap().guards[selGuard]; g.route = [g.route[0]]; changed();
   });
   $("g-delete").addEventListener("click", deleteGuard);
 
-  // NPCs and switch cells
-  A.npc_blocks.forEach((b) => $("n-blocks").add(new Option(
-    { move: "walking (player and guards)", none: "nothing (walk over it)", all: "everything, like a wall" }[b] || b, b)));
+  // talking and switch cells
   A.tiles.filter((t) => t.char !== "P").forEach((t) =>
     $("s-on").add(new Option(t.name[0].toUpperCase() + t.name.slice(1), t.char)));
-  const npc = () => (cmap().npcs || [])[selNpc];
   const sw = () => (cmap().switches || [])[selSwitch];
   const fontOnly = new RegExp(`[^${A.font_chars.replace(/[\]\\^-]/g, "\\$&")}]`, "g");
   typedField($("n-verb"), (v) => {
     const el = $("n-verb");
     el.value = v.toUpperCase().replace(fontOnly, "").replace(/ /g, "").slice(0, A.verb_max);
-    if (npc()) npc().verb = el.value;
+    if (ch()) ch().verb = el.value;
   });
   typedField($("s-flag"), (v) => { if (sw()) sw().flag = v.trim(); });
-  $("n-blocks").addEventListener("change", (e) => { pushUndo(); npc().blocks = e.target.value; changed(); });
   $("s-on").addEventListener("change", (e) => { pushUndo(); sw().on = e.target.value; changed(); });
   $("s-art-pick").addEventListener("click", () => { pushUndo(); sw().on_art = artTile; changed(); });
   $("s-art-none").addEventListener("click", () => { pushUndo(); sw().on_art = null; changed(); });
-  $("n-delete").addEventListener("click", () => deleteScripted("npcs"));
-  $("s-delete").addEventListener("click", () => deleteScripted("switches"));
+  $("s-delete").addEventListener("click", deleteSwitch);
   $("map-delete").addEventListener("click", deleteMap);
   $("g-route-close").addEventListener("click", () => {
     const g = cmap().guards[selGuard];
@@ -2200,7 +2353,7 @@ function wire() {
 async function init() {
   A = await api("/api/assets");
   bkgTiles = A.bkg.map((px) => makeTile(px, false));
-  sprTiles = A.spr.map((px) => makeTile(px, true));
+  buildSprites();
   levels = (await api("/api/levels")).levels;
   levels.forEach((lv) => {
     lv.items = lv.items || {};

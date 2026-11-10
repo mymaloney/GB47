@@ -2,9 +2,10 @@
  * game.c - Turn rules for the stealth puzzle prototype.
  *
  * One turn:
- *   1. The player acts: move, wait, throw, drag/push a body, talk to an
- *      NPC (which runs its script), or take down an adjacent guard (which
- *      locks the player for TAKEDOWN_TURNS).
+ *   1. The player acts: move, wait, throw, drag/push a body, talk to a
+ *      character (which runs its script), or take down an adjacent guard
+ *      (which locks the player for TAKEDOWN_TURNS). "Guard" here means any
+ *      character: guards, dogs, cleaners... (GuardDef in game.h).
  *   2. Standing on the exit wins immediately.
  *   3. If a guard can see the player now, the player is caught; if it can
  *      see a body or a takedown in progress, the alarm goes up.
@@ -165,11 +166,7 @@ uint8_t game_cell(uint8_t x, uint8_t y)
 
 uint8_t game_blocks(uint8_t x, uint8_t y, uint8_t what)
 {
-    uint8_t b = cell_blocks[game_cell(x, y)], i;
-
-    for (i = 0; i < level->npc_count; i++)      /* an NPC stands in the way */
-        if (level->npcs[i].x == x && level->npcs[i].y == y) b |= level->npcs[i].blocks;
-    return b & what;
+    return cell_blocks[game_cell(x, y)] & what;
 }
 
 uint8_t game_width(void)  { return map_w; }
@@ -214,6 +211,7 @@ uint8_t game_attitude(const GameState *s, uint8_t idx)
     switch (a[s->disguise]) {
     case 'H': return ATT_HOSTILE;
     case 'B': return ATT_BLIND;
+    case 'I': return ATT_IGNORE;
     default:  return ATT_ENFORCER;
     }
 }
@@ -289,6 +287,7 @@ void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
         int8_t       fx, fy, lx, ly;
         if (!GUARD_ACTIVE(g)) continue;
         att   = game_attitude(s, i);
+        if (att == ATT_IGNORE) continue;           /* no cone at all */
         cone  = watch_cone(att);
         mark  = att == ATT_BLIND ? VIS_WATCHED : VIS_SEEN;
         range = cone_range(cone);
@@ -322,7 +321,7 @@ static uint8_t player_spotted(const GameState *s, uint8_t suspicious)
         const Guard *g = &s->guards[i];
         if (!GUARD_ACTIVE(g)) continue;
         att = game_attitude(s, i);
-        if (att == ATT_BLIND && !suspicious) continue;
+        if (att == ATT_IGNORE || (att == ATT_BLIND && !suspicious)) continue;
         if (cone_sees(g, s->px, s->py, watch_cone(att))) return 1;
     }
     return 0;
@@ -335,10 +334,13 @@ static uint8_t body_spotted(const GameState *s)
     for (j = 0; j < s->guard_count; j++) {
         const Guard *b = &s->guards[j];
         if (GUARD_ACTIVE(b)) continue;
-        for (i = 0; i < s->guard_count; i++)
-            if (GUARD_ACTIVE(&s->guards[i]) &&
-                cone_sees(&s->guards[i], b->x, b->y,
-                          watch_cone(game_attitude(s, i)))) return 1;
+        for (i = 0; i < s->guard_count; i++) {
+            uint8_t att;
+            if (!GUARD_ACTIVE(&s->guards[i])) continue;
+            att = game_attitude(s, i);
+            if (att != ATT_IGNORE &&
+                cone_sees(&s->guards[i], b->x, b->y, watch_cone(att))) return 1;
+        }
     }
     return 0;
 }
@@ -470,7 +472,7 @@ static uint8_t step_toward(GameState *s, uint8_t idx, uint8_t x, uint8_t y)
     g->facing = d;
     if (game_blocks(nx, ny, BLOCK_GUARD)) return STEP_BESIDE;   /* e.g. railing */
     if (nx == s->px && ny == s->py) {
-        if (game_attitude(s, idx) == ATT_BLIND) return STEP_OK;  /* waits */
+        if (game_attitude(s, idx) >= ATT_BLIND) return STEP_OK;  /* waits */
         return STEP_BUMP;
     }
     if (guard_at(s, nx, ny, idx)) return STEP_OK;   /* blocked: wait */
@@ -504,7 +506,7 @@ static uint8_t guard_patrol(GameState *s, uint8_t idx)
         if (step_toward(s, idx, target->x, target->y) == STEP_BUMP) return 1;
     } else {
         if (nx == s->px && ny == s->py)
-            return game_attitude(s, idx) != ATT_BLIND;  /* blind guards wait */
+            return game_attitude(s, idx) < ATT_BLIND;  /* blind ones wait */
         if (guard_at(s, nx, ny, idx)) return 0;   /* blocked: wait this turn */
         g->x = nx;
         g->y = ny;
@@ -669,9 +671,10 @@ uint8_t game_talk_target(const GameState *s)
 {
     uint8_t i;
     if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
-    for (i = 0; i < level->npc_count; i++) {
-        const NpcDef *n = &level->npcs[i];
-        if (n->script && game_distance(n->x, n->y, s->px, s->py) == 1) return i;
+    for (i = 0; i < s->guard_count; i++) {
+        const Guard *g = &s->guards[i];
+        if (!GUARD_ACTIVE(g) || !level->guards[i].script) continue;
+        if (game_distance(g->x, g->y, s->px, s->py) == 1) return i;
     }
     return 0xFF;
 }
@@ -716,9 +719,11 @@ uint8_t game_takedown_target(const GameState *s)
 {
     uint8_t i;
     if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
+    if (game_talk_target(s) != 0xFF) return 0xFF;   /* B talks instead */
     for (i = 0; i < s->guard_count; i++) {
         const Guard *g = &s->guards[i];
         if (!GUARD_ACTIVE(g)) continue;
+        if (level->guards[i].flags & CHAR_NO_TAKEDOWN) continue;
         if (game_distance(g->x, g->y, s->px, s->py) == 1) return i;
     }
     return 0xFF;
@@ -836,7 +841,7 @@ uint8_t game_step(GameState *s, uint8_t action)
     } else if (action == ACT_TALK) {
         b = game_talk_target(s);
         if (b == 0xFF) return 0;
-        run_script(s, level->npcs[b].script);
+        run_script(s, level->guards[b].script);
     } else if (action != ACT_WAIT) {
         return 0;
     }

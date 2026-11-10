@@ -36,7 +36,14 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   documented at the top of `gen_levels.py`.
 - `src/far.c/h`: the ROM bank layout (read the top of `far.h` first) and
   `far_read()`.
-- NPCs, scripts and switch cells: the rules are in `game.c` (`run_script`,
+- Characters: guards, dogs and anyone else are all `GuardDef`/`Guard`
+  (the code and `levels.json` still say "guards"). Talking (`verb`,
+  `script`), `CHAR_NO_TAKEDOWN`, the `ATT_IGNORE` attitude ('I': no cone)
+  and the `look` (sprites, presentation only) are per character. Looks
+  are `tilesets/characters.png` (6 frames per row, names in
+  `characters.json`), generated into `levels.c` as `look_tile_data` and
+  loaded into sprite VRAM after the built-in sprites.
+- Scripts and switch cells: the rules are in `game.c` (`run_script`,
   `game_talk_target`, `OP_*` in `game.h`), the bytes come from
   `compile_script()` in `gen_levels.py`, and `main.c` only shows the
   message box. A new script step needs: an `OP_*`, a case in `run_script`,
@@ -96,6 +103,9 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   - The first `BKG_TILE_COUNT` (61) are built in (`src/tiles.c`, generated
     by `tools/gen_tiles.py`).
   - Painted art uses the rest (195 slots per map).
+- VRAM sprite tiles: the built-in ones (`SPRITE_TILE_COUNT`, 7: player,
+  stripped body, cursor, noise), then 6 per character look, so 41 looks
+  at most (`validate_all` checks).
 - The font is `0-9 A-Z : ! - . > ?` only (`FONT_CHARS` in `gen_levels.py`),
   so dialogue is upper-cased. Lower case would cost 26 of the art slots.
 - Switch cells are the characters `0`-`7` in the map the rules read

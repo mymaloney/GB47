@@ -69,16 +69,18 @@ def assets():
 
     return {
         "bkg": tiles("bkg_tile_data"),
+        # built-in sprites, then the character looks, as in sprite VRAM
         "spr": tiles("sprite_tile_data"),
+        "looks": looks_assets(),
         "T": g.T,
         "G": g.G,
         "items": g.ITEMS,
         "dirs": g.DIRS,
         "uniforms": g.UNIFORMS,
         "transitions": g.TRANSITIONS,
-        "max_npcs": g.MAX_NPCS, "max_switches": g.MAX_SWITCHES,
+        "max_switches": g.MAX_SWITCHES,
         "max_flags": gen_levels.MAX_FLAGS, "verb_max": gen_levels.VERB_MAX,
-        "npc_blocks": list(gen_levels.NPC_BLOCKS),
+        "attitudes": gen_levels.ATTITUDES,
         "text_cols": gen_levels.TEXT_COLS, "text_rows": gen_levels.TEXT_ROWS,
         "view_w": g.VIEW_W, "view_h": g.VIEW_H,
         "map_max_w": g.MAP_MAX_W, "map_max_h": g.MAP_MAX_H,
@@ -109,6 +111,27 @@ def tileset_assets():
     }
 
 
+def looks_assets():
+    """Character looks: names, and each look's frames as 64 shades."""
+    t = ts.load_looks()
+    return {"names": t["looks"], "frame_names": t.get("frames", []),
+            "frames": t["frames_of"], "frame_count": ts.LOOK_FRAMES,
+            "first_tile": g.T["SPRITE_TILE_COUNT"],
+            "max": gen_levels.sprite_slots_available() // ts.LOOK_FRAMES}
+
+
+def regenerate():
+    """The ROM's copy of tileset tiles and looks lives in src/levels.c:
+    regenerate it from the saved levels (if they're valid; Save does it
+    otherwise). Returns whether it did."""
+    gen_levels.forget_tilesets()
+    saved = gen_levels.load()
+    ok = not gen_levels.validate_all(saved)
+    if ok:
+        gen_levels.write_c(saved)
+    return ok
+
+
 def analyze(level):
     """Shortest solution, plus which mechanics the level really needs."""
     G = g.G
@@ -123,7 +146,7 @@ def analyze(level):
     if guards:
         checks.append(("takedown", G["SOLVE_USE_TAKEDOWN"]))
         checks.append(("drag", G["SOLVE_USE_DRAG"]))
-    if any(m.get("npcs") for m in level.maps):
+    if any(gen_levels.can_talk(gd) for gd in guards):
         checks.append(("talk", G["SOLVE_USE_TALK"]))
     if any(gd.get("uniform", "none") != "none" for gd in guards):
         checks.append(("uniform", G["SOLVE_USE_UNIFORM"]))
@@ -195,14 +218,29 @@ class Handler(BaseHTTPRequestHandler):
                 ts.set_tile(int(req["index"]), [int(v) for v in req["pixels"]])
             else:
                 ts.add_row()
-            # the ROM's copy of the tiles lives in src/levels.c: regenerate it
-            # from the saved levels (if they're valid; Save does it otherwise)
-            gen_levels._tileset = None
-            saved = gen_levels.load()
-            regenerated = not gen_levels.validate_all(saved)
-            if regenerated:
-                gen_levels.write_c(saved)
-            return {"tileset": tileset_assets(), "regenerated": regenerated}
+            return {"tileset": tileset_assets(), "regenerated": regenerate()}
+        if path in ("/api/looks/tile", "/api/looks/add"):
+            if path == "/api/looks/tile":
+                look, frame = int(req["look"]), int(req["frame"])
+                if not (0 <= frame < ts.LOOK_FRAMES and
+                        0 <= look < len(ts.load_looks()["looks"])):
+                    return {"error": "no such look or frame"}
+                ts.set_tile(look * ts.LOOK_FRAMES + frame, [int(v) for v in req["pixels"]],
+                            path=ts.CHARACTERS)
+            else:
+                name = str(req.get("name", "")).strip().lower()
+                if not re.fullmatch(r"[a-z][a-z0-9_]{0,15}", name):
+                    return {"error": "A look's name is 1-16 letters, digits or _, "
+                                     "starting with a letter."}
+                names = ts.load_looks()["looks"]
+                if len(names) >= gen_levels.sprite_slots_available() // ts.LOOK_FRAMES:
+                    return {"error": "There's no room for more looks in sprite memory."}
+                copy = req.get("copy_from")
+                try:
+                    ts.add_look(name, int(copy) if copy is not None else None)
+                except ValueError as e:
+                    return {"error": str(e)[0].upper() + str(e)[1:] + "."}
+            return {"looks": looks_assets(), "regenerated": regenerate()}
         if path in ("/api/autopaint", "/api/autotile"):
             # learn the painted style from the levels open in the editor
             cfg = dict(ts.load()["autopaint"])
@@ -213,7 +251,7 @@ class Handler(BaseHTTPRequestHandler):
             skip = {(li, mi, x + dx, y + dy) for x, y in req.get("changed", [])
                     for dx in (-2, -1, 0, 1, 2) for dy in (-2, -1, 0, 1, 2)}
             learned = autopaint.learn(req.get("levels", []), cfg, skip)
-            # NPCs and switch cells are painted by hand: leave their art alone
+            # switch cells are painted by hand: leave their art alone
             keep = [tuple(c) for c in req.get("keep", [])]
             if path == "/api/autopaint":
                 art = ts.format_art(autopaint.autopaint(req["map"], cfg, learned))

@@ -131,7 +131,7 @@
           "10....1310............................13",
           "10....1310......004201014203..........13",
           "10....3031......10........13..........13",
-          "10..............10....15..13..........13",
+          "10..............10........13..........13",
           "10....0504......10........13..........13",
           "10....1313......200124420123..........13",
           "10....1313............................13",
@@ -145,10 +145,8 @@
         ],
         "guards": [
           {"facing": "left", "route": [[14, 10]], "uniform": "none", "attitude": null},
-          {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "none", "attitude": null}
-        ],
-        "npcs": [
-          {"x": 11, "y": 5, "verb": "PET", "blocks": "move", "script": [{"if": "dog", "then": [{"say": "The dog wags its tail."}], "else": [{"say": "You pet the dog."}, {"set": "dog"}]}]}
+          {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "none", "attitude": null},
+          {"facing": "left", "route": [[11, 5]], "uniform": "none", "attitude": "III", "look": "dog", "verb": "PET", "script": [{"if": "dog", "then": [{"say": "The dog wags its tail."}], "else": [{"say": "You pet the dog."}, {"set": "dog"}]}]}
         ],
         "switches": [
           {"x": 16, "y": 13, "flag": "dog", "on": "E", "on_art": 52}

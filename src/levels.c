@@ -18,8 +18,8 @@ extern const char level_map7[];
 extern const char level_map8[];
 extern const char level_map9[];
 
-/* NPC scripts (OP_* in game.h). */
-static const uint8_t script2_0[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
+/* Characters' scripts (OP_* in game.h). */
+static const uint8_t script2_2[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
 
 const LevelDef levels[LEVEL_COUNT] = {
     /* 1: FIRST STEPS - Learn that guards only move when you do. Follow one through. */
@@ -29,17 +29,13 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map0,
         1,
         {
-            { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0 },
+            { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_FADE,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -52,18 +48,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map1,
         2,
         {
-            { DIR_DOWN, 3, { {7, 4}, {7, 13}, {7, 1} }, DISGUISE_NONE, "EEE" },
-            { DIR_UP, 3, { {11, 10}, {11, 1}, {11, 13} }, DISGUISE_NONE, 0 },
+            { DIR_DOWN, 3, { {7, 4}, {7, 13}, {7, 1} }, DISGUISE_NONE, "EEE", 0, LOOK_GUARD, 0, 0 },
+            { DIR_UP, 3, { {11, 10}, {11, 1}, {11, 13} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_WIPE,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -74,10 +66,11 @@ const LevelDef levels[LEVEL_COUNT] = {
         "THE SENTRY",
         20, 16,
         level_map2,
-        2,
+        3,
         {
-            { DIR_LEFT, 1, { {14, 10} }, DISGUISE_NONE, 0 },
-            { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} }, DISGUISE_NONE, 0 },
+            { DIR_LEFT, 1, { {14, 10} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
+            { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
+            { DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, "III", CHAR_NO_TAKEDOWN, LOOK_DOG, "PET", script2_2 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
@@ -86,11 +79,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         TRANS_IRIS,
         1,
         {
-            { 11, 5, BLOCK_PLAYER | BLOCK_GUARD, "PET", script2_0 },
-        },
-        1,
-        {
-            { 16, 13, 1, CELL_FLOOR, CELL_EXIT, 13 },   /* dog */
+            { 16, 13, 1, CELL_FLOOR, CELL_EXIT, 12 },   /* dog */
         },
     },
     /* 4: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
@@ -100,17 +89,13 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map3,
         1,
         {
-            { DIR_LEFT, 1, { {12, 6} }, DISGUISE_NONE, "EEE" },
+            { DIR_LEFT, 1, { {12, 6} }, DISGUISE_NONE, "EEE", 0, LOOK_GUARD, 0, 0 },
         },
         { 1, 1 },
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_DISSOLVE,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -123,18 +108,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map4,
         2,
         {
-            { DIR_UP, 1, { {9, 3} }, DISGUISE_GUARD, "EBE" },
-            { DIR_RIGHT, 2, { {5, 2}, {13, 2} }, DISGUISE_NONE, "EBE" },
+            { DIR_UP, 1, { {9, 3} }, DISGUISE_GUARD, "EBE", 0, LOOK_GUARD, 0, 0 },
+            { DIR_RIGHT, 2, { {5, 2}, {13, 2} }, DISGUISE_NONE, "EBE", 0, LOOK_GUARD, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_CURTAIN,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -147,19 +128,15 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map5,
         3,
         {
-            { DIR_RIGHT, 2, { {2, 6}, {7, 6} }, DISGUISE_GUARD, "EBE" },
-            { DIR_LEFT, 1, { {17, 4} }, DISGUISE_GUARD, "HBE" },
-            { DIR_DOWN, 2, { {14, 1}, {14, 7} }, DISGUISE_OFFICER, "HEB" },
+            { DIR_RIGHT, 2, { {2, 6}, {7, 6} }, DISGUISE_GUARD, "EBE", 0, LOOK_GUARD, 0, 0 },
+            { DIR_LEFT, 1, { {17, 4} }, DISGUISE_GUARD, "HBE", 0, LOOK_GUARD, 0, 0 },
+            { DIR_DOWN, 2, { {14, 1}, {14, 7} }, DISGUISE_OFFICER, "HEB", 0, LOOK_OFFICER, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_DIAGONAL,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -172,19 +149,15 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map6,
         3,
         {
-            { DIR_RIGHT, 2, { {2, 20}, {37, 20} }, DISGUISE_GUARD, "HBE" },
-            { DIR_DOWN, 1, { {35, 9} }, DISGUISE_GUARD, "HBE" },
-            { DIR_LEFT, 2, { {37, 4}, {29, 4} }, DISGUISE_NONE, "HEB" },
+            { DIR_RIGHT, 2, { {2, 20}, {37, 20} }, DISGUISE_GUARD, "HBE", 0, LOOK_GUARD, 0, 0 },
+            { DIR_DOWN, 1, { {35, 9} }, DISGUISE_GUARD, "HBE", 0, LOOK_GUARD, 0, 0 },
+            { DIR_LEFT, 2, { {37, 4}, {29, 4} }, DISGUISE_NONE, "HEB", 0, LOOK_GUARD, 0, 0 },
         },
         { 1, 0 },
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_BLINDS,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -197,18 +170,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map7,
         2,
         {
-            { DIR_LEFT, 2, { {17, 5}, {2, 5} }, DISGUISE_GUARD, "EBE" },
-            { DIR_DOWN, 2, { {12, 2}, {12, 8} }, DISGUISE_OFFICER, "EBE" },
+            { DIR_LEFT, 2, { {17, 5}, {2, 5} }, DISGUISE_GUARD, "EBE", 0, LOOK_GUARD, 0, 0 },
+            { DIR_DOWN, 2, { {12, 2}, {12, 8} }, DISGUISE_OFFICER, "EBE", 0, LOOK_OFFICER, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_INTERLACE,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -221,17 +190,13 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map8,
         1,
         {
-            { DIR_RIGHT, 2, { {9, 7}, {18, 7} }, DISGUISE_NONE, 0 },
+            { DIR_RIGHT, 2, { {9, 7}, {18, 7} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 2 */
         { 0, 10, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
-        0,
-        {
-            { 0, 0, 0, 0, 0 },
-        },
         0,
         {
             { 0, 0, 0, 0, 0, 0 },
@@ -244,8 +209,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         level_map9,
         2,
         {
-            { DIR_LEFT, 1, { {30, 7} }, DISGUISE_OFFICER, "HBE" },
-            { DIR_DOWN, 2, { {18, 3}, {18, 11} }, DISGUISE_NONE, 0 },
+            { DIR_LEFT, 1, { {30, 7} }, DISGUISE_OFFICER, "HBE", 0, LOOK_OFFICER, 0, 0 },
+            { DIR_DOWN, 2, { {18, 3}, {18, 11} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
         },
         { 0, 0 },
         1,   /* map 2 of 2 */
@@ -254,16 +219,12 @@ const LevelDef levels[LEVEL_COUNT] = {
         TRANS_IRIS,
         0,
         {
-            { 0, 0, 0, 0, 0 },
-        },
-        0,
-        {
             { 0, 0, 0, 0, 0, 0 },
         },
     },
 };
 
-/* What NPCs say (OP_SAY n shows level_text[n]); lines end in \n. */
+/* What characters say (OP_SAY n shows level_text[n]); lines end in \n. */
 const char *const level_text[] = {
     "THE DOG WAGS ITS\nTAIL.",
     "YOU PET THE DOG.",
@@ -272,54 +233,80 @@ const char *const level_text[] = {
 /* Painted art. The run-length data is in levels_art.c (ROM bank BANK_ART). */
 extern const uint8_t art0_rle[];
 extern const uint16_t art0_rows[];
-static const uint8_t art0_tiles[] = { 0, 1, 2, 7, 9, 11, 12, 13, 17, 19 };
+static const uint8_t art0_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 12, 16, 18 };
 static const uint8_t art0_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
 static const MapArt art0 = { 10, art0_tiles, art0_kinds, art0_rle, art0_rows };
 extern const uint8_t art1_rle[];
 extern const uint16_t art1_rows[];
-static const uint8_t art1_tiles[] = { 0, 1, 2, 7, 9, 11, 12, 17, 19, 20, 22 };
+static const uint8_t art1_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 16, 18, 19, 21 };
 static const uint8_t art1_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 3, 1, 5, 1 };
 static const MapArt art1 = { 11, art1_tiles, art1_kinds, art1_rle, art1_rows };
 extern const uint8_t art2_rle[];
 extern const uint16_t art2_rows[];
-static const uint8_t art2_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 14, 15, 16, 19 };
-static const uint8_t art2_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 5, 1, 1, 3, 1 };
-static const MapArt art2 = { 15, art2_tiles, art2_kinds, art2_rle, art2_rows };
+static const uint8_t art2_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 14, 15, 18 };
+static const uint8_t art2_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 3, 1 };
+static const MapArt art2 = { 14, art2_tiles, art2_kinds, art2_rle, art2_rows };
 extern const uint8_t art3_rle[];
 extern const uint16_t art3_rows[];
-static const uint8_t art3_tiles[] = { 0, 1, 2, 5, 7, 9, 11, 12, 16, 19 };
+static const uint8_t art3_tiles[] = { 0, 1, 2, 5, 7, 9, 10, 11, 15, 18 };
 static const uint8_t art3_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
 static const MapArt art3 = { 10, art3_tiles, art3_kinds, art3_rle, art3_rows };
 extern const uint8_t art4_rle[];
 extern const uint16_t art4_rows[];
-static const uint8_t art4_tiles[] = { 0, 1, 2, 7, 9, 11, 12, 14, 15, 16, 19 };
+static const uint8_t art4_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 13, 14, 15, 18 };
 static const uint8_t art4_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
 static const MapArt art4 = { 11, art4_tiles, art4_kinds, art4_rle, art4_rows };
 extern const uint8_t art5_rle[];
 extern const uint16_t art5_rows[];
-static const uint8_t art5_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 11, 12, 14, 15, 17, 19 };
+static const uint8_t art5_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 10, 11, 13, 14, 16, 18 };
 static const uint8_t art5_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
 static const MapArt art5 = { 13, art5_tiles, art5_kinds, art5_rle, art5_rows };
 extern const uint8_t art6_rle[];
 extern const uint16_t art6_rows[];
-static const uint8_t art6_tiles[] = { 0, 1, 2, 7, 9, 11, 12, 13, 14, 15, 16, 19, 20 };
+static const uint8_t art6_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 12, 13, 14, 15, 18, 19 };
 static const uint8_t art6_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 5 };
 static const MapArt art6 = { 13, art6_tiles, art6_kinds, art6_rle, art6_rows };
 extern const uint8_t art7_rle[];
 extern const uint16_t art7_rows[];
-static const uint8_t art7_tiles[] = { 0, 1, 2, 7, 8, 9, 11, 12, 16, 18, 19, 21, 22 };
+static const uint8_t art7_tiles[] = { 0, 1, 2, 7, 8, 9, 10, 11, 15, 17, 18, 20, 21 };
 static const uint8_t art7_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1 };
 static const MapArt art7 = { 13, art7_tiles, art7_kinds, art7_rle, art7_rows };
 extern const uint8_t art8_rle[];
 extern const uint16_t art8_rows[];
-static const uint8_t art8_tiles[] = { 0, 1, 2, 5, 6, 7, 9, 11, 12, 13, 19 };
+static const uint8_t art8_tiles[] = { 0, 1, 2, 5, 6, 7, 9, 10, 11, 12, 18 };
 static const uint8_t art8_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
 static const MapArt art8 = { 11, art8_tiles, art8_kinds, art8_rle, art8_rows };
 extern const uint8_t art9_rle[];
 extern const uint16_t art9_rows[];
-static const uint8_t art9_tiles[] = { 0, 1, 2, 7, 9, 11, 12, 15, 16, 18, 19, 20, 22 };
+static const uint8_t art9_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 14, 15, 17, 18, 19, 21 };
 static const uint8_t art9_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 5, 1 };
 static const MapArt art9 = { 13, art9_tiles, art9_kinds, art9_rle, art9_rows };
 
 /* Art for each entry of levels[] (0 = built-in graphics only). */
 const MapArt *const level_art[LEVEL_COUNT] = { &art0, &art1, &art2, &art3, &art4, &art5, &art6, &art7, &art8, &art9 };
+
+/* Character looks, from tilesets/characters.png: up right down left
+ * subdued body. */
+const uint8_t look_tile_data[] = {
+    /* guard */
+    0x3C, 0x3C, 0x7E, 0x7E, 0x7E, 0x7E, 0x7E, 0x00, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0x7E, 0x7E, 0x7E, 0x0A, 0x7E, 0x00, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0x7E, 0x7E, 0x7E, 0x24, 0x7E, 0x00, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0x7E, 0x7E, 0x7E, 0x50, 0x7E, 0x00, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0x7E, 0x7E, 0x5A, 0x24, 0x7E, 0x00, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x7E, 0x66, 0x66,
+    0x00, 0x00, 0x71, 0x47, 0xD1, 0xEF, 0xF0, 0xCE, 0xF0, 0xCE, 0xD1, 0xEF, 0x71, 0x47, 0x00, 0x00,
+    /* officer */
+    0x3C, 0x3C, 0xFF, 0x81, 0x7E, 0x7E, 0x7E, 0x00, 0x24, 0x3C, 0x5A, 0x7E, 0x5A, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0xFF, 0x81, 0x7E, 0x0A, 0x7E, 0x00, 0x24, 0x3C, 0x5A, 0x7E, 0x5A, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0xFF, 0x81, 0x7E, 0x24, 0x7E, 0x00, 0x24, 0x3C, 0x5A, 0x7E, 0x5A, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0xFF, 0x81, 0x7E, 0x50, 0x7E, 0x00, 0x24, 0x3C, 0x5A, 0x7E, 0x5A, 0x7E, 0x66, 0x66,
+    0x3C, 0x3C, 0xFF, 0x81, 0x5A, 0x24, 0x7E, 0x00, 0x24, 0x3C, 0x5A, 0x7E, 0x5A, 0x7E, 0x66, 0x66,
+    0x40, 0x40, 0x77, 0x07, 0xD9, 0xAF, 0xF6, 0x8E, 0xF6, 0x8E, 0xD9, 0xAF, 0x77, 0x07, 0x40, 0x40,
+    /* dog */
+    0x00, 0x18, 0x00, 0x52, 0x00, 0x66, 0x00, 0x7E, 0x00, 0x7E, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x5A,
+    0x00, 0x00, 0x00, 0x0A, 0x00, 0x4E, 0x01, 0x8F, 0x00, 0x7F, 0x00, 0xFE, 0x00, 0xFE, 0x00, 0xAA,
+    0x00, 0x00, 0x00, 0x42, 0x00, 0x66, 0x24, 0x7E, 0x18, 0x7E, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x5A,
+    0x00, 0x00, 0x00, 0x50, 0x00, 0x72, 0x80, 0xF1, 0x00, 0xFE, 0x00, 0x7F, 0x00, 0x7F, 0x00, 0x55,
+    0x00, 0x00, 0x00, 0x42, 0x00, 0x66, 0x24, 0x5A, 0x18, 0x7E, 0x00, 0x3C, 0x00, 0x7E, 0x00, 0x5A,
+    0x00, 0x00, 0x00, 0x7B, 0x10, 0x2E, 0x08, 0x1F, 0x08, 0x1F, 0x10, 0x2E, 0x00, 0x7B, 0x00, 0x00,
+};

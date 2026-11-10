@@ -209,3 +209,16 @@ dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); paddi
   font: 12px ui-monospace, monospace; letter-spacing: 1px; background: #e0f8d0; color: #081820;
   border-top: 2px solid #081820; border-radius: 2px; min-height: 3.6em; width: max-content; min-width: 19ch; }
 .script .box.problem { background: none; color: #b3261e; border-top: none; white-space: normal; min-height: 0; letter-spacing: 0; width: auto; }
+
+/* characters: look picker and the look painter's frame strip */
+.look-row { display: flex; gap: 10px; align-items: flex-end; }
+.look-row label { flex: 1; }
+.look-frames { display: flex; gap: 4px; margin-bottom: 6px; }
+.look-frames canvas { width: 24px; height: 24px; image-rendering: pixelated; border-radius: 3px; }
+.look-buttons { margin-top: 0; }
+#g-attitudes[hidden], #g-talk[hidden] { display: none; }
+.tile-frames { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tile-frames .frame { display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 4px 6px; font-size: 11px; }
+.tile-frames .frame.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.tile-frames canvas { width: 32px; height: 32px; image-rendering: pixelated; border-radius: 3px; }

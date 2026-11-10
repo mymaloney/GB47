@@ -36,25 +36,13 @@
 #define SPR_PLAYER_NONE 0
 #define SPR_PLAYER_GUARD 1
 #define SPR_PLAYER_OFFICER 2
-#define SPR_GUARD_UP 3
-#define SPR_GUARD_RIGHT 4
-#define SPR_GUARD_DOWN 5
-#define SPR_GUARD_LEFT 6
-#define SPR_GUARD_SUBDUED 7
-#define SPR_GUARD_BODY 8
-#define SPR_OFFICER_UP 9
-#define SPR_OFFICER_RIGHT 10
-#define SPR_OFFICER_DOWN 11
-#define SPR_OFFICER_LEFT 12
-#define SPR_OFFICER_SUBDUED 13
-#define SPR_OFFICER_BODY 14
-#define SPR_BODY_STRIPPED 15
-#define SPR_CURSOR 16
-#define SPR_CURSOR_BAD 17
-#define SPR_NOISE 18
+#define SPR_BODY_STRIPPED 3
+#define SPR_CURSOR 4
+#define SPR_CURSOR_BAD 5
+#define SPR_NOISE 6
 #define SPR_PLAYER  SPR_PLAYER_NONE   /* + DISGUISE_* */
-#define SPR_GUARD_STYLE_TILES 6  /* up right down left subdued body */
-#define SPRITE_TILE_COUNT 19
+/* Character looks (levels.h) are loaded after these. */
+#define SPRITE_TILE_COUNT 7
 
 extern const uint8_t bkg_tile_data[];
 extern const uint8_t sprite_tile_data[];
