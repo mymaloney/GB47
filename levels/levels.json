@@ -144,8 +144,8 @@
           "......2001010101010101010101010101010123"
         ],
         "guards": [
-          {"facing": "left", "route": [[14, 10]], "uniform": "none", "attitude": null},
-          {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "none", "attitude": null},
+          {"facing": "left", "route": [[14, 10]], "uniform": "guard", "attitude": null},
+          {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "guard", "attitude": null},
           {"facing": "left", "route": [[11, 5]], "uniform": "none", "attitude": "III", "look": "dog", "verb": "PET", "script": [{"if": "dog", "then": [{"say": "The dog wags its tail."}], "else": [{"say": "You pet the dog."}, {"set": "dog"}]}]}
         ],
         "switches": [
