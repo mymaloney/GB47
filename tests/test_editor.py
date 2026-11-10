@@ -197,6 +197,31 @@ expect = {(0, 0): 0, (1, 0): 66, (2, 0): 1, (7, 0): 3,        # top wall, corner
 for (x, y), want in expect.items():
     assert ap[y][x] == want, f"auto-paint ({x},{y}): {ap[y][x]} != {want}"
 
+# auto-tile learns from painted examples, and repaints only around edits
+cfg = tset["autopaint"]
+room = ["#" * 20] + ["#" + "." * 18 + "#"] * 14 + ["#" * 20]
+taught = autopaint.autopaint(room, cfg)
+taught[0][0] = 7                                   # "use tile 7 for this corner"
+lesson = [{"maps": [{"map": room, "art": ts.format_art(taught)}]}]
+learned = autopaint.learn(lesson, cfg)
+other = ["#" * 20] * 3 + ["###" + "." * 14 + "###"] * 10 + ["#" * 20] * 3
+assert autopaint.autopaint(other, cfg)[2][2] == cfg["top_left"]       # the rule
+assert autopaint.autopaint(other, cfg, learned)[2][2] == 7            # the lesson
+assert autopaint.autopaint(other, cfg, learned)[3][2] == cfg["left"]  # untaught: rule
+# a shape taught by hand beats what most painted cells say
+shape = autopaint.taught_key(autopaint.pattern(other, 2, 3))
+assert autopaint.learn(lesson, cfg)[autopaint.pattern(other, 2, 3)] == cfg["left"]
+taught_cfg = dict(cfg, taught={shape: 5})
+assert autopaint.autopaint(other, cfg, autopaint.learn(lesson, taught_cfg))[3][2] == 5
+base = ts.format_art(autopaint.autopaint(room, cfg))
+cut = [r[:] for r in room]
+cut[8] = cut[8][:10] + "#" + cut[8][11:]           # a pillar in the middle
+after = ts.parse_art(autopaint.autotile(cut, base, [(10, 8)], cfg))
+before = ts.parse_art(base)
+assert after[8][10] is not None and after[8][10] != before[8][10], "pillar drawn"
+changed = {(x, y) for y in range(16) for x in range(20) if after[y][x] != before[y][x]}
+assert changed and all(abs(x - 10) <= 1 and abs(y - 8) <= 1 for x, y in changed), changed
+
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])
 assert any("player start" in e for e in gen_levels.validate_level(bad))

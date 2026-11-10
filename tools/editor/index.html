@@ -50,6 +50,9 @@
         <button data-tool="route" title="Add waypoints to the selected guard; drag to move, right-click to remove (6)"><b>6</b> Route</button>
       </div>
       <div class="toolbar palette" id="palette"><span class="toolbar-label">Paint</span></div>
+      <label class="check autotile"><input type="checkbox" id="autotile" checked>
+        Auto-tile: repaint the art around walls and floor as you paint them
+        (learns from how you've painted your levels)</label>
       <div class="art-panel">
         <div class="toolbar">
           <span class="toolbar-label">Art</span>
@@ -67,6 +70,8 @@
             <select id="art-behaviour"></select></label>
         </div>
         <p id="art-budget" class="hint"></p>
+        <p class="hint"><span id="taught-info"></span>
+          <button id="taught-forget" title="Auto-tile goes back to learning from your levels and its rules">Forget taught shapes</button></p>
       </div>
       <p id="tool-hint" class="hint"></p>
       <div class="size-row">

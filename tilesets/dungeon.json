@@ -67,6 +67,12 @@
     "top_left": 0,
     "top_right": 3,
     "bottom_left": 32,
-    "bottom_right": 35
+    "bottom_right": 35,
+    "taught": {
+      "#227": 5,
+      "#143": 4,
+      "#252": 6,
+      "#231": 7
+    }
   }
 }

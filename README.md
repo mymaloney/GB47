@@ -170,6 +170,20 @@ Floor becomes tile 87, exits stairs (52), doors and one-tile gaps in a
 horizontal wall a door (36; a gap keeps behaving as floor), vents a grate
 (18). The tile numbers are under `autopaint` in the tileset settings.
 
+Those are only the starting rules. Auto-paint **learns from your levels**:
+for every shape of cell (a wall or floor plus which of its 8 neighbours
+are open) that you've hand-painted, it uses the tile you used most often
+there. And painting a tile by hand **teaches** that shape outright: the
+latest tile you painted onto a shape wins over both the rules and the
+majority (the editor shows how many shapes it has been taught; **Forget
+taught shapes** clears them). Taught shapes are saved under
+`autopaint.taught` in the tileset settings.
+
+**Auto-tile** (the checkbox under the palette, on by default) does this
+as you edit: painting walls, floor, exits or doors repaints the art of
+the cells around your stroke (and the rest of a wall face it touches).
+One Undo takes back the stroke and its repaint.
+
 **Painting tiles:** double-click a tile in the editor's tileset (or use
 **Edit pixels**) to paint it pixel by pixel in the 4 Game Boy shades:
 pencil and fill, flip, rotate, shift, copy/paste between tiles, undo,

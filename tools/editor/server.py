@@ -89,6 +89,7 @@ def tileset_assets():
         "license": t.get("license", ""),
         "tiles": [[ts.variant(px, k) for k in range(5)] for px in t["tiles"]],
         "behaviour": {str(k): v for k, v in t["behaviour"].items()},
+        "autopaint": t.get("autopaint", {}),
     }
 
 
@@ -168,6 +169,8 @@ class Handler(BaseHTTPRequestHandler):
             if not errs and "behaviour" in req:   # tileset tile behaviours
                 ts.save_behaviour({int(k): v for k, v in req["behaviour"].items()
                                    if v in gen_levels.TILES})
+            if not errs and "taught" in req:      # shapes taught to auto-tile
+                ts.save_taught(req["taught"])
             return {"ok": not errs, "errors": errs}
         if path in ("/api/tileset/tile", "/api/tileset/add_row"):
             if path == "/api/tileset/tile":
@@ -182,8 +185,20 @@ class Handler(BaseHTTPRequestHandler):
             if regenerated:
                 gen_levels.write_c(saved)
             return {"tileset": tileset_assets(), "regenerated": regenerated}
-        if path == "/api/autopaint":
-            return {"art": autopaint.autopaint_rows(req["map"])}
+        if path in ("/api/autopaint", "/api/autotile"):
+            # learn the painted style from the levels open in the editor
+            cfg = dict(ts.load()["autopaint"])
+            if "taught" in req:                   # the editor's, maybe unsaved
+                cfg["taught"] = req["taught"]
+            # don't learn from the cells being repainted: their art is stale
+            li, mi = req.get("level", -1), req.get("map_index", -1)
+            skip = {(li, mi, x + dx, y + dy) for x, y in req.get("changed", [])
+                    for dx in (-2, -1, 0, 1, 2) for dy in (-2, -1, 0, 1, 2)}
+            learned = autopaint.learn(req.get("levels", []), cfg, skip)
+            if path == "/api/autopaint":
+                return {"art": ts.format_art(autopaint.autopaint(req["map"], cfg, learned))}
+            return {"art": autopaint.autotile(req["map"], req.get("art"),
+                                              [tuple(c) for c in req["changed"]], cfg, learned)}
         if path == "/api/build":
             p = subprocess.run(["make"], cwd=ROOT, capture_output=True, text=True,
                                timeout=600)

@@ -69,6 +69,14 @@ def load(path=DEFAULT):
     return cfg
 
 
+def save_taught(taught, path=DEFAULT):
+    """Write the shapes auto-tile was taught (autopaint.taught)."""
+    path = Path(path)
+    cfg = json.loads(path.read_text())
+    cfg.setdefault("autopaint", {})["taught"] = dict(sorted(taught.items()))
+    path.write_text(json.dumps(cfg, indent=2) + "\n")
+
+
 def save_behaviour(behaviour, path=DEFAULT):
     """Write the per-tile behaviour back into the settings file."""
     path = Path(path)

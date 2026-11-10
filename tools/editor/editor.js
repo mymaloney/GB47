@@ -84,6 +84,36 @@ function makeTile(px, transparent) {
 let artImgs = [];      // [tileset tile][variant] canvases
 let behaviour = {};    // tileset tile (string) -> map char painted with it
 let artTile = 0;       // selected tileset tile
+let taught = {};       // auto-tile: "<cell kind><open-neighbour bits>" -> tile you painted
+
+/* The shape of a cell, as tools/autopaint.py pattern(): its kind plus
+ * which of its 8 neighbours (N, NE, E, SE, S, SW, W, NW) are open. */
+function shapeKey(m, x, y) {
+  const open = (xx, yy) => yy >= 0 && yy < m.map.length && xx >= 0 && xx < m.map[0].length &&
+                           m.map[yy][xx] !== "#";
+  const dirs = [[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]];
+  let bits = 0;
+  dirs.forEach(([dx, dy], i) => { if (open(x + dx, y + dy)) bits |= 1 << i; });
+  const c = m.map[y][x] === "P" ? "." : m.map[y][x];
+  return c + bits;
+}
+
+/* Painting art by hand teaches auto-tile: this shape gets this tile. */
+function teach(m, x, y, n) {
+  const key = shapeKey(m, x, y);
+  const southOpen = y + 1 < m.map.length && m.map[y + 1][x] !== "#";
+  const face = A.tileset.autopaint.face || [];
+  taught[key] = m.map[y][x] === "#" && southOpen && face.includes(n) ? "face" : n;
+  updateTaughtInfo();
+}
+
+function updateTaughtInfo() {
+  const n = Object.keys(taught).length;
+  $("taught-info").textContent = n
+    ? `Auto-tile has been taught ${n} wall/floor shape${n === 1 ? "" : "s"} by your hand-painting.`
+    : "Paint a tile by hand to teach auto-tile what you want for that shape.";
+  $("taught-forget").hidden = !n;
+}
 
 /* Background tile image: built-in ids are >= 0; painted art comes from the
  * server and the edit view as -(1 + tile * 5 + variant). */
@@ -385,7 +415,7 @@ function drawRoute(g, i, selected) {
 
 // ------------------------------------------------------- edit history
 
-function snapshot() { return JSON.stringify({ levels, cur, behaviour }); }
+function snapshot() { return JSON.stringify({ levels, cur, behaviour, taught }); }
 
 function pushUndo() {
   undoStack.push(snapshot());
@@ -397,6 +427,7 @@ function restore(s) {
   const o = JSON.parse(s);
   levels = o.levels;
   if (o.behaviour) { behaviour = o.behaviour; drawTileset(); }
+  if (o.taught) { taught = o.taught; updateTaughtInfo(); }
   cur = Math.min(o.cur, levels.length - 1);
   curMap = Math.min(curMap, level().maps.length - 1);
   if (selGuard >= cmap().guards.length) selGuard = -1;
@@ -505,10 +536,18 @@ function addWaypoint(g, x, y) {
 
 function applyTool(x, y, e, first) {
   const lv = cmap();
-  if (tool.startsWith("art:")) return paintArt(x, y, parseInt(tool.slice(4), 10));
-  if (tool === "art-erase") return paintArt(x, y, null);
+  if (tool.startsWith("art:") || tool === "art-erase") {
+    const n = tool === "art-erase" ? null : parseInt(tool.slice(4), 10);
+    const did = paintArt(x, y, n);
+    if (did) teach(lv, x, y, n);
+    return did;
+  }
   const paint = tool.startsWith("tile:") ? tool.slice(5) : null;
-  if (paint) return setCell(x, y, paint);
+  if (paint) {
+    const did = setCell(x, y, paint);
+    if (did && stroke) (stroke.cells = stroke.cells || []).push([x, y]);
+    return did;
+  }
   if (tool === "start") return first ? setCell(x, y, "P") : false;
 
   if (tool === "guard") {
@@ -574,9 +613,21 @@ window.addEventListener("mouseup", () => {
     undoStack.push(stroke.before);
     redoStack = [];
     changed();
+    if (stroke.cells && $("autotile").checked) autoTile(stroke.cells);
   }
   stroke = null;
 });
+
+/* Repaint the art around cells whose behaviour just changed (part of the
+ * same undo step as the stroke). A map with no art gets painted whole. */
+async function autoTile(cells) {
+  const m = cmap(), lvIdx = cur, mapIdx = curMap;
+  const res = await api("/api/autotile", { levels, taught, level: lvIdx, map_index: mapIdx,
+                                           map: m.map, art: m.art || null, changed: cells });
+  if (res.error || lvIdx !== cur || mapIdx !== curMap) return;
+  m.art = res.art;
+  changed();
+}
 
 function hint(msg) { $("tool-hint").textContent = msg; }
 
@@ -916,6 +967,14 @@ const TS_SCALE = 3;
 function buildTileset() {
   const ts = A.tileset;
   behaviour = { ...ts.behaviour };
+  taught = { ...((ts.autopaint || {}).taught || {}) };
+  updateTaughtInfo();
+  $("taught-forget").addEventListener("click", () => {
+    pushUndo();
+    taught = {};
+    setDirty(true);
+    updateTaughtInfo();
+  });
   artImgs = ts.tiles.map((variants) => variants.map((px) => makeTile(px, false)));
   const c = $("tileset");
   const rows = Math.ceil(ts.tiles.length / ts.columns);
@@ -943,7 +1002,7 @@ function buildTileset() {
   $("show-behaviour").addEventListener("change", () => renderEdit());
   $("autopaint").addEventListener("click", async () => {
     const m = cmap();
-    const res = await api("/api/autopaint", { map: m.map });
+    const res = await api("/api/autopaint", { levels, taught, map: m.map });
     if (res.error) { hint(res.error); return; }
     pushUndo();
     m.art = res.art;
@@ -1585,7 +1644,7 @@ function deleteGuard() {
 }
 
 async function save() {
-  const res = await api("/api/save", { levels, behaviour });
+  const res = await api("/api/save", { levels, behaviour, taught });
   if (res.ok) {
     setDirty(false);
     $("save-state").textContent = "Saved to levels/levels.json and src/levels.c";
