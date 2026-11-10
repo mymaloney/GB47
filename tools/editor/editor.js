@@ -16,7 +16,11 @@ const TOOL_HINTS = {
   start: "Click to place the player's start.",
   guard: "Click an empty tile to add a guard (max 4), or click a guard to select it. Drag to move it.",
   route: "Click to add waypoints to the selected guard (corners are added for you). Drag a point to move it; right-click to remove it.",
+  npc: "Click a tile to add something to talk to (paint its look with the tileset), or click one to select it. Drag to move it.",
+  switch: "Click a tile to make it a switch cell: it changes (e.g. into the exit) when a script sets its flag. Click one to select it; drag to move it.",
 };
+const NPC_COLOR = "#00a6a6";
+const SWITCH_COLOR = "#f2b705";
 
 let A = null;                    // assets from /api/assets
 let levels = [];
@@ -26,6 +30,8 @@ let dirty = false;
 let mode = "edit";
 let tool = "tile:#";
 let selGuard = -1;
+let selNpc = -1;                 // selected NPC / switch cell of the map being edited
+let selSwitch = -1;
 let undoStack = [];
 let redoStack = [];
 let preview = null;              // {key, view} for the current level
@@ -176,6 +182,7 @@ function hudRows(lv, idx, v, ui) {
   else if (v.status === G.STATUS_WON) msg = "ESCAPED!   A:NEXT";
   else if (ui.mode === "aim") msg = "A:THROW B:BACK";
   else if (v.prompt.takedown) msg = "B:TAKEDOWN";
+  else if (v.prompt.talk) msg = "B:" + v.prompt.talk;
   else if (v.prompt.uniform) msg = "B:TAKE UNIFORM";
   else if (v.prompt.body_adjacent) msg = "HOLD B:DRAG";
   else if (ui.looking) msg = "LOOKING AROUND";
@@ -262,10 +269,48 @@ function renderEdit() {
     ctx.strokeRect(x * TILE + 1.5, y * TILE + 1.5, TILE - 3, TILE - 3);
   }
 
+  drawScripted(lv);
   drawLinkMarkers();
   if ($("show-behaviour").checked && lv.art) drawBehaviourLetters(lv);
   updateSizeInfo(lv);
   updateArtBudget(lv);
+}
+
+/* NPCs and switch cells. An NPC's look is whatever is painted on its cell,
+ * so it gets an outline and its prompt word. A switch cell shows what it
+ * turns into, faintly, inside a dashed outline: stairs that aren't there
+ * yet are still visible to the designer. */
+function drawScripted(lv) {
+  ctx.save();
+  ctx.font = `bold ${Math.max(8, TILE * 0.4)}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  (lv.switches || []).forEach((sw, i) => {
+    const def = A.tiles.find((t) => t.char === sw.on);
+    const img = sw.on_art !== null && sw.on_art !== undefined && artImgs[sw.on_art]
+      ? artImgs[sw.on_art][0] : def ? bkgTiles[def.tile] : null;
+    if (img) {
+      ctx.globalAlpha = 0.55;
+      ctx.drawImage(img, sw.x * TILE, sw.y * TILE, TILE, TILE);
+      ctx.globalAlpha = 1;
+    }
+    ctx.strokeStyle = SWITCH_COLOR;
+    ctx.lineWidth = i === selSwitch ? 3 : 2;
+    ctx.setLineDash([4, 3]);
+    ctx.strokeRect(sw.x * TILE + 1.5, sw.y * TILE + 1.5, TILE - 3, TILE - 3);
+    ctx.setLineDash([]);
+  });
+  (lv.npcs || []).forEach((n, i) => {
+    ctx.strokeStyle = NPC_COLOR;
+    ctx.lineWidth = i === selNpc ? 3 : 2;
+    ctx.strokeRect(n.x * TILE + 1.5, n.y * TILE + 1.5, TILE - 3, TILE - 3);
+    const w = ctx.measureText(n.verb).width + 4, h = Math.max(9, TILE * 0.45);
+    ctx.fillStyle = NPC_COLOR;
+    ctx.fillRect(n.x * TILE + TILE / 2 - w / 2, n.y * TILE - h, w, h);
+    ctx.fillStyle = "#fff";
+    ctx.textBaseline = "middle";
+    ctx.fillText(n.verb, n.x * TILE + TILE / 2, n.y * TILE - h / 2 + 0.5);
+  });
+  ctx.restore();
 }
 
 /* Painted art can hide what a cell does: label painted cells whose
@@ -565,6 +610,36 @@ function applyTool(x, y, e, first) {
     return moveDragged(x, y);
   }
 
+  if (tool === "npc" || tool === "switch") {
+    const isNpc = tool === "npc";
+    const key = isNpc ? "npcs" : "switches";
+    if (!first) return moveDragged(x, y);
+    const list = lv[key] || [];
+    const i = list.findIndex((d) => d.x === x && d.y === y);
+    if (i >= 0) {
+      if (isNpc) selNpc = i; else selSwitch = i;
+      stroke.drag = { thing: key, index: i };
+      renderScripting();
+      renderEdit();
+      return false;
+    }
+    const max = isNpc ? A.max_npcs : A.max_switches;
+    if (list.length >= max) { hint(`At most ${max} ${isNpc ? "NPCs" : "switch cells"} in a map.`); return false; }
+    if (isNpc) {
+      list.push({ x, y, verb: "TALK", blocks: "move", script: [{ say: "Hello." }] });
+      selNpc = list.length - 1;
+    } else {
+      // stairs that appear are the usual case: an exit, with the tileset's
+      // exit tile if this map is painted
+      const exitArt = lv.art && A.tileset.autopaint ? A.tileset.autopaint.exit : null;
+      list.push({ x, y, flag: levelFlags()[0] || "open", on: "E", on_art: exitArt ?? null });
+      selSwitch = list.length - 1;
+    }
+    lv[key] = list;
+    stroke.drag = { thing: key, index: list.length - 1 };
+    return true;
+  }
+
   if (tool === "route") {
     const g = lv.guards[selGuard];
     if (!g) { if (first) hint("Select a guard first (Guard tool, or click a guard chip)."); return false; }
@@ -582,6 +657,12 @@ function applyTool(x, y, e, first) {
 
 function moveDragged(x, y) {
   if (!stroke.drag) return false;
+  if (stroke.drag.thing) {                 // an NPC or a switch cell
+    const d = cmap()[stroke.drag.thing][stroke.drag.index];
+    if (d.x === x && d.y === y) return false;
+    d.x = x; d.y = y;
+    return true;
+  }
   const g = cmap().guards[stroke.drag.guard];
   const p = g.route[stroke.drag.point];
   if (p[0] === x && p[1] === y) return false;
@@ -623,7 +704,8 @@ window.addEventListener("mouseup", () => {
 async function autoTile(cells) {
   const m = cmap(), lvIdx = cur, mapIdx = curMap;
   const res = await api("/api/autotile", { levels, taught, level: lvIdx, map_index: mapIdx,
-                                           map: m.map, art: m.art || null, changed: cells });
+                                           map: m.map, art: m.art || null, changed: cells,
+                                           keep: scriptedCells(m) });
   if (res.error || lvIdx !== cur || mapIdx !== curMap) return;
   m.art = res.art;
   changed();
@@ -658,6 +740,7 @@ function renderAll() {
   renderLinks();
   renderProps();
   renderGuards();
+  renderScripting();
   if (mode === "edit") renderEdit();
 }
 
@@ -763,10 +846,176 @@ function renderGuards() {
   });
 }
 
+// ---- NPCs, their scripts, and switch cells
+
+/* Cells whose art auto-paint must leave alone (painted by hand). */
+const scriptedCells = (m) => [...(m.npcs || []), ...(m.switches || [])].map((d) => [d.x, d.y]);
+
+/* Every step of a script, including those inside "if" steps. */
+function* scriptSteps(script) {
+  for (const st of script || []) {
+    yield st;
+    if ("if" in st) { yield* scriptSteps(st.then); yield* scriptSteps(st.else); }
+  }
+}
+
+/* The level's flag names (tools/gen_levels.py level_flags). */
+function levelFlags() {
+  const names = [];
+  level().maps.forEach((m) => (m.switches || []).forEach((sw) => names.push(sw.flag)));
+  level().maps.forEach((m) => (m.npcs || []).forEach((n) => {
+    for (const st of scriptSteps(n.script))
+      for (const k of ["set", "clear", "if"]) if (k in st) names.push(st[k]);
+  }));
+  return [...new Set(names.filter((n) => typeof n === "string" && n))];
+}
+
+let scriptTyping = false;     // typing in one of these panels: don't rebuild it
+
+/* A change typed into a text box of these panels: one undo step per visit
+ * to the box, and the panel isn't rebuilt under the cursor (nor when the
+ * box loses the focus: that would eat the click that took it). */
+function typedField(el, apply) {
+  let fresh = true;
+  el.addEventListener("input", () => {
+    if (fresh) { pushUndo(); fresh = false; }
+    apply(el.value);
+    scriptTyping = true;
+    changed();
+    scriptTyping = false;
+  });
+  el.addEventListener("blur", () => { fresh = true; });
+}
+
+const STEP_KINDS = [["say", "Say"], ["set", "Set flag"], ["clear", "Clear flag"], ["if", "If flag"]];
+const stepKind = (st) => (STEP_KINDS.find(([k]) => k in st) || STEP_KINDS[0])[0];
+
+/* How a message will look in the Game Boy's box (asks the server, which
+ * wraps it exactly as the ROM's text is made). */
+async function showBox(text, box) {
+  const res = await api("/api/wrap", { text });
+  box.classList.toggle("problem", !!res.problem);
+  box.textContent = res.problem ? "Can't show this: " + res.problem + "." : res.lines.join("\n");
+}
+
+/* The editor for a list of steps (a script, or one branch of an "if"). */
+function scriptEditor(steps, depth = 0) {
+  const box = document.createElement("div");
+  const structural = (fn) => { pushUndo(); fn(); changed(); };
+  steps.forEach((st, i) => {
+    const kind = stepKind(st);
+    const row = document.createElement("div");
+    row.className = "step";
+    const sel = document.createElement("select");
+    STEP_KINDS.forEach(([k, label]) => (depth < 3 || k !== "if") && sel.add(new Option(label, k)));
+    sel.value = kind;
+    sel.addEventListener("change", () => structural(() => {
+      const flag = levelFlags()[0] || "open";
+      steps[i] = { say: { say: "..." }, set: { set: flag }, clear: { clear: flag },
+                   if: { if: flag, then: [], else: [] } }[sel.value];
+    }));
+    const arg = document.createElement("input");
+    arg.spellcheck = false;
+    arg.value = st[kind] ?? "";
+    if (kind === "say") arg.placeholder = "What it says";
+    else { arg.setAttribute("list", "flag-names"); arg.placeholder = "flag name"; }
+    const del = document.createElement("button");
+    del.textContent = "✕";
+    del.title = "Remove this step";
+    del.addEventListener("click", () => structural(() => steps.splice(i, 1)));
+    row.append(sel, arg, del);
+    if (kind === "say") {
+      const preview = document.createElement("div");
+      preview.className = "box";
+      row.appendChild(preview);
+      showBox(st.say, preview);
+      const later = debounce(showBox, 150);          // one timer per message
+      typedField(arg, (v) => { st.say = v; later(v, preview); });
+    } else {
+      typedField(arg, (v) => { st[kind] = v.trim(); });
+    }
+    box.appendChild(row);
+    if (kind === "if") {
+      for (const [key, label] of [["then", "then"], ["else", "otherwise"]]) {
+        st[key] = st[key] || [];
+        const br = document.createElement("div");
+        br.className = "branch";
+        br.innerHTML = `<div class="branch-label">${label}</div>`;
+        br.appendChild(scriptEditor(st[key], depth + 1));
+        box.appendChild(br);
+      }
+    }
+  });
+  const add = document.createElement("button");
+  add.className = "add";
+  add.textContent = "+ step";
+  add.addEventListener("click", () => structural(() => steps.push({ say: "..." })));
+  box.appendChild(add);
+  return box;
+}
+
+function renderScripting() {
+  const m = cmap();
+  const npcs = m.npcs || [], switches = m.switches || [];
+  if (selNpc >= npcs.length) selNpc = -1;
+  if (selSwitch >= switches.length) selSwitch = -1;
+  $("flag-names").innerHTML = "";
+  levelFlags().forEach((f) => $("flag-names").appendChild(new Option(f)));
+
+  const chips = (id, list, sel, label, pick, none) => {
+    const box = $(id);
+    box.innerHTML = "";
+    list.forEach((d, i) => {
+      const b = document.createElement("button");
+      b.className = "guard-chip" + (i === sel ? " active" : "");
+      b.textContent = label(d, i);
+      b.addEventListener("click", () => { pick(i); renderAll(); });
+      box.appendChild(b);
+    });
+    if (!list.length) box.innerHTML = `<span class="muted">${none}</span>`;
+  };
+  $("npc-count").textContent = `${npcs.length}/${A.max_npcs}`;
+  chips("npc-list", npcs, selNpc, (n) => `${n.verb} (${n.x},${n.y})`, (i) => { selNpc = i; },
+        "None yet: use the NPC tool (7).");
+  $("sw-count").textContent = `${switches.length}/${A.max_switches}`;
+  chips("sw-list", switches, selSwitch, (s) => `${s.flag} (${s.x},${s.y})`, (i) => { selSwitch = i; },
+        "None yet: use the Switch cell tool (8).");
+
+  if (scriptTyping) return;     // the lists above are enough while typing
+  const n = npcs[selNpc];
+  $("npc-props").hidden = !n;
+  if (n) {
+    if (document.activeElement !== $("n-verb")) $("n-verb").value = n.verb;
+    $("n-blocks").value = n.blocks || "move";
+    n.script = n.script || [];
+    $("n-script").replaceChildren(scriptEditor(n.script));
+  }
+  const sw = switches[selSwitch];
+  $("sw-props").hidden = !sw;
+  if (sw) {
+    if (document.activeElement !== $("s-flag")) $("s-flag").value = sw.flag;
+    $("s-on").value = sw.on;
+    $("s-art-info").textContent = sw.on_art === null || sw.on_art === undefined
+      ? "the built-in graphic" : `tileset tile ${sw.on_art}`;
+  }
+}
+
+function deleteScripted(key) {
+  const m = cmap();
+  const i = key === "npcs" ? selNpc : selSwitch;
+  if (!m[key] || i < 0) return;
+  pushUndo();
+  m[key].splice(i, 1);
+  if (!m[key].length) delete m[key];
+  if (key === "npcs") selNpc = -1; else selSwitch = -1;
+  changed();
+}
+
 function selectLevel(i) {
   cur = i;
   curMap = 0;
   selGuard = -1;
+  selNpc = selSwitch = -1;
   preview = null;
   if (mode === "play") enterEdit();
   changed(false);
@@ -807,7 +1056,7 @@ function renderMapTabs() {
     b.className = "tab" + (k === curMap ? " active" : "");
     b.textContent = `Map ${k + 1}`;
     b.title = `${mapW(m) / A.view_w}×${mapH(m) / A.view_h} screens` + (k === 0 ? "; the level starts here" : "");
-    b.addEventListener("click", () => { curMap = k; selGuard = -1; preview = null; changed(false); });
+    b.addEventListener("click", () => { curMap = k; selGuard = selNpc = selSwitch = -1; preview = null; changed(false); });
     box.appendChild(b);
   });
   const add = document.createElement("button");
@@ -929,7 +1178,8 @@ const checkLevel = debounce(async () => {
 
 // ------------------------------------------------------------- solving
 
-const NEED_NAMES = { items: "items", takedown: "a takedown", drag: "moving a body", uniform: "a disguise" };
+const NEED_NAMES = { items: "items", takedown: "a takedown", drag: "moving a body", uniform: "a disguise",
+                     talk: "talking to an NPC" };
 
 async function solve() {
   const out = $("solve-result");
@@ -1003,7 +1253,8 @@ function buildTileset() {
   $("show-behaviour").addEventListener("change", () => renderEdit());
   $("autopaint").addEventListener("click", async () => {
     const m = cmap();
-    const res = await api("/api/autopaint", { levels, taught, map: m.map });
+    const res = await api("/api/autopaint", { levels, taught, map: m.map, art: m.art || null,
+                                              keep: scriptedCells(m) });
     if (res.error) { hint(res.error); return; }
     pushUndo();
     m.art = res.art;
@@ -1311,7 +1562,8 @@ function renderPlay() {
     if (px <= -8 || px >= A.view_w * 8 || py <= -8 || py + 8 > A.view_h * 8) return;  // off screen / under HUD
     drawSprPx(t, px, py);
   };
-  if (ui.mode !== "inventory") {          // sprites are hidden while the inventory is open
+  $("play-flags").textContent = v.flags && v.flags.length ? "Flags set: " + v.flags.join(", ") : "";
+  if (ui.mode !== "inventory" && ui.mode !== "dialogue") {   // sprites are hidden while the window is up
     // lower sprite index = on top (player is sprite 0), so draw in reverse
     [...v.sprites].reverse().forEach((s) => {
       let t = s.t;
@@ -1326,6 +1578,7 @@ function renderPlay() {
   }
 
   if (ui.mode === "inventory") { drawInventory(); return; }
+  if (ui.mode === "dialogue") { drawDialogue(); return; }
   const [r1, r2] = hudRows(P.lv, P.idx, v, ui);
   r1.forEach((t, x) => drawBkgPx(t, x * 8, A.view_h * 8));
   r2.forEach((t, x) => drawBkgPx(t, x * 8, A.view_h * 8 + 8));
@@ -1350,6 +1603,17 @@ function drawInventory() {
   row(textRow([[1, "A:AIM  B:BACK"]]), top + rows - 1);
 }
 
+/* The message box (draw_dialogue in main.c): what an NPC said this turn. */
+function drawDialogue() {
+  const T = A.T;
+  const top = 18 - 5;
+  const row = (r, y) => r.forEach((t, x) => drawBkgPx(t, x * 8, y * 8));
+  const lines = P.said[P.ui.sayAt] || [];
+  row(new Array(20).fill(T.TILE_WIN_EDGE), top);
+  for (let i = 0; i < A.text_rows; i++) row(textRow([[1, lines[i] || ""]]), top + 1 + i);
+  row(textRow([[1, P.ui.sayAt + 1 < P.said.length ? "A:MORE" : "A:OK"]]), top + 4);
+}
+
 async function act(action, opts = {}) {
   const prev = P.state;
   const res = await api("/api/act", { level: P.lv, state: P.state, action,
@@ -1362,6 +1626,7 @@ async function act(action, opts = {}) {
   }
   P.state = res.state;
   P.view = res.view;
+  P.said = res.said || [];
   await followCamera();
   return true;
 }
@@ -1555,6 +1820,14 @@ async function onPlayKey(btn, dir) {
   const v = P.view;
   ui.msg = null;
 
+  if (ui.mode === "dialogue") {            // A or B: next message, or close
+    if (btn === "A" || btn === "B") {
+      ui.sayAt++;
+      if (ui.sayAt >= P.said.length) ui.mode = "play";
+    }
+    return;
+  }
+
   if (ui.mode === "inventory") {
     if (btn === "B" || btn === "SELECT") ui.mode = "play";
     else if (dir === 0) ui.item = nextItem(ui.item, -1);
@@ -1593,6 +1866,12 @@ async function onPlayKey(btn, dir) {
   if (v.status !== G.STATUS_PLAYING) return;
   if (btn === "B") {
     if (v.prompt.takedown) await doTakedown();
+    else if (v.prompt.talk) {
+      if (await act({ type: "step", code: G.ACT_TALK }) && P.said.length) {
+        ui.mode = "dialogue";
+        ui.sayAt = 0;
+      }
+    }
     else if (v.prompt.uniform) await act({ type: "step", code: G.ACT_UNIFORM });
     return;
   }
@@ -1700,7 +1979,7 @@ window.addEventListener("keydown", async (e) => {
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redoEdit(); return; }
-    const tools = { 4: "start", 5: "guard", 6: "route", 0: "art-erase" };
+    const tools = { 4: "start", 5: "guard", 6: "route", 7: "npc", 8: "switch", 0: "art-erase" };
     if (tools[e.key]) { setTool(tools[e.key]); return; }
     const tile = !e.ctrlKey && !e.metaKey &&
       A.tiles.find((x) => x.char !== "P" && tileKey(x.char) === e.key.toUpperCase().replace(/^([123])$/, "$1"));
@@ -1882,6 +2161,27 @@ function wire() {
     pushUndo(); const g = cmap().guards[selGuard]; g.route = [g.route[0]]; changed();
   });
   $("g-delete").addEventListener("click", deleteGuard);
+
+  // NPCs and switch cells
+  A.npc_blocks.forEach((b) => $("n-blocks").add(new Option(
+    { move: "walking (player and guards)", none: "nothing (walk over it)", all: "everything, like a wall" }[b] || b, b)));
+  A.tiles.filter((t) => t.char !== "P").forEach((t) =>
+    $("s-on").add(new Option(t.name[0].toUpperCase() + t.name.slice(1), t.char)));
+  const npc = () => (cmap().npcs || [])[selNpc];
+  const sw = () => (cmap().switches || [])[selSwitch];
+  const fontOnly = new RegExp(`[^${A.font_chars.replace(/[\]\\^-]/g, "\\$&")}]`, "g");
+  typedField($("n-verb"), (v) => {
+    const el = $("n-verb");
+    el.value = v.toUpperCase().replace(fontOnly, "").replace(/ /g, "").slice(0, A.verb_max);
+    if (npc()) npc().verb = el.value;
+  });
+  typedField($("s-flag"), (v) => { if (sw()) sw().flag = v.trim(); });
+  $("n-blocks").addEventListener("change", (e) => { pushUndo(); npc().blocks = e.target.value; changed(); });
+  $("s-on").addEventListener("change", (e) => { pushUndo(); sw().on = e.target.value; changed(); });
+  $("s-art-pick").addEventListener("click", () => { pushUndo(); sw().on_art = artTile; changed(); });
+  $("s-art-none").addEventListener("click", () => { pushUndo(); sw().on_art = null; changed(); });
+  $("n-delete").addEventListener("click", () => deleteScripted("npcs"));
+  $("s-delete").addEventListener("click", () => deleteScripted("switches"));
   $("map-delete").addEventListener("click", deleteMap);
   $("g-route-close").addEventListener("click", () => {
     const g = cmap().guards[selGuard];

@@ -26,6 +26,10 @@ stealth with social stealth (disguises, dialogue) and combat.
 - **Linked maps:** a level can be up to 4 maps joined at their edges
 - **Tileset painting:** paint a level's look from a tileset image
   (`tilesets/`), separately from what each cell does
+- **NPCs and scripts:** walk up to someone (or something) and press B to
+  talk; a message box shows what they say, and a small script can change
+  the level, like making the stairs appear. On level 3 you have to pet
+  the dog
 - **Level transitions:** finishing a level dips to black and back in the
   style chosen for that level: fade, wipe, curtain, iris (a circle closing
   on you), dissolve, diagonal wipe, blinds, interlace, or a plain cut
@@ -68,6 +72,20 @@ rules into `build/libgame.so`, starts a local server, and opens
   you, so legs stay straight. Drag a point to move it; right-click removes
   it. **Close loop** adds the corner needed to walk back to the start.
 - Per guard: facing, uniform, and attitude to each disguise.
+- **NPC** (`7`): click a tile to add something to talk to, click one to
+  select it, drag to move it. An NPC looks like whatever you paint on its
+  cell (it has no sprite of its own), so paint it with the tileset. Per
+  NPC: the prompt word (`PET` shows as `B:PET`), what it blocks, and its
+  script.
+- **Scripts** are a list of steps, run top to bottom when the player
+  talks: **Say** (with a live preview of the Game Boy's message box: 3
+  lines of 18 characters, upper case), **Set flag**, **Clear flag**, and
+  **If flag** with steps for "then" and "otherwise". Flags are names you
+  make up; a level can use 8, shared by all its maps.
+- **Switch cell** (`8`): a cell that turns into something else when a
+  flag is set, e.g. floor that becomes the exit. It is drawn with a dashed
+  outline and a faint picture of what it becomes. Per switch cell: the
+  flag, what it turns into, and the tileset tile it then shows.
 - Per level: name, design notes, and starting stones/bottles.
 - **Transition**: how the screen dips to black when the level is finished.
   Choosing one plays it on the picture (so does **Preview**), and finishing
@@ -101,7 +119,7 @@ Levels live in `levels/levels.json` (format documented at the top of
 |---|---|
 | D-pad | Move one tile (spends a turn); you can walk over bodies |
 | A | Wait one turn / next level after escaping (through the level's transition) |
-| B | Take down an adjacent guard (`B:TAKEDOWN`), or put on the uniform of the body you're standing on (`B:TAKE UNIFORM`) |
+| B | Take down an adjacent guard (`B:TAKEDOWN`), talk to an NPC next to you (`B:PET`, `B:TALK`, ...), or put on the uniform of the body you're standing on (`B:TAKE UNIFORM`). In a message box, A or B continues |
 | Hold B + D-pad | Drag a body behind you, or push one in front of you |
 | SELECT (tap) | Open inventory |
 | Hold SELECT + D-pad | Look at the neighbouring screens; let go to return |
@@ -324,9 +342,23 @@ levels 1-5 have no uniform and are enforcers to everything. Disguise
 types are `DISGUISE_*` in `src/game.h` (own clothes, GUARD, OFFICER).
 Cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and `HOSTILE_HALF`.
 
+### NPCs, scripts and switch cells
+
+Stand next to an NPC and the HUD shows its prompt (`B:PET`). Pressing B
+talks: its script runs, a message box shows what it says, and guards take
+their turn as after any other action. Talking isn't suspicious. An NPC
+can block walking (for you and for guards) or be walked over.
+
+Scripts set and clear the level's flags, and switch cells follow them at
+once. Undo takes flags back like everything else. In Playtest, the line
+under the keys shows which flags are set.
+
+Text is upper case for now: the font has only `0-9 A-Z : ! - . > ?`.
+
 ### Turn order
 
-1. Player moves, waits, throws, drags/pushes a body, or starts a takedown.
+1. Player moves, waits, throws, talks, drags/pushes a body, or starts a
+   takedown.
 2. If standing on the exit, the player escapes.
 3. If any guard sees the player, they're caught; if a guard sees a body or
    a takedown in progress, the alarm goes up.
@@ -363,11 +395,19 @@ make usage
 ```
 
 prints how full the ROM banks and RAM are (GBDK's `romusage`); CI prints
-it on every build. Levels currently live in the first 32 KB of the
-cartridge with the code, and that is now full: about 5.4 KB is left
-(only 88 bytes in bank 0), and WRAM has about 1.4 KB left. Level data
-moves into switchable ROM banks before the next feature (step 1 of
-`docs/dialogue-plan.md`).
+it on every build. The cartridge is MBC5 with 64 KB of ROM in four banks
+and 8 KB of RAM (`src/far.h` has the layout):
+
+| Bank | Holds | Free |
+|---|---|---|
+| 0 | the rules, GBDK | 3.4 KB |
+| 1 | `main.c`, built-in tiles, the level table, scripts and text | 6.4 KB |
+| 2 | map cells | 11.9 KB |
+| 3 | painted art | 13.7 KB |
+
+About 5.4 KB of the 8 KB of work RAM is free; the current map and the
+pathfinding arrays live in cartridge RAM. Emulators will write a `.sav`
+file next to the ROM (nothing is saved in it yet).
 
 ### Rule tests (no GBDK needed)
 
@@ -399,7 +439,8 @@ gives up after 2 million and reports "too big to tell".
 |---|---|
 | `src/game.c`, `game.h` | All game rules: turns, patrols, vision, undo. No hardware access, so it also compiles on a PC. |
 | `levels/levels.json` | **Level data** (source of truth): maps, guard routes, uniforms and attitudes, starting items. |
-| `src/levels.c`, `levels.h` | Generated from the JSON by `tools/gen_levels.py`. Don't edit. |
+| `src/levels.c`, `levels_maps.c`, `levels_art.c`, `levels.h` | Generated from the JSON by `tools/gen_levels.py`, one file per ROM bank. Don't edit. |
+| `src/far.c`, `far.h` | The ROM bank layout, and reading level data out of the data banks. |
 | `tools/editor/` | Level editor: `server.py` (local server), `game_lib.py` (Python bridge to the C rules), and the page. |
 | `tools/solver.c` | A* solver, shared by the tests and the editor. |
 | `tilesets/` | Tileset images and their settings (shade thresholds, tile behaviours). |
@@ -419,9 +460,9 @@ makes undo, the solver, and PC testing possible.
 2. ~~Distraction throwing~~, ~~takedowns and bodies~~, ~~disguises~~
 3. ~~Level editor~~
 4. **Write more levels and find out what makes them fun**
-5. **Next:** NPC dialogue and simple scripts. The first one is the dog on level 3; the plan is in
-   [`docs/dialogue-plan.md`](docs/dialogue-plan.md). Later: talking to guards changes their state
-   (sends them away, distracts them)
+5. ~~NPC dialogue and simple scripts~~ (the dog on level 3; how it was built is in
+   [`docs/dialogue-plan.md`](docs/dialogue-plan.md)). Later: more script steps (give an item,
+   send a guard somewhere), talking to guards, a lower-case font
 6. Title screen, save data (battery SRAM), music (hUGETracker)
 
 Introduce each new mechanic with its own teaching level, and let the

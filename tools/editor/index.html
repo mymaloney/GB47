@@ -48,6 +48,8 @@
         <button data-tool="start" title="Place player start (4)"><b>4</b> Start</button>
         <button data-tool="guard" title="Add a guard, or click one to select it (5)"><b>5</b> Guard</button>
         <button data-tool="route" title="Add waypoints to the selected guard; drag to move, right-click to remove (6)"><b>6</b> Route</button>
+        <button data-tool="npc" title="Add something to talk to, or click one to select it; drag to move (7)"><b>7</b> NPC</button>
+        <button data-tool="switch" title="Add a cell that changes when a flag is set (e.g. stairs that appear), or click one to select it (8)"><b>8</b> Switch cell</button>
       </div>
       <div class="toolbar palette" id="palette"><span class="toolbar-label">Paint</span></div>
       <label class="check autotile"><input type="checkbox" id="autotile" checked>
@@ -103,11 +105,12 @@
       <table class="keys">
         <tr><td><kbd>←↑↓→</kbd></td><td>D-pad: move (hold <kbd>X</kbd> to drag/push a body)</td></tr>
         <tr><td><kbd>Z</kbd></td><td>A: wait</td></tr>
-        <tr><td><kbd>X</kbd></td><td>B: takedown / take uniform; hold to drag</td></tr>
+        <tr><td><kbd>X</kbd></td><td>B: takedown / talk to an NPC / take uniform; hold to drag</td></tr>
         <tr><td><kbd>Shift</kbd></td><td>SELECT: tap for inventory; hold + arrows to look at other screens</td></tr>
         <tr><td><kbd>Enter</kbd></td><td>START: tap undo, hold restart</td></tr>
       </table>
       <p id="play-status" class="hint"></p>
+      <p id="play-flags" class="hint"></p>
     </div>
   </section>
 
@@ -148,6 +151,36 @@
         <button id="g-delete" class="danger">Delete guard</button>
       </div>
     </div>
+
+    <h2>NPCs <span id="npc-count" class="muted">(this map)</span></h2>
+    <div id="npc-list" class="guard-list"></div>
+    <div id="npc-props" class="guard-props" hidden>
+      <div class="two">
+        <label>Prompt <span class="muted">(B:…)</span>
+          <input id="n-verb" maxlength="8" spellcheck="false"></label>
+        <label>Blocks <select id="n-blocks"></select></label>
+      </div>
+      <div class="route-head">When talked to <span class="muted">(top to bottom; costs a turn)</span></div>
+      <div id="n-script" class="script"></div>
+      <div class="row-buttons"><button id="n-delete" class="danger">Delete NPC</button></div>
+    </div>
+
+    <h2>Switch cells <span id="sw-count" class="muted">(this map)</span></h2>
+    <div id="sw-list" class="guard-list"></div>
+    <div id="sw-props" class="guard-props" hidden>
+      <label>Changes when this flag is set
+        <input id="s-flag" list="flag-names" spellcheck="false"></label>
+      <label>Turns into <select id="s-on"></select></label>
+      <div class="route-head">Then looks like: <span id="s-art-info"></span></div>
+      <div class="row-buttons">
+        <button id="s-art-pick" title="Pick a tile in the tileset below the map first">Use the selected tileset tile</button>
+        <button id="s-art-none">Built-in look</button>
+        <button id="s-delete" class="danger">Delete</button>
+      </div>
+      <p class="hint">Until then the cell is whatever is painted there. A script's
+        "Set flag" step changes it.</p>
+    </div>
+    <datalist id="flag-names"></datalist>
 
     <h2>Check</h2>
     <ul id="errors" class="errors"></ul>

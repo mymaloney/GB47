@@ -206,6 +206,23 @@ def autotile(rows, art_rows, changed, cfg, learned=None):
     return ts.format_art(art)
 
 
+def scripted_cells(m):
+    """Cells with an NPC or a switch cell: their look is painted by hand
+    (the dog, the stairs that appear), so auto-paint leaves them alone."""
+    return [(d["x"], d["y"]) for key in ("npcs", "switches") for d in m.get(key, [])]
+
+
+def keep_art(new_rows, old_rows, cells):
+    """new_rows with the cells' art put back as it was in old_rows
+    (unpainted if there was no art)."""
+    rows = [list(r) for r in new_rows]
+    for x, y in cells:
+        if 0 <= y < len(rows) and 0 <= 2 * x < len(rows[y]):
+            old = old_rows[y][2 * x:2 * x + 2] if old_rows and y < len(old_rows) else ".."
+            rows[y][2 * x:2 * x + 2] = old if len(old) == 2 else ".."
+    return ["".join(r) for r in rows]
+
+
 def main():
     import gen_levels
     levels = gen_levels.load()
@@ -213,7 +230,8 @@ def main():
     learned = learn(levels, cfg["autopaint"])     # keep your painted style
     for lv in levels:
         for m in lv["maps"]:
-            m["art"] = autopaint_rows(m["map"], cfg, learned)
+            m["art"] = keep_art(autopaint_rows(m["map"], cfg, learned), m.get("art"),
+                                scripted_cells(m))
     errs = gen_levels.save(levels)
     if errs:
         print("\n".join(errs), file=sys.stderr)

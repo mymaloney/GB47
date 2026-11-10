@@ -197,3 +197,15 @@ dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); paddi
 /* level transition: the choice and its Preview button on one line */
 .trans-row { display: flex; gap: 6px; margin: 2px 0 8px; }
 .trans-row select { flex: 1; width: auto; }
+
+/* NPC scripts: a list of steps; "if" steps hold two more lists */
+.script { margin-top: 4px; font-size: 13px; }
+.script .step { display: grid; grid-template-columns: auto 1fr auto; gap: 4px; align-items: center; margin: 3px 0; }
+.script .step select { width: auto; }
+.script .step button, .script .add { padding: 0 6px; font-size: 12px; }
+.script .branch { margin: 2px 0 4px 10px; padding-left: 8px; border-left: 2px solid var(--border, #c9d2c5); }
+.script .branch-label { color: var(--muted); font-size: 12px; }
+.script .box { grid-column: 1 / -1; margin: 0 0 2px; padding: 4px 8px; white-space: pre; line-height: 1.15;
+  font: 12px ui-monospace, monospace; letter-spacing: 1px; background: #e0f8d0; color: #081820;
+  border-top: 2px solid #081820; border-radius: 2px; min-height: 3.6em; width: max-content; min-width: 19ch; }
+.script .box.problem { background: none; color: #b3261e; border-top: none; white-space: normal; min-height: 0; letter-spacing: 0; width: auto; }
