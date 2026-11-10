@@ -18,6 +18,9 @@ extern const char level_map7[];
 extern const char level_map8[];
 extern const char level_map9[];
 
+/* NPC scripts (OP_* in game.h). */
+static const uint8_t script2_0[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
+
 const LevelDef levels[LEVEL_COUNT] = {
     /* 1: FIRST STEPS - Learn that guards only move when you do. Follow one through. */
     {
@@ -33,6 +36,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_FADE,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 2: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
     {
@@ -49,6 +60,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_WIPE,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 3: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
     {
@@ -65,6 +84,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
+        1,
+        {
+            { 11, 5, BLOCK_PLAYER | BLOCK_GUARD, "PET", script2_0 },
+        },
+        1,
+        {
+            { 16, 13, 1, CELL_FLOOR, CELL_EXIT, 13 },   /* dog */
+        },
     },
     /* 4: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
     {
@@ -80,6 +107,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_DISSOLVE,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 5: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
     {
@@ -96,6 +131,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_CURTAIN,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 6: DRESS CODE - The hall sentry is hostile to your clothes (huge cone) but blind to his own uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
     {
@@ -113,6 +156,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_DIAGONAL,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 7: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
     {
@@ -130,6 +181,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_BLINDS,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 8: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
     {
@@ -146,6 +205,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_INTERLACE,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 9: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
     {
@@ -161,6 +228,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 10, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
     /* 9: ANNEX, map 2 */
     {
@@ -177,7 +252,21 @@ const LevelDef levels[LEVEL_COUNT] = {
         { 0, 0, 0, 9 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
+        0,
+        {
+            { 0, 0, 0, 0, 0 },
+        },
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
     },
+};
+
+/* What NPCs say (OP_SAY n shows level_text[n]); lines end in \n. */
+const char *const level_text[] = {
+    "THE DOG WAGS ITS\nTAIL.",
+    "YOU PET THE DOG.",
 };
 
 /* Painted art. The run-length data is in levels_art.c (ROM bank BANK_ART). */

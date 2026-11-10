@@ -12,5 +12,6 @@ extern const LevelDef levels[LEVEL_COUNT];
 /* 16 bytes per tile; in ROM bank BANK_ART (far.h): read with far_read */
 extern const uint8_t art_tile_data[];
 extern const MapArt *const level_art[LEVEL_COUNT];
+extern const char *const level_text[];        /* what NPCs say */
 
 #endif

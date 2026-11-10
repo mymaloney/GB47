@@ -16,6 +16,7 @@ static void blank_player(GameState *s)
     uint8_t k;
     for (k = 0; k < ITEM_TYPES; k++) s->items[k] = 0;
     s->disguise = 0;
+    s->flags    = 0;
     s->turn     = 0;
     s->px = s->py = 0;
     s->status = STATUS_PLAYING;
@@ -60,6 +61,7 @@ void world_load(const LevelDef *tbl, uint8_t first, World *w)
 void world_activate(const World *w)
 {
     game_use(&table[w->part_def[w->cur]]);
+    game_set_flags(w->part[w->cur].flags);
 }
 
 GameState *world_state(World *w)            { return &w->part[w->cur]; }
@@ -92,7 +94,7 @@ static uint8_t cross(World *w, uint8_t dir)
     if (tx < 0 || ty < 0 || tx >= nd->width || ty >= nd->height) return 0;
 
     n = &w->part[p];
-    game_use(nd);
+    game_use(nd);       /* (read with the player's flags, which come along) */
     if (game_blocks((uint8_t)tx, (uint8_t)ty, BLOCK_PLAYER) ||
         game_guard_at(n, (uint8_t)tx, (uint8_t)ty)) {
         game_use(def);
@@ -102,6 +104,7 @@ static uint8_t cross(World *w, uint8_t dir)
     /* carry the player's things over, then blank the map being left */
     for (k = 0; k < ITEM_TYPES; k++) n->items[k] = s->items[k];
     n->disguise = s->disguise;
+    n->flags    = s->flags;
     n->turn     = s->turn;
     blank_player(s);
 

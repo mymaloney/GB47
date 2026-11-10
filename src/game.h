@@ -46,7 +46,8 @@
 #define ACT_DRAG      5   /* ACT_DRAG + dir: move while pushing/dragging */
 #define ACT_TAKEDOWN  9   /* grab an adjacent guard */
 #define ACT_UNIFORM   10  /* put on the uniform of the body you stand on */
-#define ACT_COUNT     11
+#define ACT_TALK      11  /* talk to (pet, ...) an NPC next to you */
+#define ACT_COUNT     12
 
 /* Throwables. Stats live in item_defs[] (game.c), so items can differ
  * later (a louder bottle, a coin that rolls...). */
@@ -131,6 +132,46 @@ typedef struct {
     uint8_t x, y;
 } Point;
 
+/* ---- NPCs, scripts and switch cells ----
+ *
+ * An NPC is something that stands on a cell of a map and can be talked to
+ * (ACT_TALK from a neighbouring cell). Talking runs its script and costs
+ * a turn. A script is a few bytes of the ops below; it can show messages
+ * and set or clear the level's flags (GameState.flags, eight per level,
+ * shared by all its maps). A switch cell is one kind of cell while its
+ * flag is clear and another once it is set: that is how a script changes
+ * the map, e.g. makes the exit appear.
+ *
+ * In the map, a switch cell is the character '0' + its index in
+ * LevelDef.switches. */
+#define MAX_NPCS     4    /* per map */
+#define MAX_SWITCHES 8    /* per map */
+#define MAX_FLAGS    8    /* per level */
+#define MAX_SAID     4    /* messages one turn can show */
+
+#define OP_END   0        /* stop */
+#define OP_SAY   1        /* SAY n: show message n (the level table's text) */
+#define OP_SET   2        /* SET mask: set those flags */
+#define OP_CLEAR 3        /* CLEAR mask */
+#define OP_IF    4        /* IF mask, n: skip the next n bytes unless a flag in mask is set */
+#define OP_JUMP  5        /* JUMP n: skip the next n bytes */
+
+typedef struct {
+    uint8_t        x, y;
+    uint8_t        blocks;   /* BLOCK_* it adds to its cell */
+    const char    *verb;     /* HUD prompt, "PET" -> B:PET; max 8 chars */
+    const uint8_t *script;   /* OP_* bytes; 0 = can't be talked to */
+} NpcDef;
+
+typedef struct {
+    uint8_t x, y;
+    uint8_t flag;            /* mask in GameState.flags */
+    uint8_t off, on;         /* CELL_* while the flag is clear / set */
+    uint8_t on_art;          /* painted look once set: a local art tile
+                                (art.h), 0xFF = built-in graphic. While
+                                clear, the cell's own art is used. */
+} SwitchDef;
+
 /* ---- Static level data (lives in ROM) ---- */
 
 typedef struct {
@@ -168,6 +209,10 @@ typedef struct {
     /* TRANS_* (trans.h): how the screen dips to black when this level is
      * finished. Only looks, and only read from a level's first map. */
     uint8_t     transition;
+    uint8_t     npc_count;
+    NpcDef      npcs[MAX_NPCS];
+    uint8_t     switch_count;
+    SwitchDef   switches[MAX_SWITCHES];
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */
@@ -191,6 +236,8 @@ typedef struct {
     uint8_t  takedown_left;       /* turns left in a takedown, 0 = none */
     uint8_t  takedown_guard;      /* who is being taken down */
     uint8_t  disguise;            /* DISGUISE_* the player is wearing */
+    uint8_t  flags;               /* the level's script flags (carried
+                                     between its maps like the items) */
     Guard    guards[MAX_GUARDS];
 } GameState;
 
@@ -227,10 +274,26 @@ uint8_t game_guard_at(const GameState *s, uint8_t x, uint8_t y);
  *
  *   ACT_UNIFORM: standing on a body, swap into its uniform.
  *
+ *   ACT_TALK: next to an NPC, run its script (messages, flags). Costs a
+ *     turn like anything else; it isn't suspicious.
+ *
  * A guard that sees a body (or a takedown in progress) raises the alarm.
  * Takedowns, dragging, throwing and changing clothes are suspicious: even
  * guards blind to your disguise catch you doing them in their normal cone. */
 uint8_t game_step(GameState *s, uint8_t action);
+
+/* Index (in the map's npcs[]) of the NPC ACT_TALK would talk to, or 0xFF. */
+uint8_t game_talk_target(const GameState *s);
+
+/* The messages the last action showed, in order: game_said(i) for
+ * i < game_said_count() is a message number (see OP_SAY). */
+uint8_t game_said_count(void);
+uint8_t game_said(uint8_t i);
+
+/* Switch cells are read with these flags. Every action and world_activate
+ * set them from the state they are given; call this before asking about
+ * the map (game_cell, game_blocks, vision...) for any other state. */
+void game_set_flags(uint8_t flags);
 
 /* Index of the guard a takedown would grab, or 0xFF if none. */
 uint8_t game_takedown_target(const GameState *s);

@@ -119,6 +119,8 @@ def analyze(level):
     if guards:
         checks.append(("takedown", G["SOLVE_USE_TAKEDOWN"]))
         checks.append(("drag", G["SOLVE_USE_DRAG"]))
+    if any(m.get("npcs") for m in level.maps):
+        checks.append(("talk", G["SOLVE_USE_TALK"]))
     if any(gd.get("uniform", "none") != "none" for gd in guards):
         checks.append(("uniform", G["SOLVE_USE_UNIFORM"]))
     for name, bit in checks:
@@ -241,7 +243,8 @@ class Handler(BaseHTTPRequestHandler):
                 ok = g.throw(level, s, a["item"], a["x"], a["y"])
             else:
                 ok = g.step(level, s, a["code"])
-            return {"ok": ok, "state": g.encode(s), "view": g.view(level, s, aim)}
+            told = g.said(level) if ok else []
+            return {"ok": ok, "state": g.encode(s), "view": g.view(level, s, aim), "said": told}
         if path == "/api/solve":
             return analyze(level)
         return {"error": "unknown endpoint"}

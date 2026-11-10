@@ -156,18 +156,31 @@ int solver_run(const LevelDef *tbl, uint8_t first, int use, SolveStep *steps,
     for (f = 0; f < MAX_F; f++) bucket_head[f] = bucket_tail[f] = -1;
     entries = 0;
 
-    /* exits in every map of the level */
+    /* exits in every map of the level, counting ones a switch cell can
+     * turn into (the distance estimate must never be too long). Flags are
+     * only set by talking, so without it switch cells stay as they are. */
     exit_count = 0;
     for (p = 0; p < start.part_count; p++) {
-        game_use(&tbl[start.part_def[p]]);
+        const LevelDef *def = &tbl[start.part_def[p]];
+        game_use(def);
+        game_set_flags(0);
         for (y = 0; y < game_height(); y++)
-            for (x = 0; x < game_width(); x++)
-                if (game_cell((uint8_t)x, (uint8_t)y) == CELL_EXIT && exit_count < MAX_EXITS) {
+            for (x = 0; x < game_width(); x++) {
+                int is_exit = game_cell((uint8_t)x, (uint8_t)y) == CELL_EXIT;
+                for (i = 0; (use & SOLVE_USE_TALK) && i < def->switch_count; i++)
+                    if (def->switches[i].x == x && def->switches[i].y == y &&
+                        def->switches[i].on == CELL_EXIT) is_exit = 1;
+                if (is_exit && exit_count < MAX_EXITS) {
                     exit_part[exit_count] = (uint8_t)p;
                     exit_x[exit_count] = (uint8_t)x;
                     exit_y[exit_count] = (uint8_t)y;
                     exit_count++;
                 }
+            }
+    }
+    if (exit_count == 0) {          /* nowhere to escape to: no need to search */
+        if (states) *states = 0;
+        return 0;
     }
     compute_beyond(tbl, &start);
     world_activate(&start);
@@ -202,6 +215,7 @@ int solver_run(const LevelDef *tbl, uint8_t first, int use, SolveStep *steps,
                 if (a >= ACT_DRAG && a < ACT_DRAG + 4 && !(use & SOLVE_USE_DRAG)) continue;
                 if (a == ACT_TAKEDOWN && !(use & SOLVE_USE_TAKEDOWN)) continue;
                 if (a == ACT_UNIFORM && !(use & SOLVE_USE_UNIFORM)) continue;
+                if (a == ACT_TALK && !(use & SOLVE_USE_TALK)) continue;
                 cand[ncand].action = (uint8_t)a;
                 cand[ncand].tx = cand[ncand].ty = 0;
                 ncand++;
@@ -292,6 +306,8 @@ void solver_format(const SolveStep *steps, int len, char *out, int outlen)
             n = snprintf(out + pos, outlen - pos, " TAKEDOWN ");
         else if (st->action == ACT_UNIFORM)
             n = snprintf(out + pos, outlen - pos, " UNIFORM ");
+        else if (st->action == ACT_TALK)
+            n = snprintf(out + pos, outlen - pos, " TALK ");
         else
             n = snprintf(out + pos, outlen - pos, "%c", "URDLW"[st->action]);
         if (n < 0) break;

@@ -12,7 +12,8 @@
 #define SOLVE_USE_DRAG     2
 #define SOLVE_USE_UNIFORM  4
 #define SOLVE_USE_ITEMS    8
-#define SOLVE_USE_ALL      15
+#define SOLVE_USE_TALK     16
+#define SOLVE_USE_ALL      31
 
 /* Longest throw the solver tries. item_defs[].range must not exceed it
  * (checked by tests/test_game.c). */
@@ -34,7 +35,7 @@ int solver_run(const LevelDef *table, uint8_t first, int use, SolveStep *steps,
                int max_steps, int *states);
 
 /* Text form: U R D L W moves/wait, u r d l drag/push, TAKEDOWN, UNIFORM,
- * and e.g. S8,6 = stone thrown at (8,6), B = bottle. */
+ * TALK, and e.g. S8,6 = stone thrown at (8,6), B = bottle. */
 void solver_format(const SolveStep *steps, int len, char *out, int outlen);
 
 #endif
