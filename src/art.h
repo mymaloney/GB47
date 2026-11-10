@@ -29,6 +29,7 @@ typedef struct {
     uint8_t         count;   /* local tiles */
     const uint8_t  *tiles;   /* tileset tile for each (index into art_tile_data) */
     const uint8_t  *kinds;   /* VRAM slots each needs: 1, 3 or 5 */
+    /* these two are in ROM bank BANK_ART (far.h): read them with art_row */
     const uint8_t  *rle;     /* (run, local tile) pairs, row after row */
     const uint16_t *rows;    /* where each row starts in rle */
 } MapArt;

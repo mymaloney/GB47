@@ -22,6 +22,8 @@
  * is 32x32 tiles and wraps, so the current screen is drawn into it at
  * world position modulo 32. The HUD lives in the window layer.
  */
+#pragma bank 1     /* see far.h for what lives where */
+
 #include <gb/gb.h>
 #include <stdint.h>
 
@@ -29,6 +31,7 @@
 #include "world.h"
 #include "art.h"
 #include "trans.h"
+#include "far.h"
 #include "levels.h"
 #include "tiles.h"
 
@@ -449,8 +452,7 @@ static void select_released(void)
  * cones and aiming) into VRAM after the built-in tiles. */
 static void load_art(void)
 {
-    uint8_t k, slot = ART_SLOT0, v, buf[16], was_on = LCDC_REG & LCDCF_ON;
-    const uint8_t *src;
+    uint8_t k, slot = ART_SLOT0, v, src[16], buf[16], was_on = LCDC_REG & LCDCF_ON;
 
     art_map = world.part_def[world.cur];
     art = level_art[art_map];
@@ -461,7 +463,7 @@ static void load_art(void)
     if (was_on) DISPLAY_OFF;
     for (k = 0; k < art->count; k++) {
         art_slot[k] = slot;
-        src = art_tile_data + (uint16_t)art->tiles[k] * 16;
+        far_read(BANK_ART, src, art_tile_data + (uint16_t)art->tiles[k] * 16, 16);
         for (v = 0; v < art->kinds[k]; v++) {
             art_variant(src, v, buf);
             set_bkg_data(slot++, 1, buf);
@@ -835,6 +837,8 @@ void main(void)
     uint8_t keys, prev = 0, pressed, released;
 
     DISPLAY_OFF;
+    ENABLE_RAM;        /* the rules keep the current map in cartridge RAM */
+    SWITCH_RAM(0);
     BGP_REG  = PAL_NORMAL;
     OBP0_REG = PAL_NORMAL;
     set_bkg_data(0, BKG_TILE_COUNT, bkg_tile_data);

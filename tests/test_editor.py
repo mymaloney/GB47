@@ -23,10 +23,9 @@ levels = gen_levels.load()
 assert not gen_levels.validate_all(levels), gen_levels.validate_all(levels)
 
 # generated C must match the committed files
-assert gen_levels.generate_c(levels) == (ROOT / "src" / "levels.c").read_text(), \
-    "src/levels.c is out of date: run make levels"
-assert gen_levels.generate_h(levels) == (ROOT / "src" / "levels.h").read_text(), \
-    "src/levels.h is out of date: run make levels"
+for fname, text in gen_levels.generated_files(levels).items():
+    assert text == (ROOT / "src" / fname).read_text(), \
+        f"src/{fname} is out of date: run make levels"
 
 def with_map(lv, rows, k=0):
     """Copy of a level with map k's rows replaced."""

@@ -149,7 +149,9 @@ typedef struct {
     uint8_t     width;       /* a multiple of VIEW_W, up to MAP_MAX_W */
     uint8_t     height;      /* a multiple of VIEW_H, up to MAP_MAX_H */
     /* width * height chars, row after row:
-     * '#' wall, '.' floor, 'E' exit, 'P' player start */
+     * '#' wall, '.' floor, 'E' exit, 'P' player start.
+     * On the Game Boy this is in ROM bank BANK_MAPS (far.h): only
+     * game_use reads it. */
     const char *map;
     uint8_t     guard_count;
     GuardDef    guards[MAX_GUARDS];

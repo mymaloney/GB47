@@ -19,6 +19,7 @@
  */
 #include <string.h>
 #include "game.h"
+#include "far.h"
 
 const ItemDef item_defs[ITEM_TYPES] = {
     /* name      range noise */
@@ -26,8 +27,28 @@ const ItemDef item_defs[ITEM_TYPES] = {
     { "BOTTLE",  6,    6 },
 };
 
-/* The map is read straight from the level data in ROM; row_start[y] is
- * y * width, so a tile lookup needs no multiply (slow on the Game Boy). */
+/* On the Game Boy the map's cells are in a ROM bank that isn't normally
+ * mapped (far.h), so game_use copies the current map into cartridge RAM
+ * and the rules read that. The pathfinding arrays live there too: work
+ * RAM has no room for any of them. On a PC, cells points straight at the
+ * level data. row_start[y] is y * width, so a tile lookup needs no
+ * multiply (slow on the Game Boy). */
+#define NO_PATH    0xFF
+#define QUEUE_SIZE 1024   /* ring buffer; holds the BFS frontier only */
+
+#ifdef __SDCC
+static char    __at(0xA000) map_copy[MAP_MAX_CELLS];
+static uint8_t __at(0xA800) dist[MAP_MAX_CELLS];      /* dist[row_start[y] + x] */
+static uint8_t __at(0xB000) queue_x[QUEUE_SIZE];
+static uint8_t __at(0xB400) queue_y[QUEUE_SIZE];
+#define cells map_copy
+#else
+static const char *cells;
+static uint8_t dist[MAP_MAX_CELLS];
+static uint8_t queue_x[QUEUE_SIZE];
+static uint8_t queue_y[QUEUE_SIZE];
+#endif
+
 static const LevelDef *level;
 static uint8_t         map_w, map_h;
 static uint16_t        row_start[MAP_MAX_H];
@@ -44,11 +65,17 @@ void game_use(const LevelDef *lvl)
     uint8_t  y;
     uint16_t at = 0;
 
-    if (lvl != level) game_map_changed();
-    level = lvl;
     map_w = lvl->width;
     map_h = lvl->height;
     for (y = 0; y < map_h; y++, at += map_w) row_start[y] = at;
+#ifdef __SDCC
+    /* ROM never changes, so the copy is only needed for a different map */
+    if (lvl != level) far_read(BANK_MAPS, map_copy, lvl->map, at);
+#else
+    cells = lvl->map;
+#endif
+    if (lvl != level) game_map_changed();
+    level = lvl;
 }
 
 void game_load(const LevelDef *lvl, GameState *s)
@@ -65,7 +92,7 @@ void game_load(const LevelDef *lvl, GameState *s)
 
     for (y = 0; y < map_h; y++)
         for (x = 0; x < map_w; x++, at++)
-            if (lvl->map[at] == 'P') {
+            if (cells[at] == 'P') {
                 s->px = x;
                 s->py = y;
             }
@@ -101,7 +128,7 @@ const uint8_t cell_blocks[CELL_TYPES] = {
 uint8_t game_cell(uint8_t x, uint8_t y)
 {
     if (x >= map_w || y >= map_h) return CELL_WALL;
-    switch (level->map[row_start[y] + x]) {
+    switch (cells[row_start[y] + x]) {
     case '#': return CELL_WALL;
     case 'E': return CELL_EXIT;
     case 'D': return CELL_DOOR;
@@ -295,14 +322,8 @@ static uint8_t body_spotted(const GameState *s)
 /* Pathfinding: breadth-first distances from one tile                  */
 /* ------------------------------------------------------------------ */
 
-#define NO_PATH 0xFF
-#define QUEUE_SIZE 1024   /* ring buffer; holds the BFS frontier only */
-
 #define NO_TARGET 0xFF    /* dist_x when dist[] holds nothing usable */
 
-static uint8_t dist[MAP_MAX_CELLS];   /* dist[row_start[y] + x] */
-static uint8_t queue_x[QUEUE_SIZE];
-static uint8_t queue_y[QUEUE_SIZE];
 static uint8_t dist_x = NO_TARGET, dist_y;   /* the tile dist[] was filled for */
 
 #define DIST(x, y) dist[row_start[y] + (x)]
