@@ -61,6 +61,8 @@
         <canvas id="tileset" aria-label="Tileset: click a tile to paint with it"></canvas>
         <div class="art-tile-row">
           <span id="art-tile-info" class="muted"></span>
+          <button id="tile-edit" title="Paint this tile's pixels (or double-click a tile)">Edit pixels</button>
+          <button id="tile-add-row" title="Add a row of 16 blank tiles to the tileset">+ 16 blank tiles</button>
           <label class="inline">When painted, set behaviour to
             <select id="art-behaviour"></select></label>
         </div>
@@ -146,6 +148,50 @@
     <div id="solve-result" class="solve-result"></div>
   </aside>
 </main>
+
+<dialog id="tile-dialog" class="tile-dialog">
+  <h2 id="tile-title">Edit tile</h2>
+  <div class="tile-editor">
+    <canvas id="tile-canvas" width="256" height="256" aria-label="Tile pixels: click or drag to paint"></canvas>
+    <div class="tile-side">
+      <div class="shade-row" id="shade-row" aria-label="Shade"></div>
+      <div class="toolbar">
+        <button data-ptool="pencil" class="active" title="Draw pixels (P)">Pencil</button>
+        <button data-ptool="fill" title="Fill an area of one shade (F)">Fill</button>
+      </div>
+      <div class="toolbar">
+        <button data-op="fliph" title="Flip left-right">Flip ↔</button>
+        <button data-op="flipv" title="Flip up-down">Flip ↕</button>
+        <button data-op="rot" title="Rotate clockwise">Rotate ⟳</button>
+      </div>
+      <div class="toolbar">
+        <button data-op="left" title="Shift left (wraps)">←</button>
+        <button data-op="right" title="Shift right (wraps)">→</button>
+        <button data-op="up" title="Shift up (wraps)">↑</button>
+        <button data-op="down" title="Shift down (wraps)">↓</button>
+        <button data-op="clear" title="Clear to the lightest shade">Clear</button>
+      </div>
+      <div class="toolbar">
+        <button data-op="copy" title="Copy this tile (Ctrl+C)">Copy</button>
+        <button data-op="paste" title="Paste a copied tile (Ctrl+V)">Paste</button>
+        <button data-op="undo" title="Undo (Ctrl+Z)">Undo</button>
+        <button data-op="redo" title="Redo (Ctrl+Shift+Z)">Redo</button>
+      </div>
+      <div class="tile-previews">
+        <figure><canvas id="tile-prev1" width="24" height="24"></canvas><figcaption>In game</figcaption></figure>
+        <figure><canvas id="tile-prev3" width="72" height="72"></canvas><figcaption>Tiled 3×3</figcaption></figure>
+        <figure><canvas id="tile-prevseen" width="72" height="72"></canvas><figcaption>In a guard's view</figcaption></figure>
+      </div>
+      <p class="hint">Left-click paints the chosen shade, right-click the lightest
+        (the lightest shows the floor through). Keys 1-4 pick a shade.</p>
+    </div>
+  </div>
+  <div class="row-buttons">
+    <button id="tile-save" class="primary">Save tile</button>
+    <button id="tile-cancel">Cancel</button>
+    <span id="tile-status" class="hint"></span>
+  </div>
+</dialog>
 
 <dialog id="build-dialog">
   <h2>Build ROM</h2>

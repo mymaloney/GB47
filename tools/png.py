@@ -91,3 +91,21 @@ def read_png(path):
             out.append((r, g, b, a))
         pixels.append(out)
     return w, h, pixels
+
+
+def write_png(path, width, height, pixels):
+    """Write rows of (r, g, b, a) as an 8-bit RGBA PNG."""
+    def chunk(kind, body):
+        return (struct.pack(">I", len(body)) + kind + body +
+                struct.pack(">I", zlib.crc32(kind + body) & 0xFFFFFFFF))
+    raw = bytearray()
+    for row in pixels:
+        raw.append(0)                       # no filter
+        for r, g, b, a in row:
+            raw += bytes((r, g, b, a))
+    data = (b"\x89PNG\r\n\x1a\n" +
+            chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 6, 0, 0, 0)) +
+            chunk(b"IDAT", zlib.compress(bytes(raw), 9)) +
+            chunk(b"IEND", b""))
+    with open(path, "wb") as f:
+        f.write(data)

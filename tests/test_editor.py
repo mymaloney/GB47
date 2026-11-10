@@ -166,6 +166,24 @@ greedy["maps"][0]["art"] = ts.format_art(
     [[(y * 20 + x) % 100 for x in range(20)] for y in range(16)])
 assert any("tile slots" in e for e in gen_levels.validate_level(greedy))
 
+# tile painter: saving a tile round-trips exactly through the PNG, leaves
+# other tiles alone, and adding a row keeps existing numbers (on a copy)
+import random   # noqa: E402
+import shutil   # noqa: E402
+import tempfile   # noqa: E402
+with tempfile.TemporaryDirectory() as tmp:
+    for f in ("dungeon.json", "dungeon.png"):
+        shutil.copy(ROOT / "tilesets" / f, tmp)
+    copy = Path(tmp) / "dungeon.json"
+    before = ts.load(copy)["tiles"]
+    pattern = [random.randrange(4) for _ in range(64)]
+    ts.set_tile(7, pattern, copy)
+    after = ts.load(copy)["tiles"]
+    assert after[7] == pattern and all(after[i] == before[i] for i in range(len(before)) if i != 7)
+    ts.add_row(copy)
+    grown = ts.load(copy)["tiles"]
+    assert len(grown) == len(before) + 16 and grown[7] == pattern and not any(map(any, grown[-16:]))
+
 # auto-paint: the wall rules, checked against a hand-painted level 1
 import autopaint   # noqa: E402
 ap = autopaint.autopaint(first_rows, tset["autopaint"])

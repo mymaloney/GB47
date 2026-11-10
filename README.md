@@ -170,6 +170,15 @@ Floor becomes tile 87, exits stairs (52), doors and one-tile gaps in a
 horizontal wall a door (36; a gap keeps behaving as floor), vents a grate
 (18). The tile numbers are under `autopaint` in the tileset settings.
 
+**Painting tiles:** double-click a tile in the editor's tileset (or use
+**Edit pixels**) to paint it pixel by pixel in the 4 Game Boy shades:
+pencil and fill, flip, rotate, shift, copy/paste between tiles, undo,
+with previews of the tile in game, repeated 3×3, and inside a guard's
+view. The lightest shade shows the floor through. **Save tile** writes it
+into the tileset PNG (as greys that convert back to exactly those shades;
+the tile's original colours are replaced) and regenerates `src/levels.c`.
+**+ 16 blank tiles** adds a row to the sheet without renumbering anything.
+
 To use your own tileset, put the PNG in `tilesets/` and point `image` in
 `tilesets/dungeon.json` at it. Keep the same tile positions, or repaint,
 since levels refer to tiles by number.

@@ -922,11 +922,12 @@ function buildTileset() {
   c.width = ts.columns * 8 * TS_SCALE;
   c.height = rows * 8 * TS_SCALE;
   c.addEventListener("click", (e) => {
+    const t = A.tileset;                       // may have grown since
     const r = c.getBoundingClientRect();
-    const x = Math.floor((e.clientX - r.left) / (r.width / ts.columns));
-    const y = Math.floor((e.clientY - r.top) / (r.height / rows));
-    const n = y * ts.columns + x;
-    if (n < ts.tiles.length) setTool("art:" + n);
+    const x = Math.floor((e.clientX - r.left) / (r.width / t.columns));
+    const y = Math.floor((e.clientY - r.top) / (r.height / Math.ceil(t.tiles.length / t.columns)));
+    const n = y * t.columns + x;
+    if (n < t.tiles.length) setTool("art:" + n);
   });
   const sel = $("art-behaviour");
   sel.add(new Option("nothing (look only)", ""));
@@ -979,6 +980,182 @@ function drawTileset() {
   }
   $("art-tile-info").textContent = `Tile ${artTile}`;
   $("art-behaviour").value = behaviour[String(artTile)] || "";
+}
+
+// ---------------------------------------------------------- tile painter
+
+const TP = { index: 0, px: [], shade: 3, tool: "pencil", undo: [], redo: [], clip: null,
+             drawing: false, stroke: null };
+
+function tpOpen(n) {
+  TP.index = n;
+  TP.px = [...A.tileset.tiles[n][0]];
+  TP.undo = [];
+  TP.redo = [];
+  $("tile-title").textContent = `Edit tile ${n}`;
+  $("tile-status").textContent = "";
+  tpRender();
+  $("tile-dialog").showModal();
+}
+
+function tpPush() {
+  TP.undo.push([...TP.px]);
+  if (TP.undo.length > 200) TP.undo.shift();
+  TP.redo = [];
+}
+
+function tpRender() {
+  const c = $("tile-canvas"), g = c.getContext("2d");
+  const s = c.width / 8;
+  TP.px.forEach((v, i) => {
+    g.fillStyle = PALETTE[v];
+    g.fillRect((i % 8) * s, Math.floor(i / 8) * s, s, s);
+  });
+  g.strokeStyle = "rgba(0, 0, 0, 0.18)";
+  g.lineWidth = 1;
+  for (let k = 1; k < 8; k++) {
+    g.beginPath(); g.moveTo(k * s + 0.5, 0); g.lineTo(k * s + 0.5, c.height); g.stroke();
+    g.beginPath(); g.moveTo(0, k * s + 0.5); g.lineTo(c.width, k * s + 0.5); g.stroke();
+  }
+  const tile = makeTile(TP.px, false);
+  const seen = makeTile(TP.px.map((v) => (v === 0 ? 1 : v)), false);   // cone: lightest -> light grey
+  const draw = (id, img, n) => {
+    const cv = $(id), gg = cv.getContext("2d");
+    gg.imageSmoothingEnabled = false;
+    const t = cv.width / n;
+    for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) gg.drawImage(img, x * t, y * t, t, t);
+  };
+  draw("tile-prev1", tile, 1);
+  draw("tile-prev3", tile, 3);
+  draw("tile-prevseen", seen, 3);
+  document.querySelectorAll("#shade-row button").forEach((b) =>
+    b.classList.toggle("active", Number(b.dataset.shade) === TP.shade));
+  document.querySelectorAll("[data-ptool]").forEach((b) =>
+    b.classList.toggle("active", b.dataset.ptool === TP.tool));
+}
+
+function tpPixelAt(e) {
+  const r = $("tile-canvas").getBoundingClientRect();
+  const x = Math.floor((e.clientX - r.left) / (r.width / 8));
+  const y = Math.floor((e.clientY - r.top) / (r.height / 8));
+  return x >= 0 && y >= 0 && x < 8 && y < 8 ? y * 8 + x : -1;
+}
+
+function tpFill(i, shade) {
+  const from = TP.px[i];
+  if (from === shade) return;
+  const todo = [i];
+  while (todo.length) {
+    const k = todo.pop();
+    if (TP.px[k] !== from) continue;
+    TP.px[k] = shade;
+    const x = k % 8, y = Math.floor(k / 8);
+    if (x > 0) todo.push(k - 1);
+    if (x < 7) todo.push(k + 1);
+    if (y > 0) todo.push(k - 8);
+    if (y < 7) todo.push(k + 8);
+  }
+}
+
+function tpOp(op) {
+  const p = TP.px, at = (x, y) => p[y * 8 + x];
+  const remap = (f) => { tpPush(); TP.px = [...Array(64)].map((_, i) => f(i % 8, Math.floor(i / 8))); };
+  if (op === "fliph") remap((x, y) => at(7 - x, y));
+  else if (op === "flipv") remap((x, y) => at(x, 7 - y));
+  else if (op === "rot") remap((x, y) => at(y, 7 - x));
+  else if (op === "left") remap((x, y) => at((x + 1) % 8, y));
+  else if (op === "right") remap((x, y) => at((x + 7) % 8, y));
+  else if (op === "up") remap((x, y) => at(x, (y + 1) % 8));
+  else if (op === "down") remap((x, y) => at(x, (y + 7) % 8));
+  else if (op === "clear") remap(() => 0);
+  else if (op === "copy") { TP.clip = [...p]; $("tile-status").textContent = "Copied."; }
+  else if (op === "paste" && TP.clip) { tpPush(); TP.px = [...TP.clip]; }
+  else if (op === "undo" && TP.undo.length) { TP.redo.push([...p]); TP.px = TP.undo.pop(); }
+  else if (op === "redo" && TP.redo.length) { TP.undo.push([...p]); TP.px = TP.redo.pop(); }
+  tpRender();
+}
+
+/* Apply a new tileset from the server: tile images, panel, map views. */
+function tilesetUpdated(tset) {
+  A.tileset = tset;
+  artImgs = tset.tiles.map((variants) => variants.map((px) => makeTile(px, false)));
+  const c = $("tileset");
+  c.height = Math.ceil(tset.tiles.length / tset.columns) * 8 * TS_SCALE;
+  drawTileset();
+  preview = null;
+  if (mode === "edit") renderEdit();
+  checkLevel();
+}
+
+async function tpSave() {
+  $("tile-status").textContent = "Saving…";
+  const res = await api("/api/tileset/tile", { index: TP.index, pixels: TP.px });
+  if (res.error) { $("tile-status").textContent = res.error; return; }
+  tilesetUpdated(res.tileset);
+  $("tile-dialog").close();
+  hint(`Saved tile ${TP.index} to the tileset image` +
+       (res.regenerated ? " and updated src/levels.c." : ". Save the levels to update src/levels.c."));
+}
+
+function wireTilePainter() {
+  const row = $("shade-row");
+  [0, 1, 2, 3].forEach((s) => {
+    const b = document.createElement("button");
+    b.dataset.shade = s;
+    b.style.background = PALETTE[s];
+    b.style.color = s < 2 ? PALETTE[3] : PALETTE[0];
+    b.textContent = String(s + 1);
+    b.title = ["Lightest (shows the floor)", "Light", "Dark", "Darkest"][s] + ` (key ${s + 1})`;
+    b.addEventListener("click", () => { TP.shade = s; tpRender(); });
+    row.appendChild(b);
+  });
+  document.querySelectorAll("[data-ptool]").forEach((b) =>
+    b.addEventListener("click", () => { TP.tool = b.dataset.ptool; tpRender(); }));
+  document.querySelectorAll("#tile-dialog [data-op]").forEach((b) =>
+    b.addEventListener("click", () => tpOp(b.dataset.op)));
+
+  const c = $("tile-canvas");
+  c.addEventListener("contextmenu", (e) => e.preventDefault());
+  c.addEventListener("pointerdown", (e) => {
+    const i = tpPixelAt(e);
+    if (i < 0) return;
+    const shade = e.button === 2 ? 0 : TP.shade;
+    tpPush();
+    if (TP.tool === "fill") { tpFill(i, shade); tpRender(); return; }
+    TP.drawing = true;
+    TP.stroke = shade;
+    c.setPointerCapture(e.pointerId);
+    TP.px[i] = shade;
+    tpRender();
+  });
+  c.addEventListener("pointermove", (e) => {
+    if (!TP.drawing) return;
+    const i = tpPixelAt(e);
+    if (i >= 0 && TP.px[i] !== TP.stroke) { TP.px[i] = TP.stroke; tpRender(); }
+  });
+  c.addEventListener("pointerup", () => { TP.drawing = false; });
+
+  $("tile-dialog").addEventListener("keydown", (e) => {
+    if (e.key >= "1" && e.key <= "4") { TP.shade = Number(e.key) - 1; tpRender(); }
+    else if (e.key === "p" || e.key === "P") { TP.tool = "pencil"; tpRender(); }
+    else if (e.key === "f" || e.key === "F") { TP.tool = "fill"; tpRender(); }
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "z") tpOp(e.shiftKey ? "redo" : "undo");
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "c") tpOp("copy");
+    else if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "v") tpOp("paste");
+    else return;
+    e.preventDefault();
+    e.stopPropagation();
+  });
+  $("tile-save").addEventListener("click", tpSave);
+  $("tile-cancel").addEventListener("click", () => $("tile-dialog").close());
+  $("tile-edit").addEventListener("click", () => tpOpen(artTile));
+  $("tileset").addEventListener("dblclick", () => tpOpen(artTile));
+  $("tile-add-row").addEventListener("click", async () => {
+    const res = await api("/api/tileset/add_row", {});
+    if (res.error) { hint(res.error); return; }
+    tilesetUpdated(res.tileset);
+    hint(`Added 16 blank tiles (${res.tileset.tiles.length - 16}–${res.tileset.tiles.length - 1}).`);
+  });
 }
 
 // =================================================================== PLAY
@@ -1327,6 +1504,7 @@ function typing(e) {
 }
 
 window.addEventListener("keydown", async (e) => {
+  if (document.querySelector("dialog[open]")) return;   // e.g. the tile painter
   if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") { e.preventDefault(); save(); return; }
   if (typing(e)) return;
 
@@ -1537,6 +1715,7 @@ async function init() {
   wire();
   buildPalette();
   buildTileset();
+  wireTilePainter();
   setTool("tile:#");
   setDirty(false);
   renderAll();

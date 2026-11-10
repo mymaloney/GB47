@@ -884,7 +884,9 @@ static const struct {
     { 5, SOLVE_USE_TAKEDOWN, "a takedown" },
     { 5, SOLVE_USE_DRAG,     "dragging the body" },
     { 6, SOLVE_USE_UNIFORM,  "a disguise" },
-    { 7, SOLVE_USE_ITEMS,    "the stone (multi-screen level)" },
+    /* level 7: the stone lures the shaft sentry; or take the corridor
+     * guard's uniform, which the sentry is blind to */
+    { 7, SOLVE_USE_ITEMS | SOLVE_USE_UNIFORM, "the stone or a disguise" },
 };
 
 /* Levels built around a tile must need it: with every such tile turned

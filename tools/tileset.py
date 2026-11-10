@@ -24,7 +24,7 @@ loads, from the same rules as art_variant() in src/art.c.
 import json
 from pathlib import Path
 
-from png import read_png
+from png import read_png, write_png
 
 ROOT = Path(__file__).resolve().parent.parent
 TILESET_DIR = ROOT / "tilesets"
@@ -149,3 +149,47 @@ def rle_rows(grid):
             data += [n, v]
             x += n
     return data, offsets
+
+
+# ------------------------------------------------------------ editing tiles
+
+def shade_colour(cfg, shade):
+    """An RGBA colour that converts back to exactly this shade under the
+    tileset's thresholds: transparent for the lightest, greys between the
+    cut-offs for the rest."""
+    t0, t1, t2 = cfg.get("thresholds", [0.72, 0.5, 0.3])
+    if shade == 0:
+        return (0, 0, 0, 0)
+    y = {1: (t0 + t1) / 2, 2: (t1 + t2) / 2, 3: t2 / 2}[shade]
+    g = round(y * 255)
+    return (g, g, g, 255)
+
+
+def _image(path):
+    path = Path(path)
+    cfg = json.loads(path.read_text())
+    img = path.parent / cfg["image"]
+    w, h, px = read_png(img)
+    return cfg, img, w, h, px
+
+
+def set_tile(index, shades, path=DEFAULT):
+    """Repaint tile `index` with 64 shades (0 lightest .. 3 darkest)."""
+    cfg, img, w, h, px = _image(path)
+    cols = w // 8
+    if not 0 <= index < cols * (h // 8):
+        raise ValueError(f"no tile {index}")
+    if len(shades) != 64 or any(s not in (0, 1, 2, 3) for s in shades):
+        raise ValueError("a tile is 64 shades of 0-3")
+    tx, ty = index % cols, index // cols
+    for y in range(8):
+        for x in range(8):
+            px[ty * 8 + y][tx * 8 + x] = shade_colour(cfg, shades[y * 8 + x])
+    write_png(img, w, h, px)
+
+
+def add_row(path=DEFAULT):
+    """Add a row of blank tiles at the bottom (existing numbers don't move)."""
+    cfg, img, w, h, px = _image(path)
+    px += [[(0, 0, 0, 0)] * w for _ in range(8)]
+    write_png(img, w, h + 8, px)

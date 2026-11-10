@@ -169,6 +169,19 @@ class Handler(BaseHTTPRequestHandler):
                 ts.save_behaviour({int(k): v for k, v in req["behaviour"].items()
                                    if v in gen_levels.TILES})
             return {"ok": not errs, "errors": errs}
+        if path in ("/api/tileset/tile", "/api/tileset/add_row"):
+            if path == "/api/tileset/tile":
+                ts.set_tile(int(req["index"]), [int(v) for v in req["pixels"]])
+            else:
+                ts.add_row()
+            # the ROM's copy of the tiles lives in src/levels.c: regenerate it
+            # from the saved levels (if they're valid; Save does it otherwise)
+            gen_levels._tileset = None
+            saved = gen_levels.load()
+            regenerated = not gen_levels.validate_all(saved)
+            if regenerated:
+                gen_levels.write_c(saved)
+            return {"tileset": tileset_assets(), "regenerated": regenerated}
         if path == "/api/autopaint":
             return {"art": autopaint.autopaint_rows(req["map"])}
         if path == "/api/build":
