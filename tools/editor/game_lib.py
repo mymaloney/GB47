@@ -39,6 +39,7 @@ def _parse_defines(path):
 
 G = _parse_defines(ROOT / "src" / "game.h")     # game constants
 G.update(_parse_defines(ROOT / "tools" / "solver.h"))  # SOLVE_USE_*
+G.update(_parse_defines(ROOT / "src" / "trans.h"))     # TRANS_*
 T = _parse_defines(ROOT / "src" / "tiles.h")    # tile/sprite indices
 
 lib = C.CDLL(str(LIB_PATH))
@@ -68,7 +69,8 @@ class LevelDef(C.Structure):
                 ("map", C.c_char_p),
                 ("guard_count", C.c_uint8), ("guards", GuardDef * MAX_GUARDS),
                 ("items", C.c_uint8 * ITEM_TYPES),
-                ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4)]
+                ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4),
+                ("transition", C.c_uint8)]
 
 
 class Guard(C.Structure):
@@ -130,6 +132,8 @@ _sig = {
     "solver_run": (C.c_int, [L, C.c_uint8, C.c_int, C.POINTER(SolveStep), C.c_int,
                              C.POINTER(C.c_int)]),
     "solver_format": (None, [C.POINTER(SolveStep), C.c_int, C.c_char_p, C.c_int]),
+    "trans_steps": (C.c_uint8, [C.c_uint8] * 3),
+    "trans_phase": (C.c_uint8, [C.c_uint8] * 7),
 }
 for name, (res, args) in _sig.items():
     f = getattr(lib, name)
@@ -150,6 +154,22 @@ ITEM_DEFS = (ItemDef * ITEM_TYPES).in_dll(lib, "item_defs")
 ITEMS = [{"name": d.name.decode(), "range": d.range, "noise": d.noise} for d in ITEM_DEFS]
 DIRS = gen_levels.DIRS            # DIR_* order
 UNIFORMS = gen_levels.UNIFORMS    # DISGUISE_* order
+TRANSITIONS = gen_levels.TRANSITIONS
+assert [G["TRANS_" + n.upper()] for n in TRANSITIONS] == list(range(G["TRANS_COUNT"])), \
+    "TRANS_* in src/trans.h changed: update TRANSITIONS in tools/gen_levels.py"
+
+
+def transition(kind, cx, cy):
+    """A transition's pattern, from the same code the ROM plays: the step
+    at which each screen tile goes black ("out") and comes back ("in"),
+    rows of TRANS_W. steps = 0 means it isn't tile-based (cut, fade)."""
+    k = TRANSITIONS.index(kind)
+    w, h = G["TRANS_W"], G["TRANS_H"]
+    cx, cy = min(max(cx, 0), w - 1), min(max(cy, 0), h - 1)
+    n = lib.trans_steps(k, cx, cy)
+    grid = [[[lib.trans_phase(k, into, n, x, y, cx, cy) for x in range(w)] for y in range(h)]
+            for into in (0, 1)]
+    return {"kind": kind, "steps": n, "out": grid[0], "in": grid[1]}
 
 
 class Level:
@@ -194,6 +214,7 @@ class Level:
                 for i, it in enumerate(ITEMS):
                     d.items[i] = items.get(it["name"].lower(), 0)
             d.part = k
+            d.transition = TRANSITIONS.index(data["transition"])
             for di, dname in enumerate(DIRS):
                 if (k, dname) in links:
                     to, off = links[(k, dname)]

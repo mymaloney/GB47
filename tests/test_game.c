@@ -15,6 +15,7 @@
 #include "../src/levels.h"
 #include "../tools/solver.h"
 #include "../src/world.h"
+#include "../src/trans.h"
 
 static int failures = 0;
 
@@ -55,6 +56,7 @@ static const LevelDef test_level = {
     },
     { 2, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_movement(void)
@@ -146,6 +148,7 @@ static const LevelDef patrol_level = {
     { { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0 } },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_patrol(void)
@@ -274,6 +277,7 @@ static const LevelDef td_level = {
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_takedown(void)
@@ -373,6 +377,7 @@ static const LevelDef dz_level = {
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_disguise_cones(void)
@@ -502,6 +507,7 @@ static const LevelDef big_level = {
     },
     { 1, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_big_map(void)
@@ -551,6 +557,7 @@ static const LevelDef tile_level = {
     { { DIR_LEFT, 1, { {10, 8} }, DISGUISE_NONE, 0 } },
     { 2, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void tiles_reset(char column, char gap)
@@ -571,6 +578,48 @@ static void tiles_load(GameState *s, int px, int py)
     s->py = (uint8_t)py;
 }
 
+/* Level transitions: every screen tile changes exactly once, at a step
+ * inside the animation, and the animation has no dead steps at either end. */
+static void test_transitions(void)
+{
+    static const uint8_t centres[][2] = { {10, 8}, {0, 0}, {19, 15}, {1, 7}, {18, 1} };
+    unsigned c;
+    int kind, in, x, y;
+
+    CHECK(trans_steps(TRANS_CUT, 10, 8) == 0 && trans_steps(TRANS_FADE, 10, 8) == 0 &&
+          trans_steps(TRANS_COUNT, 10, 8) == 0, "cut and fade aren't tile patterns");
+    for (kind = TRANS_FADE + 1; kind < TRANS_COUNT; kind++)
+        for (c = 0; c < sizeof centres / sizeof centres[0]; c++) {
+            uint8_t cx = centres[c][0], cy = centres[c][1];
+            uint8_t n = trans_steps((uint8_t)kind, cx, cy);
+            CHECK(n >= 4 && n <= 24, "transition %d has %d steps", kind, n);
+            for (in = 0; in < 2; in++) {
+                int first = 0, last = 0;
+                for (y = 0; y < TRANS_H; y++)
+                    for (x = 0; x < TRANS_W; x++) {
+                        uint8_t p = trans_phase((uint8_t)kind, (uint8_t)in, n, (uint8_t)x,
+                                                (uint8_t)y, cx, cy);
+                        CHECK(p < n, "transition %d: tile (%d,%d) at step %d of %d",
+                              kind, x, y, p, n);
+                        if (p == 0) first = 1;
+                        if (p == n - 1) last = 1;
+                    }
+                CHECK(first && last, "transition %d (in=%d, centre %d,%d) has dead steps",
+                      kind, in, cx, cy);
+            }
+        }
+    /* the iris closes on the player: their tile is the last to go, the
+     * first to come back */
+    {
+        uint8_t n = trans_steps(TRANS_IRIS, 3, 12);
+        CHECK(trans_phase(TRANS_IRIS, 0, n, 3, 12, 3, 12) == n - 1 &&
+              trans_phase(TRANS_IRIS, 1, n, 3, 12, 3, 12) == 0, "iris centred on the player");
+    }
+    /* every level names a transition that exists */
+    for (kind = 0; kind < LEVEL_COUNT; kind++)
+        CHECK(levels[kind].transition < TRANS_COUNT, "map %d: unknown transition", kind);
+}
+
 /* A patrol leg with something in the way (the editor refuses these, but
  * the rules shouldn't leave the guard stuck): it walks round. */
 static void test_patrol_detour(void)
@@ -580,7 +629,7 @@ static void test_patrol_detour(void)
         1,
         { { DIR_RIGHT, 2, { {3, 3}, {12, 3} }, DISGUISE_NONE, 0 } },
         { 0, 0 },
-        0, { 0 }, { 0 },
+        0, { 0 }, { 0 }, TRANS_CUT,
     };
     GameState s;
     int i;
@@ -819,6 +868,7 @@ static LevelDef two_maps[2] = {
         { { DIR_DOWN, 2, { {4, 10}, {14, 10} }, DISGUISE_NONE, 0 } },
         { 1, 0 },
         0, { 0, 2, 0, 0 }, { 0, 2, 0, 0 },      /* right -> B, offset 2 */
+        TRANS_CUT,
     },
     {
         "TWO", 20, 16,
@@ -842,6 +892,7 @@ static LevelDef two_maps[2] = {
         { { DIR_DOWN, 1, { {3, 10} }, DISGUISE_NONE, 0 } },
         { 0, 0 },
         1, { 0, 0, 0, 1 }, { 0, 0, 0, -2 },     /* left -> A, offset -2 */
+        TRANS_CUT,
     },
 };
 
@@ -1007,6 +1058,7 @@ int main(void)
     test_big_map();
     test_tile_types();
     test_patrol_detour();
+    test_transitions();
     test_level_data();
     if (failures == 0) {
         test_world();

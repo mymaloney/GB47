@@ -52,7 +52,7 @@ So, in priority order:
 
 ## Step 1 (blocker): make room in ROM
 
-Bank 0 has **88 bytes free**, and the flat 32 KB is ~80% used. The
+Bank 0 has **88 bytes free**, and the flat 32 KB is ~83% used. The
 dialogue code, the script interpreter, the text and the font won't fit
 until something moves into switchable banks. Do this first, as its own
 commit, and keep every test and level behaving the same.

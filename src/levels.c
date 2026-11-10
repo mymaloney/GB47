@@ -31,6 +31,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_FADE,
     },
     /* 2: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
     {
@@ -61,6 +62,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_WIPE,
     },
     /* 3: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
     {
@@ -91,6 +93,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_IRIS,
     },
     /* 4: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
     {
@@ -120,6 +123,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_DISSOLVE,
     },
     /* 5: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
     {
@@ -150,6 +154,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_CURTAIN,
     },
     /* 6: DRESS CODE - The hall sentry is hostile to your clothes (huge cone) but blind to his own uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
     {
@@ -181,6 +186,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_DIAGONAL,
     },
     /* 7: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
     {
@@ -228,6 +234,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_BLINDS,
     },
     /* 8: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
     {
@@ -258,6 +265,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 1 */
         { 0, 0, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_INTERLACE,
     },
     /* 9: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
     {
@@ -287,6 +295,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* map 1 of 2 */
         { 0, 10, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_IRIS,
     },
     /* 9: ANNEX, map 2 */
     {
@@ -317,6 +326,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         1,   /* map 2 of 2 */
         { 0, 0, 0, 9 },   /* up right down left */
         { 0, 0, 0, 0 },
+        TRANS_IRIS,
     },
 };
 

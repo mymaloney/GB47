@@ -163,6 +163,9 @@ typedef struct {
     uint8_t     part;
     uint8_t     link[4];
     int8_t      link_offset[4];
+    /* TRANS_* (trans.h): how the screen dips to black when this level is
+     * finished. Only looks, and only read from a level's first map. */
+    uint8_t     transition;
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */

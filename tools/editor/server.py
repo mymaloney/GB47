@@ -75,6 +75,7 @@ def assets():
         "items": g.ITEMS,
         "dirs": g.DIRS,
         "uniforms": g.UNIFORMS,
+        "transitions": g.TRANSITIONS,
         "view_w": g.VIEW_W, "view_h": g.VIEW_H,
         "map_max_w": g.MAP_MAX_W, "map_max_h": g.MAP_MAX_H,
         "map_max_cells": g.MAP_MAX_CELLS,
@@ -210,6 +211,8 @@ class Handler(BaseHTTPRequestHandler):
                 return {"art": ts.format_art(autopaint.autopaint(req["map"], cfg, learned))}
             return {"art": autopaint.autotile(req["map"], req.get("art"),
                                               [tuple(c) for c in req["changed"]], cfg, learned)}
+        if path == "/api/transition":
+            return g.transition(req["kind"], int(req.get("cx", 10)), int(req.get("cy", 8)))
         if path == "/api/build":
             p = subprocess.run(["make"], cwd=ROOT, capture_output=True, text=True,
                                timeout=600)

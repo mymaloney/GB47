@@ -240,6 +240,24 @@ assert not server.allowed({})
 needs = server.analyze(g.Level(levels[4]))["needs"]
 assert needs.get("takedown") == "yes" and needs.get("drag") == "yes", needs
 
+# level transitions: names match TRANS_*, the choice reaches the ROM data,
+# and the editor's preview pattern comes from the C code
+assert all(lv["transition"] in gen_levels.TRANSITIONS for lv in levels)
+iris = json.loads(json.dumps(levels[0]))
+iris["transition"] = "iris"
+assert g.Level(iris).table[0].transition == g.G["TRANS_IRIS"]
+assert "        TRANS_IRIS,\n" in gen_levels.generate_c([iris])
+assert '"transition": "iris"' in gen_levels.dumps([iris])
+old = {k: v for k, v in levels[0].items() if k != "transition"}     # made before transitions
+assert gen_levels.upgrade(old)["transition"] == "fade" and not gen_levels.validate_level(old)
+iris["transition"] = "spin"
+assert any("Transition must be" in e for e in gen_levels.validate_level(iris))
+pat = g.transition("wipe", 10, 8)
+assert pat["steps"] == 20 and pat["out"][0] == list(range(20)) and len(pat["out"]) == 18
+pat = g.transition("iris", 2, 3)
+assert pat["in"][3][2] == 0 and pat["out"][3][2] == pat["steps"] - 1
+assert g.transition("fade", 0, 0)["steps"] == 0
+
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])
 assert any("player start" in e for e in gen_levels.validate_level(bad))

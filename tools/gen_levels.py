@@ -13,6 +13,9 @@ JSON format, one object per level:
       "name":  "FIRST STEPS",              max 12 chars, HUD font only
       "notes": "Shown as a comment in levels.c",
       "items": {"stone": 0, "bottle": 0},  what the player starts with
+      "transition": "fade",                how the screen dips to black when
+                                           the level is finished: one of
+                                           TRANSITIONS below
       "maps": [{                           1-4 maps; the player starts in
                                            the first
         "map": [rows of equal length],     '#' wall '.' floor 'E' exit
@@ -68,6 +71,10 @@ DIRS = ["up", "right", "down", "left"]
 OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
 UNIFORMS = ["none", "guard", "officer"]
 ITEMS = ["stone", "bottle"]
+# Level transitions, in TRANS_* order (src/trans.h); tests check they match.
+TRANSITIONS = ["cut", "fade", "wipe", "curtain", "iris", "dissolve", "diagonal",
+               "blinds", "interlace"]
+DEFAULT_TRANSITION = "fade"
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
 
 
@@ -112,6 +119,7 @@ def upgrade(lv):
         lv.setdefault("links", [])
     lv.setdefault("links", [])
     lv.setdefault("items", {})
+    lv.setdefault("transition", DEFAULT_TRANSITION)
     return lv
 
 
@@ -346,6 +354,9 @@ def validate_level(lv):
         if not isinstance(n, int) or not 0 <= n <= 99:
             errs.append(f"Item count for {k} must be 0-99.")
 
+    if lv["transition"] not in TRANSITIONS:
+        errs.append(f"Transition must be one of {', '.join(TRANSITIONS)}.")
+
     maps = lv["maps"]
     if not 1 <= len(maps) <= MAX_MAPS:
         errs.append(f"A level has 1-{MAX_MAPS} maps (has {len(maps)}).")
@@ -426,6 +437,7 @@ def generate_c(levels):
             out.append("        { " + ", ".join(str(base + l[0] + 1) if l else "0" for l in link)
                        + " },   /* up right down left */")
             out.append("        { " + ", ".join(str(l[1]) if l else "0" for l in link) + " },")
+            out.append(f"        TRANS_{lv['transition'].upper()},")
             out.append("    },")
         base += len(lv["maps"])
     out.append("};")
@@ -484,6 +496,7 @@ def generate_h(levels):
         "",
         '#include "game.h"',
         '#include "art.h"',
+        '#include "trans.h"',
         "",
         "/* One entry per map; a level's maps are consecutive (part 0 first). */",
         f"#define LEVEL_COUNT {count}",
@@ -504,6 +517,7 @@ def dumps(levels):
         lines.append(f'    "name": {json.dumps(lv["name"])},')
         lines.append(f'    "notes": {json.dumps(lv.get("notes", ""))},')
         lines.append(f'    "items": {json.dumps({k: lv.get("items", {}).get(k, 0) for k in ITEMS})},')
+        lines.append(f'    "transition": {json.dumps(lv["transition"])},')
         lines.append('    "maps": [')
         ms = []
         for m in lv["maps"]:
