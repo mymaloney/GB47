@@ -38,6 +38,17 @@ STATIC = {
     "/editor.css": ("editor.css", "text/css; charset=utf-8"),
 }
 LOCK = threading.Lock()   # game.c keeps global state: one request at a time
+ORIGINS = {f"http://{h}:{PORT}" for h in ("127.0.0.1", "localhost")}
+
+
+def allowed(headers):
+    """Only the editor's own page may talk to the server. Host must be this
+    machine by name: another site's name pointed at 127.0.0.1 (DNS
+    rebinding) is refused. A cross-site page's Origin is refused too."""
+    if f"http://{headers.get('Host', '')}" not in ORIGINS:
+        return False
+    origin = headers.get("Origin")
+    return origin is None or origin in ORIGINS
 
 
 def assets():
@@ -130,7 +141,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
-        if path in STATIC:
+        if not allowed(self.headers):
+            self.send_json({"error": "forbidden"}, 403)
+        elif path in STATIC:
             name, ctype = STATIC[path]
             body = (HERE / name).read_bytes()
             self.send_response(200)
@@ -147,9 +160,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "not found"}, 404)
 
     def do_POST(self):
-        # Reject cross-site requests: only the editor page may call the API.
-        origin = self.headers.get("Origin")
-        if origin and not re.fullmatch(r"http://(127\.0\.0\.1|localhost):%d" % PORT, origin):
+        if not allowed(self.headers):
             self.send_json({"error": "forbidden"}, 403)
             return
         try:

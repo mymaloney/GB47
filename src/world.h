@@ -30,6 +30,11 @@ typedef struct {
  * hashing worlds. */
 #define WORLD_BYTES(w) ((uint16_t)(sizeof(World) - (MAX_PARTS - (w)->part_count) * sizeof(GameState)))
 
+/* Use this level table from now on, without loading anything: for a World
+ * that was made from it earlier (the editor keeps Worlds between requests).
+ * world_load does this itself. */
+void world_use(const LevelDef *table);
+
 /* Start the level whose first map is table[first]; its other maps are
  * found by following links. */
 void world_load(const LevelDef *table, uint8_t first, World *w);
@@ -48,9 +53,14 @@ uint8_t world_throw(World *w, uint8_t item, uint8_t x, uint8_t y);
 
 /* Undo history: one entry per turn = the map that was current plus its
  * state before the turn. (A crossing changes nothing in the map entered
- * that undo needs to put back; see world.c.) */
+ * that undo needs to put back; see world.c.)
+ *
+ * Taking a turn is two steps, so a move that turns out to be illegal costs
+ * nothing: undo_mark before trying it, undo_commit if it happened. */
 void    undo_clear(void);
-void    undo_push(const World *w);
+void    undo_mark(const World *w);     /* remember the situation */
+void    undo_commit(void);             /* ...and keep it as an undo step */
+#define undo_push(w) (undo_mark(w), undo_commit())
 uint8_t undo_pop(World *w);     /* returns 0 if history is empty */
 
 #endif

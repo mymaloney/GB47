@@ -54,7 +54,6 @@
 static World       world;    /* every map of the current level */
 static GameState  *st;       /* the map the player is in: see sync() */
 #define state (*st)
-static World       before;   /* snapshot taken before each turn, for undo */
 static uint8_t     level_idx;    /* levels[] index of the level's first map */
 static uint8_t     level_num;    /* 1-based number shown in the HUD */
 static uint8_t     vision[VIEW_W * VIEW_H];
@@ -211,9 +210,10 @@ static void draw_tiles(uint8_t x0, uint8_t y0, uint8_t w, uint8_t h)
             if (art && art_buf[x] != ART_NONE) {
                 /* painted tile: pick the variant for cones / aiming */
                 uint8_t k = art_buf[x], slot = art_slot[k];
-                aim = (ui_mode == UI_AIM) && cell == CELL_FLOOR &&
+                /* only tiles painted on floor have aiming variants */
+                aim = art->kinds[k] >= 5 && (ui_mode == UI_AIM) && cell == CELL_FLOOR &&
                       game_can_throw(&state, inv_item, wx, wy);
-                if (art->kinds[k] >= 5 && aim)
+                if (aim)
                     slot += seen == VIS_SEEN ? ART_AIM_SEEN : ART_AIM;
                 else if (art->kinds[k] >= 3 && seen)
                     slot += seen == VIS_SEEN ? ART_SEEN : ART_WATCH;
@@ -502,11 +502,9 @@ static void load_level(uint8_t idx)
 /* Run one turn; push undo and redraw if it happened. */
 static uint8_t do_action(uint8_t action)
 {
-    /* SDCC can't initialise a struct from another struct in its
-     * declaration ("needs curly braces"), so assign separately. */
-    before = world;
+    undo_mark(&world);
     if (!world_step(&world, action)) return 0;
-    undo_push(&before);
+    undo_commit();
     sync();          /* the step may have crossed into another map */
     redraw();
     return 1;
@@ -628,9 +626,9 @@ static void input_aim(uint8_t pressed)
         return;
     }
     if (pressed & J_A) {
-        before = world;   /* separate assignment: see do_action() */
+        undo_mark(&world);
         if (world_throw(&world, inv_item, aim_x, aim_y)) {
-            undo_push(&before);
+            undo_commit();
             ui_mode = UI_PLAY;
             redraw();
         } else {

@@ -231,6 +231,12 @@ assert any("edge must be" in e for e in gen_levels.validate_level(bad_edge))
 # the editor's Solve says which mechanics a level needs (level 5: CLEANUP)
 os.environ["EDITOR_NO_BROWSER"] = "1"
 import server   # noqa: E402
+ok_host = f"127.0.0.1:{server.PORT}"
+assert server.allowed({"Host": ok_host})
+assert server.allowed({"Host": f"localhost:{server.PORT}", "Origin": f"http://{ok_host}"})
+assert not server.allowed({"Host": f"evil.example:{server.PORT}"}), "DNS rebinding"
+assert not server.allowed({"Host": ok_host, "Origin": "http://evil.example"}), "cross-site"
+assert not server.allowed({})
 needs = server.analyze(g.Level(levels[4]))["needs"]
 assert needs.get("takedown") == "yes" and needs.get("drag") == "yes", needs
 

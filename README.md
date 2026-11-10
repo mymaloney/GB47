@@ -358,7 +358,7 @@ make usage
 prints how full the ROM banks and RAM are (GBDK's `romusage`); CI prints
 it on every build. Levels currently live in the first 32 KB of the
 cartridge with the code, and that is now full: about 6.8 KB is left
-(only 88 bytes in bank 0), and WRAM has about 1.3 KB left. Level data
+(only 88 bytes in bank 0), and WRAM has about 1.4 KB left. Level data
 moves into switchable ROM banks before the next feature (step 1 of
 `docs/dialogue-plan.md`).
 

@@ -105,6 +105,20 @@ static void test_caught_and_undo(void)
     CHECK(world_step(&w, ACT_RIGHT) == 0, "no moves after caught");
     CHECK(undo_pop(&w) == 1, "undo works");
     CHECK(memcmp(&w, &before, WORLD_BYTES(&w)) == 0, "undo restores state");
+
+    /* a marked turn that didn't happen costs no history, even when full:
+     * exactly UNDO_DEPTH turns can be taken back */
+    world_load(&test_level, 0, &w);
+    undo_clear();
+    for (i = 0; i < UNDO_DEPTH + 3; i++) {
+        undo_mark(&w);
+        CHECK(world_step(&w, ACT_UP) == 0, "wall");     /* not committed */
+        undo_mark(&w);
+        if (world_step(&w, ACT_WAIT)) undo_commit();
+    }
+    CHECK(s->turn == UNDO_DEPTH + 3, "waited");
+    for (i = 0; i < UNDO_DEPTH; i++) CHECK(undo_pop(&w) == 1, "undo %d", i);
+    CHECK(undo_pop(&w) == 0 && s->turn == 3, "history holds UNDO_DEPTH turns");
 }
 
 /* The original level 1 layout, fixed here so these tests don't change
@@ -557,6 +571,39 @@ static void tiles_load(GameState *s, int px, int py)
     s->py = (uint8_t)py;
 }
 
+/* A patrol leg with something in the way (the editor refuses these, but
+ * the rules shouldn't leave the guard stuck): it walks round. */
+static void test_patrol_detour(void)
+{
+    static const LevelDef blocked = {
+        "DETOUR", 20, 16, tile_map,
+        1,
+        { { DIR_RIGHT, 2, { {3, 3}, {12, 3} }, DISGUISE_NONE, 0 } },
+        { 0, 0 },
+        0, { 0 }, { 0 },
+    };
+    GameState s;
+    int i;
+
+    tiles_reset(0, 0);
+    tile_map[3 * 20 + 7] = '#';
+    game_load(&blocked, &s);
+    s.px = 1; s.py = 13;
+    for (i = 0; i < 11; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 12 && s.guards[0].y == 3, "guard walked round the block (%d,%d)",
+          s.guards[0].x, s.guards[0].y);
+    CHECK(s.guards[0].next_wp == 0 && s.guards[0].facing == DIR_LEFT, "and turned for home");
+    CHECK(s.status == STATUS_PLAYING, "player unseen");
+
+    /* the walking distances are remembered between turns, but not across a
+     * change to the map */
+    tiles_reset(0, 0);
+    game_load(&blocked, &s);
+    s.px = 1; s.py = 13;
+    for (i = 0; i < 9; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 12 && s.guards[0].y == 3, "straight there once it's clear");
+}
+
 static void test_tile_types(void)
 {
     GameState s;
@@ -959,6 +1006,7 @@ int main(void)
     test_take_uniform();
     test_big_map();
     test_tile_types();
+    test_patrol_detour();
     test_level_data();
     if (failures == 0) {
         test_world();

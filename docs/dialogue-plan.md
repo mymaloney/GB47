@@ -134,6 +134,8 @@ while a flag is clear and another once it's set.
   no `GameState`; keep a pointer to the active one, like the existing
   `level` pointer, set in `game_load()`/`game_use()`/`world_activate()`.
 - Keep `game_cell()` fast. It's the hottest function in the game.
+- Call `game_map_changed()` when a flag flips a switch cell, so cached
+  guard paths are thrown away.
 - For level 3, the exit cell becomes a switch: floor (no art, or floor
   art 87) until the "dog petted" flag is set, then `E` with stairs art
   52.

@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
+import gen_levels   # noqa: E402
 import tileset as ts   # noqa: E402
 LIB_PATH = ROOT / "build" / "libgame.so"
 
@@ -121,6 +122,7 @@ _sig = {
     "game_uniform_here": (C.c_uint8, [S]),
     "game_body_adjacent": (C.c_uint8, [S]),
     "game_attitude": (C.c_uint8, [S, C.c_uint8]),
+    "world_use": (None, [L]),
     "world_load": (None, [L, C.c_uint8, Wp]),
     "world_activate": (None, [Wp]),
     "world_step": (C.c_uint8, [Wp, C.c_uint8]),
@@ -146,11 +148,8 @@ CELL_BLOCKS = list((C.c_uint8 * len(CELL_NAMES)).in_dll(lib, "cell_blocks"))
 
 ITEM_DEFS = (ItemDef * ITEM_TYPES).in_dll(lib, "item_defs")
 ITEMS = [{"name": d.name.decode(), "range": d.range, "noise": d.noise} for d in ITEM_DEFS]
-DIRS = ["up", "right", "down", "left"]
-UNIFORMS = ["none", "guard", "officer"]
-
-
-OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
+DIRS = gen_levels.DIRS            # DIR_* order
+UNIFORMS = gen_levels.UNIFORMS    # DISGUISE_* order
 
 
 class Level:
@@ -158,32 +157,21 @@ class Level:
     Map 0 is where the player starts; links point within the table."""
 
     def __init__(self, data):
+        data = gen_levels.upgrade(data)    # old one-map levels -> "maps"
         self.data = data
         self._keep = []
-        maps = data.get("maps") or [{"map": data["map"], "guards": data.get("guards", [])}]
+        maps = data["maps"]
         self.maps = maps
         self.table = (LevelDef * len(maps))()
-        links = {}
-        for ln in data.get("links", []):
-            links[(ln["from"], ln["edge"])] = (ln["to"], ln.get("offset", 0))
-            links[(ln["to"], OPPOSITE[ln["edge"]])] = (ln["from"], -ln.get("offset", 0))
+        links = gen_levels.link_table(data)
         name = self._b(data["name"])
         # painted art per map: grid of tileset tiles (None = built-in), and
-        # how many variants each tile has (same rule as tools/gen_levels.py)
+        # how many variants each tile has
         self.art, self.art_kinds = [], []
         for m in maps:
-            if m.get("art"):
-                grid = ts.parse_art(m["art"])
-                usage = {}
-                for row, arow in zip(m["map"], grid):
-                    for ch, v in zip(row, arow):
-                        if v is not None:
-                            usage.setdefault(v, set()).add(ch)
-                self.art.append(grid)
-                self.art_kinds.append({v: ts.slots_for(c) for v, c in usage.items()})
-            else:
-                self.art.append(None)
-                self.art_kinds.append({})
+            usage = gen_levels.art_usage(m)
+            self.art.append(ts.parse_art(m["art"]) if m.get("art") else None)
+            self.art_kinds.append({v: ts.slots_for(c) for v, c in usage.items()})
         for k, m in enumerate(maps):
             d = self.table[k]
             d.name = name
@@ -206,7 +194,7 @@ class Level:
                 for i, it in enumerate(ITEMS):
                     d.items[i] = items.get(it["name"].lower(), 0)
             d.part = k
-            for di, dname in enumerate(DIRS):   # DIR_* order
+            for di, dname in enumerate(DIRS):
                 if (k, dname) in links:
                     to, off = links[(k, dname)]
                     d.link[di] = to + 1
@@ -242,18 +230,18 @@ def new_game(level, disguise=None, map_index=0):
 
 
 def step(level, world, code):
-    lib.world_load(level.table, 0, C.byref(World()))   # point world.c at this table
+    lib.world_use(level.table)    # the world came from an earlier request
     return bool(lib.world_step(C.byref(world), code))
 
 
 def throw(level, world, item, x, y):
-    lib.world_load(level.table, 0, C.byref(World()))
+    lib.world_use(level.table)
     return bool(lib.world_throw(C.byref(world), item, x, y))
 
 
 def view(level, world, aim_item=None):
     """Everything the screen needs, computed the same way as src/main.c."""
-    lib.world_load(level.table, 0, C.byref(World()))
+    lib.world_use(level.table)
     lib.world_activate(C.byref(world))
     state = world.part[world.cur]
     cdef = level.table[world.cur]

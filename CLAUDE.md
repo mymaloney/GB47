@@ -57,16 +57,19 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
 - Build warnings show up only in the GBDK build, not in gcc. Keep it
   warning-free.
 - **ROM is full.**
-  - Bank 0 (0x0000-0x3FFF) has ~88 bytes free, and 0x4000-0x7FFF is ~59%
+  - Bank 0 (0x0000-0x3FFF) has ~88 bytes free, and 0x4000-0x7FFF is ~60%
     used.
   - Nothing is banked yet: code and data are linked as one flat 32 KB.
   - Biggest objects: `levels.o` 8.4 KB, `game.o` 7.5 KB, `main.o` 5 KB,
     `world.o` 2 KB, `tiles.o` 1.3 KB.
   - Banking is step 1 of the current plan.
-- **WRAM is nearly full** (about 1.3 KB of 8 KB left).
+- **WRAM is nearly full** (about 1.4 KB of 8 KB left).
   - The big users are the pathfinding `dist[]`/queue (~4 KB) and undo
     (`UNDO_DEPTH` x `GameState`).
-  - Every byte added to `GameState` costs 32+ bytes of RAM.
+  - Every byte added to `GameState` costs 33+ bytes of RAM.
+- Guards' walking distances (`dist[]`) are cached per target tile. Call
+  `game_map_changed()` whenever what guards can walk on changes without a
+  change of map (e.g. a switch cell flipping).
 - VRAM background tiles:
   - The first `BKG_TILE_COUNT` (61) are built in (`src/tiles.c`, generated
     by `tools/gen_tiles.py`).

@@ -21,11 +21,17 @@ static void blank_player(GameState *s)
     s->status = STATUS_PLAYING;
 }
 
+void world_use(const LevelDef *tbl)
+{
+    table = tbl;
+    game_map_changed();
+}
+
 void world_load(const LevelDef *tbl, uint8_t first, World *w)
 {
     uint8_t i, d, t, k, found;
 
-    table = tbl;
+    world_use(tbl);
     memset(w, 0, sizeof(World));
     w->part_def[0] = first;
     w->part_count  = 1;
@@ -136,7 +142,11 @@ typedef struct {
     GameState s;
 } UndoEntry;
 
-static UndoEntry history[UNDO_DEPTH];
+/* A ring with one slot more than the history kept, so the next free slot
+ * (where undo_mark writes) never holds an entry that is still wanted. */
+#define HIST_SLOTS (UNDO_DEPTH + 1)
+
+static UndoEntry history[HIST_SLOTS];
 static uint8_t   hist_top;    /* next free slot */
 static uint8_t   hist_count;
 
@@ -146,18 +156,23 @@ void undo_clear(void)
     hist_count = 0;
 }
 
-void undo_push(const World *w)
+void undo_mark(const World *w)
 {
     history[hist_top].cur = w->cur;
     history[hist_top].s   = w->part[w->cur];
-    hist_top = (hist_top + 1) % UNDO_DEPTH;
+}
+
+void undo_commit(void)
+{
+    if (++hist_top == HIST_SLOTS) hist_top = 0;
     if (hist_count < UNDO_DEPTH) hist_count++;
 }
 
 uint8_t undo_pop(World *w)
 {
     if (hist_count == 0) return 0;
-    hist_top = (hist_top + UNDO_DEPTH - 1) % UNDO_DEPTH;
+    if (hist_top == 0) hist_top = HIST_SLOTS;
+    hist_top--;
     hist_count--;
     if (w->cur != history[hist_top].cur)      /* undoing a crossing */
         blank_player(&w->part[w->cur]);

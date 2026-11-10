@@ -197,6 +197,11 @@ void game_load(const LevelDef *lvl, GameState *s);
  * resume a map the player left earlier. */
 void game_use(const LevelDef *lvl);
 
+/* Forget cached pathfinding. Call it when what guards can walk on may have
+ * changed behind the current LevelDef pointer (game_load and a change of
+ * map already do). */
+void game_map_changed(void);
+
 /* The player steps into this map at (x, y) from a neighbouring one: counts
  * as a turn, wins on an exit, and guards who can see the spot catch them,
  * but guards don't move. Returns 1. */
