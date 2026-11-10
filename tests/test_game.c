@@ -104,11 +104,38 @@ static void test_caught_and_undo(void)
     CHECK(memcmp(&w, &before, WORLD_BYTES(&w)) == 0, "undo restores state");
 }
 
+/* The original level 1 layout, fixed here so these tests don't change
+ * when the real level 1 is edited: a start room, a doorway at (3,4), a
+ * hallway patrolled from (1,5) to (18,5), and the exit room. */
+static const LevelDef patrol_level = {
+    "PATROL", 20, 16,
+        "####################"
+        "#P.....#############"
+        "#......#############"
+        "#......#############"
+        "###.################"
+        "#..................#"
+        "#..................#"
+        "############.#######"
+        "##########.....#####"
+        "##########...E.#####"
+        "##########.....#####"
+        "####################"
+        "####################"
+        "####################"
+        "####################"
+        "####################",
+    1,
+    { { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0 } },
+    { 0, 0 },
+    0, { 0 }, { 0 },   /* single map: no links */
+};
+
 static void test_patrol(void)
 {
     GameState s;
-    game_load(&levels[0], &s);
-    /* guard 0 of level 1 walks right from (1,5) */
+    game_load(&patrol_level, &s);
+    /* the guard walks right from (1,5) */
     CHECK(s.guards[0].x == 1, "guard start");
     game_step(&s, ACT_WAIT);
     CHECK(s.guards[0].x == 2 && s.guards[0].facing == DIR_RIGHT, "guard moved");
@@ -186,7 +213,7 @@ static void test_throw_two_hearers(void)
 static void test_patroller_resumes_route(void)
 {
     GameState s;
-    game_load(&levels[0], &s);
+    game_load(&patrol_level, &s);
     s.items[ITEM_STONE] = 1;
     /* guard at (1,5) walking right toward (18,5); lure it to the door */
     CHECK(game_can_throw(&s, ITEM_STONE, 3, 4), "door in range");
