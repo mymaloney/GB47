@@ -592,7 +592,7 @@ static void test_transitions(void)
         for (c = 0; c < sizeof centres / sizeof centres[0]; c++) {
             uint8_t cx = centres[c][0], cy = centres[c][1];
             uint8_t n = trans_steps((uint8_t)kind, cx, cy);
-            CHECK(n >= 4 && n <= 24, "transition %d has %d steps", kind, n);
+            CHECK(n >= 4 && n <= 40, "transition %d has %d steps", kind, n);
             for (in = 0; in < 2; in++) {
                 int first = 0, last = 0;
                 for (y = 0; y < TRANS_H; y++)

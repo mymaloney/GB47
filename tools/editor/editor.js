@@ -1386,6 +1386,7 @@ async function restartPlay() {
 // transition()). The patterns come from src/trans.c through the server.
 
 const FRAME_MS = 1000 / 60;
+const TRANS_BATCH = 12;          // tiles changed per frame, as in main.c
 const TRANSITION_NAMES = {
   cut: "Cut (no animation)", fade: "Fade", wipe: "Wipe", curtain: "Curtain",
   iris: "Iris (circle)", dissolve: "Dissolve (dither)", diagonal: "Diagonal wipe",
@@ -1434,7 +1435,7 @@ async function playTransition(kind, into, shot, cx, cy) {
   if (kind === "fade") {
     for (let s = 1; s <= 3; s++) {
       ctx.drawImage(darker(shot, into ? 3 - s : s), 0, 0);
-      await sleep(5 * FRAME_MS);
+      await sleep(5 * FRAME_MS);     // main.c: a shade every 5 frames
     }
     return;
   }
@@ -1445,15 +1446,19 @@ async function playTransition(kind, into, shot, cx, cy) {
   const cell = canvas.width / grid[0].length;
   const rows = Math.ceil(canvas.height / cell);
   ctx.fillStyle = PALETTE[3];
-  for (let step = 0; step < pat.steps; step++) {
-    for (let y = 0; y < rows; y++) {
-      grid[y % grid.length].forEach((at, x) => {
-        if (at !== step) return;
-        if (into) ctx.drawImage(shot, x * cell, y * cell, cell, cell, x * cell, y * cell, cell, cell);
-        else ctx.fillRect(x * cell, y * cell, cell, cell);
-      });
+  // like main.c: tiles change in step order (top to bottom within a step),
+  // TRANS_BATCH of the screen's tiles per frame
+  const order = [];
+  for (let step = 0; step < pat.steps; step++)
+    for (let y = 0; y < rows; y++)
+      grid[y % grid.length].forEach((at, x) => { if (at === step) order.push([x, y]); });
+  const perFrame = Math.ceil(TRANS_BATCH * rows / grid.length);
+  for (let i = 0; i < order.length; i += perFrame) {
+    for (const [x, y] of order.slice(i, i + perFrame)) {
+      if (into) ctx.drawImage(shot, x * cell, y * cell, cell, cell, x * cell, y * cell, cell, cell);
+      else ctx.fillRect(x * cell, y * cell, cell, cell);
     }
-    await sleep((pat.steps <= 10 ? 4 : 2) * FRAME_MS);
+    await sleep(FRAME_MS);
   }
 }
 

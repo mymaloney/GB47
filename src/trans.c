@@ -5,7 +5,7 @@
 
 static const uint8_t steps[TRANS_COUNT] = {
     0, 0, TRANS_W, TRANS_W / 2, 0 /* iris: see trans_steps */, 16,
-    (TRANS_W + TRANS_H) / 2, 6, TRANS_W,
+    (TRANS_W + TRANS_H) / 2, 6 * 3, TRANS_W,
 };
 
 /* 4x4 ordered-dither matrix: neighbouring tiles go at very different times. */
@@ -58,9 +58,11 @@ uint8_t trans_phase(uint8_t kind, uint8_t in, uint8_t n, uint8_t x, uint8_t y,
         return bayer[((y & 3) << 2) | (x & 3)];
     case TRANS_DIAGONAL:
         return (uint8_t)(x + y) >> 1;
-    case TRANS_BLINDS:                  /* three slats of six rows */
+    case TRANS_BLINDS:
+        /* three slats of six rows; each row of a slat draws left to right
+         * in three pieces */
         while (y >= 6) y -= 6;
-        return y;
+        return (uint8_t)(y * 3) + (x >> 3);
     case TRANS_INTERLACE:
         return (y & 1) ? TRANS_W - 1 - x : x;
     default:

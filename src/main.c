@@ -523,11 +523,34 @@ static void wait_frames(uint8_t n)
     while (n--) vsync();
 }
 
-/* Screen tile (x, y): the map view, then the HUD's two rows in the window. */
-static void screen_tile(uint8_t x, uint8_t y, uint8_t t)
+/* Tile changes waiting for the next vertical blank. Changing tiles while
+ * the screen is being drawn shows them half old, half new for a frame, so
+ * a transition only writes during the blank, and only as many tiles as
+ * fit in it. */
+#define TRANS_BATCH 12
+static uint8_t *batch_at[TRANS_BATCH];   /* where in the tile maps */
+static uint8_t  batch_t[TRANS_BATCH];    /* the tile to put there */
+static uint8_t  batch_n;
+
+/* Wait for the blank, then write what's waiting. */
+static void batch_flush(void)
 {
-    if (y < VIEW_H) set_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31, t);
-    else            set_win_tile_xy(x, y - VIEW_H, t);
+    uint8_t k;
+
+    vsync();
+    for (k = 0; k < batch_n; k++) set_vram_byte(batch_at[k], batch_t[k]);
+    batch_n = 0;
+}
+
+/* Queue tile t for screen tile (x, y): the map view, then the HUD's two
+ * rows in the window. The address is worked out now, so the blank is
+ * spent only on writing. */
+static void batch_tile(uint8_t x, uint8_t y, uint8_t t)
+{
+    batch_at[batch_n] = y < VIEW_H ? get_bkg_xy_addr((cam_x + x) & 31, (cam_y + y) & 31)
+                                   : get_win_xy_addr(x, y - VIEW_H);
+    batch_t[batch_n] = t;
+    if (++batch_n == TRANS_BATCH) batch_flush();
 }
 
 /* Each shade one darker per step, until everything is black. */
@@ -548,17 +571,22 @@ static void transition(uint8_t kind, uint8_t in)
     n = trans_steps(kind, cx, cy);
     if (!n) {                            /* fade: palettes only */
         for (step = 1; step < 4; step++) {
+            vsync();
             set_palettes(fade_pal[in ? 3 - step : step]);
-            wait_frames(5);
+            wait_frames(4);
         }
         return;
     }
 
-    if (!in) HIDE_SPRITES;
+    if (!in) {
+        vsync();
+        HIDE_SPRITES;
+    }
 
     /* Work out every tile's step once (vision[] is free until the next
      * draw). Coming back, also move the new screen's tiles to a part of
-     * the window map that is never shown, and cover the screen. */
+     * the window map that is never shown, and cover the screen: nothing
+     * of this shows, the palette is still all black. */
     v = vision;
     for (y = 0; y < TRANS_H; y++)
         for (x = 0; x < TRANS_W; x++) {
@@ -567,20 +595,27 @@ static void transition(uint8_t kind, uint8_t in)
                 set_win_tile_xy(x, STASH_ROW + y,
                     y < VIEW_H ? get_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31)
                                : get_win_tile_xy(x, y - VIEW_H));
-                screen_tile(x, y, TILE_BLACK);
+                if (y < VIEW_H) set_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31, TILE_BLACK);
+                else            set_win_tile_xy(x, y - VIEW_H, TILE_BLACK);
             }
         }
-    if (in) set_palettes(PAL_NORMAL);
+    if (in) {
+        vsync();
+        set_palettes(PAL_NORMAL);
+    }
 
+    /* Step by step, top to bottom within a step, a batch per frame. */
+    batch_n = 0;
     for (step = 0; step < n; step++) {
         v = vision;
         for (y = 0; y < TRANS_H; y++)
             for (x = 0; x < TRANS_W; x++)
                 if (*v++ == step)
-                    screen_tile(x, y, in ? get_win_tile_xy(x, STASH_ROW + y) : TILE_BLACK);
-        wait_frames(n <= 10 ? 3 : 1);    /* short ones would be over too soon */
+                    batch_tile(x, y, in ? get_win_tile_xy(x, STASH_ROW + y) : TILE_BLACK);
     }
+    batch_flush();
 
+    vsync();
     if (in) SHOW_SPRITES;
     else    set_palettes(PAL_BLACK);
 }
