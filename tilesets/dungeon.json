@@ -45,5 +45,24 @@
     "84": "#",
     "85": "#",
     "86": "#"
+  },
+  "autopaint": {
+    "_doc": "Tiles the editor's Auto-paint uses; see tools/autopaint.py",
+    "floor": 87,
+    "exit": 52,
+    "door": 36,
+    "vent": 18,
+    "face": [
+      66,
+      1,
+      1
+    ],
+    "left": 16,
+    "right": 19,
+    "bottom": 1,
+    "top_left": 0,
+    "top_right": 3,
+    "bottom_left": 32,
+    "bottom_right": 35
   }
 }

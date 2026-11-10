@@ -29,6 +29,7 @@ except OSError:
     sys.exit("build/libgame.so is missing. Start the editor with: make editor")
 import gen_levels
 import tileset as ts
+import autopaint
 
 PORT = int(os.environ.get("EDITOR_PORT", "8047"))
 STATIC = {
@@ -168,6 +169,8 @@ class Handler(BaseHTTPRequestHandler):
                 ts.save_behaviour({int(k): v for k, v in req["behaviour"].items()
                                    if v in gen_levels.TILES})
             return {"ok": not errs, "errors": errs}
+        if path == "/api/autopaint":
+            return {"art": autopaint.autopaint_rows(req["map"])}
         if path == "/api/build":
             p = subprocess.run(["make"], cwd=ROOT, capture_output=True, text=True,
                                timeout=600)

@@ -64,16 +64,7 @@ BKG = [
         "........",
         ".......:",
     ]),
-    ("TILE_WALL", [
-        "########",
-        "xxx#xxxx",
-        "xxx#xxxx",
-        "########",
-        "x#xxxx#x",
-        "x#xxxx#x",
-        "########",
-        "xxx#xxxx",
-    ]),
+    ("TILE_WALL", ["########"] * 8),   # flat black: the void outside rooms
     ("TILE_EXIT", [
         "########",
         "#......#",

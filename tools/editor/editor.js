@@ -940,6 +940,15 @@ function buildTileset() {
   });
   $("art-only").addEventListener("change", () => tool.startsWith("art:") && setTool(tool));
   $("show-behaviour").addEventListener("change", () => renderEdit());
+  $("autopaint").addEventListener("click", async () => {
+    const m = cmap();
+    const res = await api("/api/autopaint", { map: m.map });
+    if (res.error) { hint(res.error); return; }
+    pushUndo();
+    m.art = res.art;
+    changed();
+    hint("Repainted from the map: room outlines, floor, exits and doors. Ctrl+Z to undo.");
+  });
   drawTileset();
 }
 

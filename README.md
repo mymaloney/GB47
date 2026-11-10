@@ -45,7 +45,8 @@ rules into `build/libgame.so`, starts a local server, and opens
   with it. It also sets the cell's behaviour if the tile has one (shown
   as a letter on the tile); tick **Look only** to change just the look.
   **Erase art** (`0`) returns cells to the built-in look. The **When
-  painted, set behaviour to** menu changes a tile's behaviour (saved to the
+  painted, set behaviour to** menu changes a tile's behaviour. **Auto-paint
+  map** repaints the whole map from its walls (see above) (saved to the
   tileset settings). **Show behaviour** labels painted cells whose
   behaviour isn't what that tile normally means.
 - **Maps:** each level has tabs Map 1, Map 2, …; **+ Map** adds one (up
@@ -134,6 +135,7 @@ tie them together. `src/world.c` does the crossing and undo.
 Each map has two layers:
 
 - **Behaviour** (the map letters: wall, floor, door…) decides the rules.
+  Unpainted walls draw as flat black.
 - **Art** decides the look: which tileset tile is drawn on each cell.
   Cells without art use the built-in graphics for their kind, so levels
   don't need painting at all.
@@ -151,6 +153,22 @@ still have to show on painted cells, so the game makes shaded copies of
 each tile as it loads: a tile used only on walls needs 1 of the 195 free
 tile slots, one on exits or mesh 3, one on floor 5. The editor shows the
 count, and the problem list says if a map uses too many.
+
+**Auto-paint** draws rooms as thin outlines on a black void, from the
+map's walls alone. Every level is painted this way; use the editor's
+**Auto-paint map** button (or `python3 tools/autopaint.py` for every
+level) after changing walls, then touch up by hand. For each wall:
+
+1. floor below: a wall face (tiles 66, 1, 1 repeating along the wall);
+2. floor to the right / left: a side wall (16 / 19);
+3. floor diagonally below-right / below-left: a top corner (0 / 3);
+4. floor above: a bottom edge (1);
+5. floor diagonally above-right / above-left: a bottom corner (32 / 35);
+6. nothing open around it: left unpainted, which draws flat black.
+
+Floor becomes tile 87, exits stairs (52), doors and one-tile gaps in a
+horizontal wall a door (36; a gap keeps behaving as floor), vents a grate
+(18). The tile numbers are under `autopaint` in the tileset settings.
 
 To use your own tileset, put the PNG in `tilesets/` and point `image` in
 `tilesets/dungeon.json` at it. Keep the same tile positions, or repaint,

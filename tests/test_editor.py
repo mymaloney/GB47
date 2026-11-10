@@ -166,6 +166,19 @@ greedy["maps"][0]["art"] = ts.format_art(
     [[(y * 20 + x) % 100 for x in range(20)] for y in range(16)])
 assert any("tile slots" in e for e in gen_levels.validate_level(greedy))
 
+# auto-paint: the wall rules, checked against a hand-painted level 1
+import autopaint   # noqa: E402
+ap = autopaint.autopaint(first_rows, tset["autopaint"])
+expect = {(0, 0): 0, (1, 0): 66, (2, 0): 1, (7, 0): 3,        # top wall, corners
+          (0, 1): 16, (7, 1): 19,                               # sides
+          (1, 1): 87, (3, 4): 36,                               # floor, doorway
+          (0, 4): 0, (19, 4): 3, (0, 7): 32, (19, 7): 35,       # hallway corners
+          (9, 7): 0, (15, 7): 3, (12, 7): 36,                   # room below the hallway
+          (1, 7): 1, (13, 9): 52, (9, 11): 32, (15, 11): 35,    # bottom edges, exit
+          (10, 13): None}                                       # the void
+for (x, y), want in expect.items():
+    assert ap[y][x] == want, f"auto-paint ({x},{y}): {ap[y][x]} != {want}"
+
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])
 assert any("player start" in e for e in gen_levels.validate_level(bad))
