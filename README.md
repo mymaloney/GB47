@@ -46,8 +46,8 @@ rules into `build/libgame.so`, starts a local server, and opens
   as a letter on the tile); tick **Look only** to change just the look.
   **Erase art** (`0`) returns cells to the built-in look. The **When
   painted, set behaviour to** menu changes a tile's behaviour. **Auto-paint
-  map** repaints the whole map from its walls (see above) (saved to the
-  tileset settings). **Show behaviour** labels painted cells whose
+  map** repaints the whole map from its walls, and **Auto-tile** does the
+  same around each stroke as you paint (see *Painting with a tileset*). **Show behaviour** labels painted cells whose
   behaviour isn't what that tile normally means.
 - **Maps:** each level has tabs Map 1, Map 2, …; **+ Map** adds one (up
   to 4). The **Links** panel joins the current map's edges to other
@@ -357,8 +357,10 @@ make usage
 
 prints how full the ROM banks and RAM are (GBDK's `romusage`); CI prints
 it on every build. Levels currently live in the first 32 KB of the
-cartridge with the code. Several large multi-map levels will outgrow it,
-at which point level data needs to move into switchable ROM banks.
+cartridge with the code, and that is now full: about 6.8 KB is left
+(only 88 bytes in bank 0), and WRAM has about 1.3 KB left. Level data
+moves into switchable ROM banks before the next feature (step 1 of
+`docs/dialogue-plan.md`).
 
 ### Rule tests (no GBDK needed)
 
@@ -366,8 +368,8 @@ at which point level data needs to move into switchable ROM banks.
 make test
 ```
 
-This compiles the game rules with `gcc`, runs unit tests, and runs a
-breadth-first solver on every level. The solver tries every action: moves, waits,
+This compiles the game rules with `gcc`, runs unit tests, and runs an
+A* solver on every level. The solver tries every action: moves, waits,
 throws, takedowns and drags. It prints each level's shortest solution
 (`U R D L W` moves/wait, lowercase `u r d l` drag/push that way,
 `TAKEDOWN`, `UNIFORM`, and `S7,5` means "stone at (7,5)", `B` is a bottle) and fails
@@ -409,7 +411,9 @@ makes undo, the solver, and PC testing possible.
 2. ~~Distraction throwing~~, ~~takedowns and bodies~~, ~~disguises~~
 3. ~~Level editor~~
 4. **Write more levels and find out what makes them fun**
-5. Dialogue: talking costs a turn and changes a guard's state (sends them away, distracts them)
+5. **Next:** NPC dialogue and simple scripts. The first one is the dog on level 3; the plan is in
+   [`docs/dialogue-plan.md`](docs/dialogue-plan.md). Later: talking to guards changes their state
+   (sends them away, distracts them)
 6. Title screen, save data (battery SRAM), music (hUGETracker)
 
 Introduce each new mechanic with its own teaching level, and let the

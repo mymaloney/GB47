@@ -1,5 +1,5 @@
 /*
- * solver.h - Breadth-first level solver, shared by the tests and the
+ * solver.h - A* level solver, shared by the tests and the
  * level editor. Runs on a PC (uses malloc; far too big for the Game Boy).
  */
 #ifndef SOLVER_H

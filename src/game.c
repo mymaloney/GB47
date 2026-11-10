@@ -319,8 +319,8 @@ static void distances_to(uint8_t x, uint8_t y)
         cx = queue_x[head];
         cy = queue_y[head];
         head = (head + 1) & (QUEUE_SIZE - 1);
-        nd = DIST(cx, cy) + 1;
-        if (nd == NO_PATH) nd = NO_PATH - 1;   /* very long paths saturate */
+        nd = DIST(cx, cy);
+        if (nd < NO_PATH - 1) nd++;            /* very long paths saturate */
         for (d = 0; d < 4; d++) {
             nx = cx + dir_dx[d];
             ny = cy + dir_dy[d];
