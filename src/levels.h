@@ -9,7 +9,9 @@
 /* One entry per map; a level's maps are consecutive (part 0 first). */
 #define LEVEL_COUNT 10
 extern const LevelDef levels[LEVEL_COUNT];
-extern const uint8_t art_tile_data[];          /* 16 bytes per tile */
+/* 16 bytes per tile; in ROM bank BANK_ART (far.h): read with far_read */
+extern const uint8_t art_tile_data[];
 extern const MapArt *const level_art[LEVEL_COUNT];
+extern const char *const level_text[];        /* what NPCs say */
 
 #endif

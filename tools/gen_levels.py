@@ -5,7 +5,10 @@
 
 levels/levels.json is the source of truth; edit it with the level editor
 (make editor) or by hand. The generated C files are committed so the ROM
-builds without Python, but don't edit them directly.
+builds without Python, but don't edit them directly. There are three, one
+per ROM bank (src/far.h): levels.c (the level table, in bank 1 with the
+code that reads it), levels_maps.c (map cells) and levels_art.c (painted
+art), which are only mapped in while being copied out.
 
 JSON format, one object per level:
 
@@ -36,6 +39,23 @@ JSON format, one object per level:
           "attitude": null                 or e.g. "HBE": hostile/enforcer/
                                            blind to own clothes, GUARD,
                                            OFFICER; null = enforcer to all
+        }],
+        "npcs": [{                         optional: things to talk to (B)
+          "x": 11, "y": 5,
+          "verb": "PET",                   HUD prompt: B:PET (max 8 chars)
+          "blocks": "move",                move: nobody walks through it;
+                                           none: walk over; all: also
+                                           blocks sight and throws
+          "script": [ ... ]                what talking does: see below
+        }],
+        "switches": [{                     optional: cells that change when
+          "x": 16, "y": 13,                a flag is set
+          "flag": "dog",
+          "on": "E",                       the map character it becomes
+                                           (until then it is what the map
+                                           says)
+          "on_art": 52                     its tileset tile once set, or
+                                           null for the built-in graphic
         }]
       }],
       "links": [{                          joins two maps' edges (both ways)
@@ -49,6 +69,18 @@ JSON format, one object per level:
 
 Walking off a linked edge enters the other map at the matching tile, so
 openings on both sides must line up (validate_level checks this).
+
+A script is a list of steps, run top to bottom when the player talks:
+
+    {"say": "You pet the dog."}            a message box (upper-cased; up
+                                           to 3 lines of 18 characters,
+                                           wrapped for you)
+    {"set": "dog"}                         set a flag (a name; up to 8 per
+    {"clear": "dog"}                       level, shared by its maps)
+    {"if": "dog", "then": [...],           steps for when the flag is set,
+                  "else": [...]}           and (optional) for when it isn't
+
+Flags start clear. Switch cells follow them at once.
 """
 import json
 import re
@@ -75,6 +107,12 @@ ITEMS = ["stone", "bottle"]
 TRANSITIONS = ["cut", "fade", "wipe", "curtain", "iris", "dissolve", "diagonal",
                "blinds", "interlace"]
 DEFAULT_TRANSITION = "fade"
+MAX_NPCS, MAX_SWITCHES, MAX_FLAGS = 4, 8, 8
+VERB_MAX = 8
+TEXT_COLS, TEXT_ROWS = 18, 3          # the message box (src/main.c)
+NPC_BLOCKS = {"move": "BLOCK_PLAYER | BLOCK_GUARD", "none": "0", "all": "BLOCK_ALL"}
+# script ops, as in src/game.h
+OP_END, OP_SAY, OP_SET, OP_CLEAR, OP_IF, OP_JUMP = range(6)
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
 
 
@@ -109,6 +147,12 @@ TILES = {
     "M": ("mesh",          False, False, False, True),
     "V": ("vent",          False, True,  True,  True),
 }
+
+
+# CELL_* name (src/game.h) for each map character.
+CELL_OF = {".": "FLOOR", "P": "FLOOR", "#": "WALL", "E": "EXIT", "D": "DOOR",
+           "W": "WINDOW", "R": "RAILING", "S": "SECURITY", "C": "CURTAIN",
+           "M": "MESH", "V": "VENT"}
 
 
 def upgrade(lv):
@@ -209,7 +253,8 @@ def validate_map(m):
 
 
 def art_usage(m):
-    """{tileset tile: set of map chars it's painted on} for one map."""
+    """{tileset tile: set of map chars it's painted on} for one map,
+    counting what switch cells turn into."""
     used = {}
     if not m.get("art"):
         return used
@@ -217,7 +262,228 @@ def art_usage(m):
         for ch, v in zip(row, arow):
             if v is not None:
                 used.setdefault(v, set()).add(ch)
+    for sw in m.get("switches", []):
+        if isinstance(sw.get("on_art"), int) and sw.get("on") in TILES:
+            used.setdefault(sw["on_art"], set()).add(sw["on"])
     return used
+
+
+def cell_rows(m):
+    """The map as the rules read it: a switch cell is the digit of its
+    index in the map's switches."""
+    rows = [list(r) for r in m["map"]]
+    for k, sw in enumerate(m.get("switches", [])):
+        rows[sw["y"]][sw["x"]] = str(k)
+    return ["".join(r) for r in rows]
+
+
+# ---- scripts
+
+def wrap_text(text):
+    """A message as the box shows it: upper case, wrapped to TEXT_COLS.
+    Raises ValueError (with a plain message) if it can't be shown."""
+    text = " ".join(str(text).upper().split())
+    if not text:
+        raise ValueError("the message is empty")
+    bad = sorted(set(text) - FONT_CHARS)
+    if bad:
+        raise ValueError(f"the font has no {' '.join(bad)} (only A-Z, 0-9 and : ! - . > ?)")
+    lines, line = [], ""
+    for word in text.split(" "):
+        if len(word) > TEXT_COLS:
+            raise ValueError(f"\"{word}\" is longer than a line ({TEXT_COLS} characters)")
+        if line and len(line) + 1 + len(word) > TEXT_COLS:
+            lines.append(line)
+            line = word
+        else:
+            line = (line + " " + word).strip()
+    lines.append(line)
+    if len(lines) > TEXT_ROWS:
+        raise ValueError(f"it needs {len(lines)} lines and the box has {TEXT_ROWS}; "
+                         "split it into two messages")
+    return lines
+
+
+def script_steps(script):
+    """Every step of a script, including those inside if/else."""
+    for st in script if isinstance(script, list) else []:
+        if isinstance(st, dict):
+            yield st
+            if "if" in st:
+                yield from script_steps(st.get("then", []))
+                yield from script_steps(st.get("else", []))
+
+
+def level_scripts(lv):
+    return [n.get("script", []) for m in lv["maps"] for n in m.get("npcs", [])]
+
+
+def level_flags(lv):
+    """The level's flag names, in the order they get their bits."""
+    names = []
+    for m in lv["maps"]:
+        for sw in m.get("switches", []):
+            names.append(sw.get("flag"))
+    for sc in level_scripts(lv):
+        for st in script_steps(sc):
+            names += [st[k] for k in ("set", "clear", "if") if k in st]
+    out = []
+    for n in names:
+        if isinstance(n, str) and n and n not in out:
+            out.append(n)
+    return out
+
+
+def compile_script(script, flags, texts):
+    """Script steps -> bytes (OP_* in src/game.h). texts collects the
+    messages; a SAY refers to its index there."""
+    def mask(name):
+        return 1 << flags.index(name)
+
+    def block(steps):
+        out = []
+        for st in steps:
+            if "say" in st:
+                text = "\n".join(wrap_text(st["say"]))
+                if text not in texts:
+                    texts.append(text)
+                out += [OP_SAY, texts.index(text)]
+            elif "set" in st:
+                out += [OP_SET, mask(st["set"])]
+            elif "clear" in st:
+                out += [OP_CLEAR, mask(st["clear"])]
+            elif "if" in st:
+                then, other = block(st.get("then", [])), block(st.get("else", []))
+                if other:
+                    then += [OP_JUMP, len(other)]
+                out += [OP_IF, mask(st["if"]), len(then)] + then + other
+        return out
+
+    return block(script) + [OP_END]
+
+
+def validate_script(script, tag):
+    errs = []
+    if not isinstance(script, list):
+        return [f"{tag}: the script must be a list of steps."]
+
+    def block(steps, depth):
+        if not isinstance(steps, list):
+            errs.append(f"{tag}: the steps of an \"if\" must be a list.")
+            return 0
+        size = 0
+        for st in steps:
+            kinds = [k for k in ("say", "set", "clear", "if") if isinstance(st, dict) and k in st]
+            if len(kinds) != 1:
+                errs.append(f"{tag}: each script step is one of say, set, clear or if.")
+                continue
+            kind = kinds[0]
+            if kind == "say":
+                try:
+                    wrap_text(st["say"])
+                except ValueError as e:
+                    errs.append(f"{tag}: can't say \"{st['say']}\": {e}.")
+                size += 2
+            elif not isinstance(st[kind], str) or not st[kind].strip():
+                errs.append(f"{tag}: \"{kind}\" needs the name of a flag.")
+            elif kind == "if":
+                if depth >= 4:
+                    errs.append(f"{tag}: \"if\" steps are nested too deep.")
+                    continue
+                inner = block(st.get("then", []), depth + 1) + 2 + block(st.get("else", []), depth + 1)
+                if inner > 250:
+                    errs.append(f"{tag}: the steps inside one \"if\" are too long.")
+                size += 3 + inner
+            else:
+                size += 2
+        return size
+
+    block(script, 0)
+    return errs
+
+
+def route_cells(g):
+    """Every cell a guard's patrol passes over (straight legs only)."""
+    route = [tuple(p) for p in g.get("route", [])]
+    cells = set(route[:1])
+    if len(route) > 1:
+        for w in range(len(route)):
+            (ax, ay), (bx, by) = route[w], route[(w + 1) % len(route)]
+            if ax != bx and ay != by:
+                continue
+            sx, sy = (bx > ax) - (bx < ax), (by > ay) - (by < ay)
+            x, y = ax, ay
+            while (x, y) != (bx, by):
+                x, y = x + sx, y + sy
+                cells.add((x, y))
+    return cells
+
+
+def validate_scripting(m, set_flags):
+    """Problems with a map's NPCs and switch cells. set_flags: the flags
+    some script in the level sets."""
+    errs = []
+    rows = m["map"]
+    mw, mh = map_size(m)
+    npcs, switches = m.get("npcs", []), m.get("switches", [])
+    if len(npcs) > MAX_NPCS:
+        errs.append(f"At most {MAX_NPCS} NPCs in a map (has {len(npcs)}).")
+    if len(switches) > MAX_SWITCHES:
+        errs.append(f"At most {MAX_SWITCHES} switch cells in a map (has {len(switches)}).")
+    routes = set()
+    for g in m.get("guards", []):
+        if 1 <= len(g.get("route", [])) <= MAX_WAYPOINTS:
+            routes |= route_cells(g)
+    taken = {}
+
+    def place(what, d):
+        """Check a thing's cell; returns (x, y) or None."""
+        x, y = d.get("x"), d.get("y")
+        if not (isinstance(x, int) and isinstance(y, int) and 0 <= x < mw and 0 <= y < mh):
+            errs.append(f"{what} is off the map.")
+            return None
+        if rows[y][x] == "P":
+            errs.append(f"{what} at ({x},{y}) is on the player's start.")
+        if (x, y) in taken:
+            errs.append(f"{what} at ({x},{y}) shares its cell with {taken[(x, y)]}.")
+        taken[(x, y)] = what[0].lower() + what[1:]
+        return x, y
+
+    for i, n in enumerate(npcs[:MAX_NPCS]):
+        tag = f"NPC {i + 1}"
+        at = place(tag, n)
+        blocks = n.get("blocks", "move")
+        if blocks not in NPC_BLOCKS:
+            errs.append(f"{tag}: blocks must be one of {', '.join(NPC_BLOCKS)}.")
+        verb = n.get("verb", "")
+        if not isinstance(verb, str) or not 1 <= len(verb) <= VERB_MAX or set(verb) - FONT_CHARS:
+            errs.append(f"{tag}: the prompt word needs 1-{VERB_MAX} characters of "
+                        "A-Z, 0-9 and : ! - . > ? (e.g. TALK).")
+        errs += validate_script(n.get("script", []), tag)
+        if at:
+            x, y = at
+            if rows[y][x] == "#":
+                errs.append(f"{tag} at ({x},{y}) is inside a wall.")
+            if blocks in ("move", "all") and (x, y) in routes:
+                errs.append(f"{tag} at ({x},{y}) stands on a guard's route and would block it.")
+    for i, sw in enumerate(switches[:MAX_SWITCHES]):
+        tag = f"Switch cell {i + 1}"
+        at = place(tag, sw)
+        flag, on = sw.get("flag"), sw.get("on")
+        if not isinstance(flag, str) or not flag.strip():
+            errs.append(f"{tag}: needs the name of the flag that changes it.")
+        elif flag not in set_flags:
+            errs.append(f"{tag}: nothing sets the flag \"{flag}\", so it would never change. "
+                        "Give an NPC a \"set\" step for it.")
+        if on not in TILES or on == "P":
+            errs.append(f"{tag}: what it turns into must be one of "
+                        f"{' '.join(c for c in TILES if c != 'P')}.")
+        art = sw.get("on_art")
+        if art is not None and not (isinstance(art, int) and 0 <= art < len(tileset()["tiles"])):
+            errs.append(f"{tag}: its painted tile isn't in the tileset.")
+        if at and on in TILES and at in routes and (TILES[rows[at[1]][at[0]]][2] or TILES[on][2]):
+            errs.append(f"{tag} at ({at[0]},{at[1]}) is on a guard's route, and would block it.")
+    return errs
 
 
 def validate_art(m):
@@ -370,13 +636,29 @@ def validate_level(lv):
     if map_errs:
         return errs
 
+    # NPCs, scripts and switch cells (the maps themselves are sound by now)
+    set_flags = {st["set"] for sc in level_scripts(lv) for st in script_steps(sc)
+                 if isinstance(st.get("set"), str)}
+    script_errs = []
+    for k, m in enumerate(maps):
+        prefix = f"Map {k + 1}: " if multi else ""
+        script_errs += [prefix + e for e in validate_scripting(m, set_flags)]
+    flags = level_flags(lv)
+    if len(flags) > MAX_FLAGS:
+        script_errs.append(f"A level can use {MAX_FLAGS} flags (this one uses {len(flags)}: "
+                           f"{', '.join(flags)}).")
+    errs += script_errs
+    if script_errs:
+        return errs
+
     starts = [(k, x, y) for k, m in enumerate(maps) for y, r in enumerate(m["map"])
               for x, c in enumerate(r) if c == "P"]
     if len(starts) != 1:
         errs.append(f"Level needs exactly one player start (has {len(starts)}).")
     elif starts[0][0] != 0:
         errs.append("The player start must be in the first map.")
-    if not any("E" in r for m in maps for r in m["map"]):
+    if not any("E" in r for m in maps for r in m["map"]) and \
+            not any(sw["on"] == "E" for m in maps for sw in m.get("switches", [])):
         errs.append("Level needs at least one exit.")
     errs += validate_links(lv)
     return errs
@@ -390,23 +672,67 @@ def validate_all(levels):
         errs.append("Too many maps in total (max 250).")
     for n, lv in enumerate(levels):
         errs += [f"Level {n + 1} ({lv.get('name', '?')}): {e}" for e in validate_level(lv)]
+    if not errs and len(compile_all(levels)[1]) > 255:
+        errs.append("Too many different messages in total (max 255).")
     return errs
 
 
+def compile_all(levels):
+    """Every NPC's script as bytes, and the text they say:
+    ({(map index in the table, npc index): bytes}, [messages])."""
+    scripts, texts, base = {}, [], 0
+    for lv in map(upgrade, levels):
+        flags = level_flags(lv)
+        for k, m in enumerate(lv["maps"]):
+            for i, n in enumerate(m.get("npcs", [])):
+                if n.get("script"):
+                    scripts[(base + k, i)] = compile_script(n["script"], flags, texts)
+        base += len(lv["maps"])
+    return scripts, texts
+
+
 def c_string(s):
-    return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return '"' + s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n") + '"'
+
+
+GENERATED = ["/* Generated by tools/gen_levels.py from levels/levels.json.",
+             " * Don't edit by hand: use the level editor (make editor) or the JSON. */"]
+
+
+def bank_pragma(bank, why):
+    """Put a generated file in a ROM bank (ignored by gcc). Numbers as in
+    src/far.h."""
+    return ["#ifdef __SDCC", f"#pragma bank {bank}     /* {why}: see far.h */", "#endif", ""]
+
+
+def all_maps(levels):
+    return [m for lv in map(upgrade, levels) for m in lv["maps"]]
+
+
+def generate_maps(levels):
+    """src/levels_maps.c: every map's cells, in ROM bank BANK_MAPS."""
+    out = GENERATED + ['#include "levels.h"', ""] + bank_pragma(2, "BANK_MAPS")
+    for k, m in enumerate(all_maps(levels)):
+        rows = cell_rows(m)
+        out.append(f"const char level_map{k}[] =")
+        out += [f"    {c_string(r)}" + (";" if j == len(rows) - 1 else "") for j, r in enumerate(rows)]
+        out.append("")
+    return "\n".join(out)
 
 
 def generate_c(levels):
-    """One LevelDef per map; a level's maps are consecutive, first map
-    part 0, links as 1 + absolute index."""
-    out = [
-        "/* Generated by tools/gen_levels.py from levels/levels.json.",
-        " * Don't edit by hand: use the level editor (make editor) or the JSON. */",
-        '#include "levels.h"',
-        "",
-        "const LevelDef levels[LEVEL_COUNT] = {",
-    ]
+    """src/levels.c: one LevelDef per map; a level's maps are consecutive,
+    first map part 0, links as 1 + absolute index."""
+    out = GENERATED + ['#include "levels.h"', ""] + bank_pragma(1, "with main.c")
+    count = len(all_maps(levels))
+    out.append("/* Map cells: in levels_maps.c (ROM bank BANK_MAPS). */")
+    out += [f"extern const char level_map{k}[];" for k in range(count)]
+    scripts, texts = compile_all(levels)
+    if scripts:
+        out += ["", "/* NPC scripts (OP_* in game.h). */"]
+        out += [f"static const uint8_t script{k}_{i}[] = {{ {', '.join(map(str, code))} }};"
+                for (k, i), code in scripts.items()]
+    out += ["", "const LevelDef levels[LEVEL_COUNT] = {"]
     base = 0
     for n, lv in enumerate(map(upgrade, levels)):
         notes = lv.get("notes", "").strip()
@@ -419,8 +745,7 @@ def generate_c(levels):
             out.append("    {")
             out.append(f"        {c_string(lv['name'])},")
             out.append(f"        {len(rows[0])}, {len(rows)},")
-            for j, r in enumerate(rows):
-                out.append(f"            {c_string(r)}" + ("," if j == len(rows) - 1 else ""))
+            out.append(f"        level_map{base + k},")
             guards = m.get("guards", [])
             out.append(f"        {len(guards)},")
             out.append("        {")
@@ -438,28 +763,65 @@ def generate_c(levels):
                        + " },   /* up right down left */")
             out.append("        { " + ", ".join(str(l[1]) if l else "0" for l in link) + " },")
             out.append(f"        TRANS_{lv['transition'].upper()},")
+            flags = level_flags(lv)
+            local = sorted(art_usage(m))          # as generate_art numbers them
+            npcs, switches = m.get("npcs", []), m.get("switches", [])
+            out.append(f"        {len(npcs)},")
+            out.append("        {")
+            for i, n in enumerate(npcs):
+                script = f"script{base + k}_{i}" if (base + k, i) in scripts else "0"
+                out.append(f"            {{ {n['x']}, {n['y']}, {NPC_BLOCKS[n.get('blocks', 'move')]}, "
+                           f"{c_string(n['verb'])}, {script} }},")
+            if not npcs:
+                out.append("            { 0, 0, 0, 0, 0 },")
+            out.append("        },")
+            out.append(f"        {len(switches)},")
+            out.append("        {")
+            for sw in switches:
+                art = local.index(sw["on_art"]) if sw.get("on_art") is not None and local else 255
+                out.append(f"            {{ {sw['x']}, {sw['y']}, {1 << flags.index(sw['flag'])}, "
+                           f"CELL_{CELL_OF[rows[sw['y']][sw['x']]]}, CELL_{CELL_OF[sw['on']]}, {art} }},"
+                           f"   /* {sw['flag']} */")
+            if not switches:
+                out.append("            { 0, 0, 0, 0, 0, 0 },")
+            out.append("        },")
             out.append("    },")
         base += len(lv["maps"])
     out.append("};")
     out.append("")
-    out += generate_art(levels)
+    out.append("/* What NPCs say (OP_SAY n shows level_text[n]); lines end in \\n. */")
+    out.append("const char *const level_text[] = {")
+    out += [f"    {c_string(t)}," for t in texts] or ["    0,"]
+    out.append("};")
+    out.append("")
+    out += generate_art(levels)[0]
     return "\n".join(out)
 
 
+def generate_art_data(levels):
+    """src/levels_art.c: tileset tiles and run-length art, in ROM bank
+    BANK_ART."""
+    out = GENERATED + ['#include "levels.h"', ""] + bank_pragma(3, "BANK_ART")
+    return "\n".join(out + generate_art(levels)[1])
+
+
 def generate_art(levels):
-    """Tileset tiles used anywhere (as 2bpp data) and each map's MapArt."""
-    maps = [m for lv in map(upgrade, levels) for m in lv["maps"]]
+    """Each map's painted art, as C lines for (levels.c, levels_art.c):
+    the small MapArt records that code reads directly, and the bulky data
+    (tileset tiles as 2bpp, run-length art) that goes in the art bank."""
+    maps = all_maps(levels)
     used = sorted({v for m in maps for v in art_usage(m)})
     index = {v: i for i, v in enumerate(used)}
     tiles = tileset()["tiles"]
-    out = ["/* Tileset tiles used by any map (16 bytes each), from tilesets/. */",
+    far = ["/* Tileset tiles used by any map (16 bytes each), from tilesets/. */",
            "const uint8_t art_tile_data[] = {"]
     for v in used:
-        out.append(f"    /* tileset tile {v} */ " + ", ".join(f"0x{b:02X}" for b in ts.to_2bpp(tiles[v])) + ",")
+        far.append(f"    /* tileset tile {v} */ " + ", ".join(f"0x{b:02X}" for b in ts.to_2bpp(tiles[v])) + ",")
     if not used:
-        out.append("    0")
-    out.append("};")
-    out.append("")
+        far.append("    0")
+    far.append("};")
+    far.append("")
+    out = ["/* Painted art. The run-length data is in levels_art.c (ROM bank BANK_ART). */"]
     refs = []
     for k, m in enumerate(maps):
         usage = art_usage(m)
@@ -472,11 +834,13 @@ def generate_art(levels):
         data, rows = ts.rle_rows([[0xFF if v is None else lidx[v] for v in row] for row in grid])
         data += [0, 0]                             # end marker
         name = f"art{k}"
+        far.append(f"const uint8_t {name}_rle[] = {{ {', '.join(str(b) for b in data)} }};")
+        far.append(f"const uint16_t {name}_rows[] = {{ {', '.join(str(r) for r in rows)} }};")
+        out.append(f"extern const uint8_t {name}_rle[];")
+        out.append(f"extern const uint16_t {name}_rows[];")
         out.append(f"static const uint8_t {name}_tiles[] = {{ {', '.join(str(index[v]) for v in local)} }};")
         out.append(f"static const uint8_t {name}_kinds[] = {{ "
                    f"{', '.join(str(ts.slots_for(usage[v])) for v in local)} }};")
-        out.append(f"static const uint8_t {name}_rle[] = {{ {', '.join(str(b) for b in data)} }};")
-        out.append(f"static const uint16_t {name}_rows[] = {{ {', '.join(str(r) for r in rows)} }};")
         out.append(f"static const MapArt {name} = {{ {len(local)}, {name}_tiles, {name}_kinds, "
                    f"{name}_rle, {name}_rows }};")
         refs.append(f"&{name}")
@@ -484,7 +848,8 @@ def generate_art(levels):
     out.append("/* Art for each entry of levels[] (0 = built-in graphics only). */")
     out.append("const MapArt *const level_art[LEVEL_COUNT] = { " + ", ".join(refs) + " };")
     out.append("")
-    return out
+    far.append("")
+    return out, far
 
 
 def generate_h(levels):
@@ -501,8 +866,10 @@ def generate_h(levels):
         "/* One entry per map; a level's maps are consecutive (part 0 first). */",
         f"#define LEVEL_COUNT {count}",
         "extern const LevelDef levels[LEVEL_COUNT];",
-        "extern const uint8_t art_tile_data[];          /* 16 bytes per tile */",
+        "/* 16 bytes per tile; in ROM bank BANK_ART (far.h): read with far_read */",
+        "extern const uint8_t art_tile_data[];",
         "extern const MapArt *const level_art[LEVEL_COUNT];",
+        "extern const char *const level_text[];        /* what NPCs say */",
         "",
         "#endif",
         "",
@@ -534,6 +901,12 @@ def dumps(levels):
                     "facing": g["facing"], "route": g["route"],
                     "uniform": g.get("uniform", "none"), "attitude": g.get("attitude")}))
             ml.append('        "guards": [' + ("\n" + ",\n".join(gl) + "\n        ]" if gl else "]"))
+            for key in ("npcs", "switches"):       # only where there are any
+                if m.get(key):
+                    ml[-1] += ","
+                    ml.append(f'        "{key}": [\n' +
+                              ",\n".join("          " + json.dumps(d) for d in m[key]) +
+                              "\n        ]")
             ml.append("      }")
             ms.append("\n".join(ml))
         lines.append(",\n".join(ms))
@@ -563,8 +936,14 @@ def save(levels, path=JSON_PATH):
 
 
 def write_c(levels):
-    (ROOT / "src" / "levels.c").write_text(generate_c(levels))
-    (ROOT / "src" / "levels.h").write_text(generate_h(levels))
+    for name, text in generated_files(levels).items():
+        (ROOT / "src" / name).write_text(text)
+
+
+def generated_files(levels):
+    """{file name in src/: contents} for everything this script writes."""
+    return {"levels.c": generate_c(levels), "levels_maps.c": generate_maps(levels),
+            "levels_art.c": generate_art_data(levels), "levels.h": generate_h(levels)}
 
 
 def main():

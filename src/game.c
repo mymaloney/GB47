@@ -2,8 +2,9 @@
  * game.c - Turn rules for the stealth puzzle prototype.
  *
  * One turn:
- *   1. The player acts: move, wait, throw, drag/push a body, or take down
- *      an adjacent guard (which locks the player for TAKEDOWN_TURNS).
+ *   1. The player acts: move, wait, throw, drag/push a body, talk to an
+ *      NPC (which runs its script), or take down an adjacent guard (which
+ *      locks the player for TAKEDOWN_TURNS).
  *   2. Standing on the exit wins immediately.
  *   3. If a guard can see the player now, the player is caught; if it can
  *      see a body or a takedown in progress, the alarm goes up.
@@ -19,6 +20,7 @@
  */
 #include <string.h>
 #include "game.h"
+#include "far.h"
 
 const ItemDef item_defs[ITEM_TYPES] = {
     /* name      range noise */
@@ -26,11 +28,34 @@ const ItemDef item_defs[ITEM_TYPES] = {
     { "BOTTLE",  6,    6 },
 };
 
-/* The map is read straight from the level data in ROM; row_start[y] is
- * y * width, so a tile lookup needs no multiply (slow on the Game Boy). */
+/* On the Game Boy the map's cells are in a ROM bank that isn't normally
+ * mapped (far.h), so game_use copies the current map into cartridge RAM
+ * and the rules read that. The pathfinding arrays live there too: work
+ * RAM has no room for any of them. On a PC, cells points straight at the
+ * level data. row_start[y] is y * width, so a tile lookup needs no
+ * multiply (slow on the Game Boy). */
+#define NO_PATH    0xFF
+#define QUEUE_SIZE 1024   /* ring buffer; holds the BFS frontier only */
+
+#ifdef __SDCC
+static char    __at(0xA000) map_copy[MAP_MAX_CELLS];
+static uint8_t __at(0xA800) dist[MAP_MAX_CELLS];      /* dist[row_start[y] + x] */
+static uint8_t __at(0xB000) queue_x[QUEUE_SIZE];
+static uint8_t __at(0xB400) queue_y[QUEUE_SIZE];
+#define cells map_copy
+#else
+static const char *cells;
+static uint8_t dist[MAP_MAX_CELLS];
+static uint8_t queue_x[QUEUE_SIZE];
+static uint8_t queue_y[QUEUE_SIZE];
+#endif
+
 static const LevelDef *level;
 static uint8_t         map_w, map_h;
 static uint16_t        row_start[MAP_MAX_H];
+
+static uint8_t cur_flags;               /* what switch cells are read with */
+static uint8_t said[MAX_SAID], said_n;  /* messages from the last action */
 
 static const int8_t dir_dx[4] = { 0, 1, 0, -1 };
 static const int8_t dir_dy[4] = { -1, 0, 1, 0 };
@@ -44,11 +69,17 @@ void game_use(const LevelDef *lvl)
     uint8_t  y;
     uint16_t at = 0;
 
-    if (lvl != level) game_map_changed();
-    level = lvl;
     map_w = lvl->width;
     map_h = lvl->height;
     for (y = 0; y < map_h; y++, at += map_w) row_start[y] = at;
+#ifdef __SDCC
+    /* ROM never changes, so the copy is only needed for a different map */
+    if (lvl != level) far_read(BANK_MAPS, map_copy, lvl->map, at);
+#else
+    cells = lvl->map;
+#endif
+    if (lvl != level) game_map_changed();
+    level = lvl;
 }
 
 void game_load(const LevelDef *lvl, GameState *s)
@@ -60,12 +91,14 @@ void game_load(const LevelDef *lvl, GameState *s)
     memset(s, 0, sizeof(GameState));
     game_use(lvl);
     game_map_changed();     /* a new game: assume nothing about the map */
+    cur_flags = 0;
+    said_n    = 0;
     s->px = 1;
     s->py = 1;
 
     for (y = 0; y < map_h; y++)
         for (x = 0; x < map_w; x++, at++)
-            if (lvl->map[at] == 'P') {
+            if (cells[at] == 'P') {
                 s->px = x;
                 s->py = y;
             }
@@ -98,10 +131,20 @@ const uint8_t cell_blocks[CELL_TYPES] = {
     BLOCK_GUARD | BLOCK_SIGHT | BLOCK_THROW,    /* vent     */
 };
 
+void game_set_flags(uint8_t flags)
+{
+    if (flags == cur_flags) return;
+    cur_flags = flags;
+    game_map_changed();     /* a switch cell may have opened or closed */
+}
+
 uint8_t game_cell(uint8_t x, uint8_t y)
 {
+    char c;
     if (x >= map_w || y >= map_h) return CELL_WALL;
-    switch (level->map[row_start[y] + x]) {
+    c = cells[row_start[y] + x];
+    switch (c) {
+    case '.': return CELL_FLOOR;
     case '#': return CELL_WALL;
     case 'E': return CELL_EXIT;
     case 'D': return CELL_DOOR;
@@ -111,13 +154,22 @@ uint8_t game_cell(uint8_t x, uint8_t y)
     case 'C': return CELL_CURTAIN;
     case 'M': return CELL_MESH;
     case 'V': return CELL_VENT;
-    default:  return CELL_FLOOR;       /* '.' and 'P' */
+    default:
+        if (c >= '0' && c < '0' + MAX_SWITCHES) {       /* a switch cell */
+            const SwitchDef *sw = &level->switches[c - '0'];
+            return (cur_flags & sw->flag) ? sw->on : sw->off;
+        }
+        return CELL_FLOOR;             /* 'P' */
     }
 }
 
 uint8_t game_blocks(uint8_t x, uint8_t y, uint8_t what)
 {
-    return cell_blocks[game_cell(x, y)] & what;
+    uint8_t b = cell_blocks[game_cell(x, y)], i;
+
+    for (i = 0; i < level->npc_count; i++)      /* an NPC stands in the way */
+        if (level->npcs[i].x == x && level->npcs[i].y == y) b |= level->npcs[i].blocks;
+    return b & what;
 }
 
 uint8_t game_width(void)  { return map_w; }
@@ -295,14 +347,8 @@ static uint8_t body_spotted(const GameState *s)
 /* Pathfinding: breadth-first distances from one tile                  */
 /* ------------------------------------------------------------------ */
 
-#define NO_PATH 0xFF
-#define QUEUE_SIZE 1024   /* ring buffer; holds the BFS frontier only */
-
 #define NO_TARGET 0xFF    /* dist_x when dist[] holds nothing usable */
 
-static uint8_t dist[MAP_MAX_CELLS];   /* dist[row_start[y] + x] */
-static uint8_t queue_x[QUEUE_SIZE];
-static uint8_t queue_y[QUEUE_SIZE];
 static uint8_t dist_x = NO_TARGET, dist_y;   /* the tile dist[] was filled for */
 
 #define DIST(x, y) dist[row_start[y] + (x)]
@@ -616,6 +662,53 @@ static void finish_turn(GameState *s, uint8_t noise, uint8_t nx, uint8_t ny,
 }
 
 /* ------------------------------------------------------------------ */
+/* Talking and scripts                                                 */
+/* ------------------------------------------------------------------ */
+
+uint8_t game_talk_target(const GameState *s)
+{
+    uint8_t i;
+    if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
+    for (i = 0; i < level->npc_count; i++) {
+        const NpcDef *n = &level->npcs[i];
+        if (n->script && game_distance(n->x, n->y, s->px, s->py) == 1) return i;
+    }
+    return 0xFF;
+}
+
+uint8_t game_said_count(void)    { return said_n; }
+uint8_t game_said(uint8_t i)     { return said[i]; }
+
+/* Run a script (see the OP_* list in game.h). */
+static void run_script(GameState *s, const uint8_t *p)
+{
+    for (;;) {
+        switch (*p++) {
+        case OP_SAY:
+            if (said_n < MAX_SAID) said[said_n++] = *p;
+            p++;
+            break;
+        case OP_SET:
+            s->flags |= *p++;
+            break;
+        case OP_CLEAR:
+            s->flags &= (uint8_t)~*p++;
+            break;
+        case OP_IF:
+            if (!(s->flags & p[0])) p += p[1];
+            p += 2;
+            break;
+        case OP_JUMP:
+            p += p[0] + 1;
+            break;
+        default:                        /* OP_END */
+            game_set_flags(s->flags);   /* switch cells follow at once */
+            return;
+        }
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /* Takedowns and bodies                                                */
 /* ------------------------------------------------------------------ */
 
@@ -707,6 +800,8 @@ uint8_t game_step(GameState *s, uint8_t action)
     uint8_t nx, ny, b, bx, by;
     uint8_t suspicious = s->takedown_left != 0;   /* mid-takedown */
 
+    said_n = 0;
+    game_set_flags(s->flags);
     if (s->status != STATUS_PLAYING) return 0;
     if (s->takedown_left && action != ACT_WAIT) return 0;  /* locked */
 
@@ -738,6 +833,10 @@ uint8_t game_step(GameState *s, uint8_t action)
         s->takedown_guard  = b;
         s->takedown_left   = TAKEDOWN_TURNS;
         suspicious = 1;
+    } else if (action == ACT_TALK) {
+        b = game_talk_target(s);
+        if (b == 0xFF) return 0;
+        run_script(s, level->npcs[b].script);
     } else if (action != ACT_WAIT) {
         return 0;
     }
@@ -760,6 +859,8 @@ uint8_t game_can_throw(const GameState *s, uint8_t item, uint8_t x, uint8_t y)
 
 uint8_t game_throw(GameState *s, uint8_t item, uint8_t x, uint8_t y)
 {
+    said_n = 0;
+    game_set_flags(s->flags);
     if (s->status != STATUS_PLAYING || s->takedown_left) return 0;
     if (!game_can_throw(s, item, x, y)) return 0;
 
@@ -779,6 +880,8 @@ uint8_t game_guard_at(const GameState *s, uint8_t x, uint8_t y)
 
 uint8_t game_arrive(GameState *s, uint8_t x, uint8_t y)
 {
+    said_n = 0;
+    game_set_flags(s->flags);
     s->px     = x;
     s->py     = y;
     s->status = STATUS_PLAYING;

@@ -1,7 +1,26 @@
 # Next task: NPC dialogue and simple scripting
 
-Status: **not started**. This is a handoff spec. Read `CLAUDE.md` first
-for the build, the code layout and the constraints.
+Status: **done.** Kept as the record of what was asked for and why it was
+built this way; `CLAUDE.md` and `README.md` describe how it works now.
+
+What was decided along the way:
+
+- **Banking** (step 1): a simpler variant of approach A. All code stays
+  mapped (banks 0 and 1), so nothing is a banked call; only map cells and
+  painted art went to data banks, copied out through `far_read()`. The
+  current map is copied to cartridge RAM, and the pathfinding arrays
+  moved there too. See `src/far.h`.
+- **The open questions** at the end were answered with the suggestions:
+  upper-case text, talking costs a turn, it isn't suspicious, the dog
+  blocks walking.
+- **Messages** are not in `GameState`: what a turn said is read back with
+  `game_said()`, so it costs no undo memory.
+- **Switch cells** keep their normal character in `levels.json` (that is
+  the "off" state); only the generated map uses the digits. A switch has
+  an `on` cell and `on_art`, no `off`.
+- **Level 3** needs the dog now: 36 turns instead of 27.
+
+The original spec follows.
 
 ## What the user asked for
 

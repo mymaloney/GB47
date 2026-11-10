@@ -2,7 +2,8 @@
 
 A turn-based stealth puzzle game for the original Game Boy (GBDK-2020 4.3.0,
 SDCC, MBC5), plus a browser level editor. Read `README.md` for the player
-and editor view. **The current task is in `docs/dialogue-plan.md`.**
+and editor view. `docs/dialogue-plan.md` is the (finished) plan for NPCs,
+scripts and ROM banking, kept for its reasoning.
 
 ## Commands
 
@@ -29,9 +30,18 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   entries are `{current map, GameState}` and are taken before each turn.
 - `src/main.c`: Game Boy only (input, drawing, HUD, windows). It only
   *reads* `GameState`, except through `world_step`/`world_throw`.
-- `src/levels.c/h`: **generated** from `levels/levels.json` by
-  `tools/gen_levels.py`. Never edit it by hand. The JSON format is
+- `src/levels.c`, `levels_maps.c`, `levels_art.c`, `levels.h`:
+  **generated** from `levels/levels.json` by `tools/gen_levels.py`, one
+  file per ROM bank. Never edit them by hand. The JSON format is
   documented at the top of `gen_levels.py`.
+- `src/far.c/h`: the ROM bank layout (read the top of `far.h` first) and
+  `far_read()`.
+- NPCs, scripts and switch cells: the rules are in `game.c` (`run_script`,
+  `game_talk_target`, `OP_*` in `game.h`), the bytes come from
+  `compile_script()` in `gen_levels.py`, and `main.c` only shows the
+  message box. A new script step needs: an `OP_*`, a case in `run_script`,
+  `compile_script` + `validate_script`, the editor's `STEP_KINDS`, and a
+  test.
 - `src/trans.c/h`: level transition patterns (pure C, also in
   `libgame.so` for the editor's preview). `main.c` plays them; a level's
   choice is `LevelDef.transition`, `"transition"` in the JSON. Adding one:
@@ -60,25 +70,37 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
 - No passing structs by value. Prefer `uint8_t`, and avoid large locals.
 - Build warnings show up only in the GBDK build, not in gcc. Keep it
   warning-free.
-- **ROM is full.**
-  - Bank 0 (0x0000-0x3FFF) has ~88 bytes free, and 0x4000-0x7FFF is ~67%
-    used.
-  - Nothing is banked yet: code and data are linked as one flat 32 KB.
-  - Biggest objects: `levels.o` 8.4 KB, `game.o` 7.5 KB, `main.o` 5 KB,
-    `world.o` 2 KB, `tiles.o` 1.3 KB.
-  - Banking is step 1 of the current plan.
-- **WRAM is nearly full** (about 1.4 KB of 8 KB left).
-  - The big users are the pathfinding `dist[]`/queue (~4 KB) and undo
-    (`UNDO_DEPTH` x `GameState`).
-  - Every byte added to `GameState` costs 33+ bytes of RAM.
+- **ROM banks** (MBC5, 64 KB; details in `src/far.h`):
+  - Bank 0 (3.4 KB free): files with no `#pragma bank`: `game.c`,
+    `world.c`, `art.c`, `trans.c`, `far.c`, plus GBDK. It can't overflow
+    into bank 1 any more, so this is the tight one: **new rules code goes
+    here, and there isn't much room.**
+  - Bank 1 (6.4 KB free): `main.c`, `tiles.c`, `levels.c` (the level
+    table, scripts, text). Always mapped, like bank 0.
+  - Banks 2 and 3 (12-14 KB free): map cells and painted art. Only
+    `far_read()` and `art_row()` map them in, and only code in bank 0 may
+    switch banks.
+  - A pointer into bank 2 or 3 (`LevelDef.map`, `MapArt.rle`/`rows`,
+    `art_tile_data`) must never be read directly on the Game Boy.
+- **Work RAM**: about 5.4 KB of 8 KB free. The current map's cells and the
+  pathfinding arrays are in cartridge RAM (0xA000-0xB7FF, fixed addresses
+  in `game.c`); 2 KB of it is unused.
+  - Every byte added to `GameState` still costs 33+ bytes (undo history).
 - Guards' walking distances (`dist[]`) are cached per target tile. Call
   `game_map_changed()` whenever what guards can walk on changes without a
   change of map (e.g. a switch cell flipping).
+- Changing tiles while the screen is being drawn shows them half-drawn
+  for a frame. Animations must write during vertical blank only, and only
+  about 12 tiles fit (see `batch_flush()` in `main.c`).
 - VRAM background tiles:
   - The first `BKG_TILE_COUNT` (61) are built in (`src/tiles.c`, generated
     by `tools/gen_tiles.py`).
   - Painted art uses the rest (195 slots per map).
-- The font is `0-9 A-Z : ! - . > ?` only (`FONT_CHARS` in `gen_levels.py`).
+- The font is `0-9 A-Z : ! - . > ?` only (`FONT_CHARS` in `gen_levels.py`),
+  so dialogue is upper-cased. Lower case would cost 26 of the art slots.
+- Switch cells are the characters `0`-`7` in the map the rules read
+  (`cell_rows()` in `gen_levels.py`); `levels.json` keeps the cell's
+  normal character there.
 
 ## Conventions
 

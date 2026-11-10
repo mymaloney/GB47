@@ -6,13 +6,15 @@
  *   D-pad        move one tile (spends a turn); you can walk over bodies
  *   A            wait one turn            (after escaping: next level,
  *                through the level's transition)
- *   B            take down an adjacent guard, or take the uniform of
- *                the body you stand on (when prompted)
+ *   B            take down an adjacent guard, talk to (pet, ...) an NPC
+ *                next to you, or take the uniform of the body you stand
+ *                on (when prompted)
  *   B + D-pad    hold B to drag a body behind you, or push one ahead
  *   SELECT       tap: open inventory
  *   SELECT+D-pad hold SELECT to look at neighbouring screens; let go to return
  *   START        tap: undo    hold: restart level
  *
+ * Message box (after talking): A or B for the next message / to close
  * Inventory:  UP/DOWN choose, A aim, B/SELECT close
  * Aiming:     D-pad move cursor, A throw (spends a turn), B back, SELECT cancel
  *
@@ -22,6 +24,8 @@
  * is 32x32 tiles and wraps, so the current screen is drawn into it at
  * world position modulo 32. The HUD lives in the window layer.
  */
+#pragma bank 1     /* see far.h for what lives where */
+
 #include <gb/gb.h>
 #include <stdint.h>
 
@@ -29,6 +33,7 @@
 #include "world.h"
 #include "art.h"
 #include "trans.h"
+#include "far.h"
 #include "levels.h"
 #include "tiles.h"
 
@@ -45,10 +50,14 @@
 #define UI_PLAY      0
 #define UI_INVENTORY 1
 #define UI_AIM       2
+#define UI_DIALOGUE  3   /* a message box is up: A/B only */
 
-/* Inventory window: edge, title, one row per item type, hint line */
-#define WIN_ROWS (3 + ITEM_TYPES)
-#define WIN_Y    (144 - WIN_ROWS * 8)
+/* The pop-up window (inventory, message box): edge, then four rows. The
+ * inventory uses them for a title, one row per item type and a hint; a
+ * message for TEXT_ROWS lines and a hint. */
+#define WIN_ROWS  5
+#define WIN_Y     (144 - WIN_ROWS * 8)
+#define TEXT_ROWS 3      /* must match TEXT_ROWS/TEXT_COLS in gen_levels.py */
 
 #define TILE_BLACK TILE_WALL   /* flat black: what a transition covers with */
 #define PAL_NORMAL 0xE4        /* 11 10 01 00: index 0 = white ... 3 = black */
@@ -82,6 +91,7 @@ static uint8_t     art_slot[256 - BKG_TILE_COUNT];   /* first slot of each local
 static uint8_t     art_buf[VIEW_W];         /* local tiles of one screen row */
 
 static uint8_t     ui_mode;
+static uint8_t     say_at;       /* which of this turn's messages is showing */
 static uint8_t     inv_item;     /* highlighted / chosen item type */
 static uint8_t     aim_x, aim_y; /* aiming cursor */
 static const char *hud_msg;      /* one-off message for the HUD's 2nd row */
@@ -154,7 +164,9 @@ static uint8_t next_item(uint8_t from, uint8_t step)
 
 static void draw_hud(void)
 {
-    if (ui_mode == UI_INVENTORY) {   /* the window shows the inventory */
+    uint8_t n;
+
+    if (ui_mode == UI_INVENTORY || ui_mode == UI_DIALOGUE) {   /* the window is in use */
         hud_msg = 0;                 /* don't show a stale message later */
         return;
     }
@@ -165,7 +177,8 @@ static void draw_hud(void)
         put_text(put_text(0, "THROW ") , item_defs[inv_item].name);
     } else {
         /* level number (1-99), a space, then the name (max 12 chars) */
-        uint8_t n = level_num, x = 0;
+        uint8_t x = 0;
+        n = level_num;
         if (n >= 10) row_buf[x++] = FONT_BASE + n / 10;
         row_buf[x++] = FONT_BASE + n % 10;
         put_text(x + 1, levels[level_idx].name);
@@ -182,6 +195,8 @@ static void draw_hud(void)
     else if (state.status == STATUS_WON)    put_text(0, "ESCAPED!   A:NEXT");
     else if (ui_mode == UI_AIM)          put_text(0, "A:THROW B:BACK");
     else if (game_takedown_target(&state) != 0xFF) put_text(0, "B:TAKEDOWN");
+    else if ((n = game_talk_target(&state)) != 0xFF)
+        put_text(put_text(0, "B:"), world_def(&world)->npcs[n].verb);
     else if (game_uniform_here(&state) != 0xFF)    put_text(0, "B:TAKE UNIFORM");
     else if (game_body_adjacent(&state)) put_text(0, "HOLD B:DRAG");
     else if (looking)                    put_text(0, "LOOKING AROUND");
@@ -207,12 +222,22 @@ static void draw_tiles(uint8_t x0, uint8_t y0, uint8_t w, uint8_t h)
 {
     uint8_t  x, y, wx, wy, cell, seen, aim, bx, first;
     uint8_t *v = vision;
+    const LevelDef  *def = world_def(&world);
+    const SwitchDef *sw;
 
     game_compute_vision(&state, x0, y0, w, h, vision);
 
     for (y = 0; y < h; y++) {
         wy = y0 + y;
-        if (art) art_row(art, wy, x0, w, art_buf);
+        if (art) {
+            art_row(art, wy, x0, w, art_buf);
+            /* a switch cell whose flag is set shows its other look */
+            for (x = 0; x < def->switch_count; x++) {
+                sw = &def->switches[x];
+                if (sw->y == wy && (state.flags & sw->flag) &&
+                    sw->x >= x0 && sw->x < x0 + w) art_buf[sw->x - x0] = sw->on_art;
+            }
+        }
         for (x = 0; x < w; x++, v++) {
             wx   = x0 + x;
             cell = game_cell(wx, wy);
@@ -408,7 +433,7 @@ static void open_inventory(void)
     HIDE_SPRITES;         /* sprites would draw on top of the window */
 }
 
-static void close_inventory(void)
+static void close_window(void)
 {
     move_win(7, HUD_WIN_Y);   /* back to just the HUD */
     SHOW_SPRITES;
@@ -416,9 +441,49 @@ static void close_inventory(void)
 
 static void back_to_play(void)
 {
-    if (ui_mode == UI_INVENTORY) close_inventory();
+    if (ui_mode == UI_INVENTORY || ui_mode == UI_DIALOGUE) close_window();
     ui_mode = UI_PLAY;
     redraw();
+}
+
+/* ------------------------------------------------------------------ */
+/* Message box: what an NPC said this turn (same window)               */
+/* ------------------------------------------------------------------ */
+
+static void draw_dialogue(void)
+{
+    const char *t = level_text[game_said(say_at)];
+    uint8_t     i, x;
+
+    for (i = 0; i < VIEW_W; i++) row_buf[i] = TILE_WIN_EDGE;
+    set_win_tiles(0, 0, VIEW_W, 1, row_buf);
+
+    /* the text comes already wrapped: lines end in '\n' */
+    for (i = 1; i <= TEXT_ROWS; i++) {
+        clear_row_buf();
+        for (x = 1; *t && *t != '\n' && x < VIEW_W - 1; x++) row_buf[x] = char_tile(*t++);
+        if (*t == '\n') t++;
+        set_win_tiles(0, i, VIEW_W, 1, row_buf);
+    }
+    clear_row_buf();
+    put_text(1, say_at + 1 < game_said_count() ? "A:MORE" : "A:OK");
+    set_win_tiles(0, WIN_ROWS - 1, VIEW_W, 1, row_buf);
+}
+
+static void open_dialogue(void)
+{
+    say_at  = 0;
+    ui_mode = UI_DIALOGUE;
+    draw_dialogue();
+    move_win(7, WIN_Y);
+    HIDE_SPRITES;
+}
+
+static void input_dialogue(uint8_t pressed)
+{
+    if (!(pressed & (J_A | J_B))) return;
+    if (++say_at < game_said_count()) draw_dialogue();
+    else back_to_play();
 }
 
 /* SELECT was let go: a tap opens the inventory, a look returns to the
@@ -449,8 +514,7 @@ static void select_released(void)
  * cones and aiming) into VRAM after the built-in tiles. */
 static void load_art(void)
 {
-    uint8_t k, slot = ART_SLOT0, v, buf[16], was_on = LCDC_REG & LCDCF_ON;
-    const uint8_t *src;
+    uint8_t k, slot = ART_SLOT0, v, src[16], buf[16], was_on = LCDC_REG & LCDCF_ON;
 
     art_map = world.part_def[world.cur];
     art = level_art[art_map];
@@ -461,7 +525,7 @@ static void load_art(void)
     if (was_on) DISPLAY_OFF;
     for (k = 0; k < art->count; k++) {
         art_slot[k] = slot;
-        src = art_tile_data + (uint16_t)art->tiles[k] * 16;
+        far_read(BANK_ART, src, art_tile_data + (uint16_t)art->tiles[k] * 16, 16);
         for (v = 0; v < art->kinds[k]; v++) {
             art_variant(src, v, buf);
             set_bkg_data(slot++, 1, buf);
@@ -492,7 +556,7 @@ static void load_level(uint8_t idx)
 {
     uint8_t i;
 
-    if (ui_mode == UI_INVENTORY) close_inventory();
+    if (ui_mode == UI_INVENTORY || ui_mode == UI_DIALOGUE) close_window();
     ui_mode   = UI_PLAY;
     level_idx = idx;
     inv_item  = 0;
@@ -523,11 +587,34 @@ static void wait_frames(uint8_t n)
     while (n--) vsync();
 }
 
-/* Screen tile (x, y): the map view, then the HUD's two rows in the window. */
-static void screen_tile(uint8_t x, uint8_t y, uint8_t t)
+/* Tile changes waiting for the next vertical blank. Changing tiles while
+ * the screen is being drawn shows them half old, half new for a frame, so
+ * a transition only writes during the blank, and only as many tiles as
+ * fit in it. */
+#define TRANS_BATCH 12
+static uint8_t *batch_at[TRANS_BATCH];   /* where in the tile maps */
+static uint8_t  batch_t[TRANS_BATCH];    /* the tile to put there */
+static uint8_t  batch_n;
+
+/* Wait for the blank, then write what's waiting. */
+static void batch_flush(void)
 {
-    if (y < VIEW_H) set_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31, t);
-    else            set_win_tile_xy(x, y - VIEW_H, t);
+    uint8_t k;
+
+    vsync();
+    for (k = 0; k < batch_n; k++) set_vram_byte(batch_at[k], batch_t[k]);
+    batch_n = 0;
+}
+
+/* Queue tile t for screen tile (x, y): the map view, then the HUD's two
+ * rows in the window. The address is worked out now, so the blank is
+ * spent only on writing. */
+static void batch_tile(uint8_t x, uint8_t y, uint8_t t)
+{
+    batch_at[batch_n] = y < VIEW_H ? get_bkg_xy_addr((cam_x + x) & 31, (cam_y + y) & 31)
+                                   : get_win_xy_addr(x, y - VIEW_H);
+    batch_t[batch_n] = t;
+    if (++batch_n == TRANS_BATCH) batch_flush();
 }
 
 /* Each shade one darker per step, until everything is black. */
@@ -548,17 +635,22 @@ static void transition(uint8_t kind, uint8_t in)
     n = trans_steps(kind, cx, cy);
     if (!n) {                            /* fade: palettes only */
         for (step = 1; step < 4; step++) {
+            vsync();
             set_palettes(fade_pal[in ? 3 - step : step]);
-            wait_frames(5);
+            wait_frames(4);
         }
         return;
     }
 
-    if (!in) HIDE_SPRITES;
+    if (!in) {
+        vsync();
+        HIDE_SPRITES;
+    }
 
     /* Work out every tile's step once (vision[] is free until the next
      * draw). Coming back, also move the new screen's tiles to a part of
-     * the window map that is never shown, and cover the screen. */
+     * the window map that is never shown, and cover the screen: nothing
+     * of this shows, the palette is still all black. */
     v = vision;
     for (y = 0; y < TRANS_H; y++)
         for (x = 0; x < TRANS_W; x++) {
@@ -567,20 +659,27 @@ static void transition(uint8_t kind, uint8_t in)
                 set_win_tile_xy(x, STASH_ROW + y,
                     y < VIEW_H ? get_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31)
                                : get_win_tile_xy(x, y - VIEW_H));
-                screen_tile(x, y, TILE_BLACK);
+                if (y < VIEW_H) set_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31, TILE_BLACK);
+                else            set_win_tile_xy(x, y - VIEW_H, TILE_BLACK);
             }
         }
-    if (in) set_palettes(PAL_NORMAL);
+    if (in) {
+        vsync();
+        set_palettes(PAL_NORMAL);
+    }
 
+    /* Step by step, top to bottom within a step, a batch per frame. */
+    batch_n = 0;
     for (step = 0; step < n; step++) {
         v = vision;
         for (y = 0; y < TRANS_H; y++)
             for (x = 0; x < TRANS_W; x++)
                 if (*v++ == step)
-                    screen_tile(x, y, in ? get_win_tile_xy(x, STASH_ROW + y) : TILE_BLACK);
-        wait_frames(n <= 10 ? 3 : 1);    /* short ones would be over too soon */
+                    batch_tile(x, y, in ? get_win_tile_xy(x, STASH_ROW + y) : TILE_BLACK);
     }
+    batch_flush();
 
+    vsync();
     if (in) SHOW_SPRITES;
     else    set_palettes(PAL_BLACK);
 }
@@ -657,6 +756,11 @@ static void input_play(uint8_t pressed, uint8_t keys)
 
     if (pressed & J_B) {
         if (game_takedown_target(&state) != 0xFF) do_takedown();
+        else if (game_talk_target(&state) != 0xFF) {
+            /* the turn is drawn first (a switch cell may have changed),
+             * then what was said goes up over it */
+            if (do_action(ACT_TALK) && game_said_count()) open_dialogue();
+        }
         else if (game_uniform_here(&state) != 0xFF) do_action(ACT_UNIFORM);
         return;   /* otherwise B only matters while held (dragging) */
     }
@@ -709,7 +813,7 @@ static void input_inventory(uint8_t pressed)
         inv_item = next_item(inv_item, 1);
         draw_inventory();
     } else if (pressed & J_A) {
-        close_inventory();
+        close_window();
         ui_mode = UI_AIM;
         aim_x   = state.px;
         aim_y   = state.py;
@@ -800,6 +904,8 @@ void main(void)
     uint8_t keys, prev = 0, pressed, released;
 
     DISPLAY_OFF;
+    ENABLE_RAM;        /* the rules keep the current map in cartridge RAM */
+    SWITCH_RAM(0);
     BGP_REG  = PAL_NORMAL;
     OBP0_REG = PAL_NORMAL;
     set_bkg_data(0, BKG_TILE_COUNT, bkg_tile_data);
@@ -824,6 +930,7 @@ void main(void)
         if (!pressed) continue;
 
         if      (ui_mode == UI_INVENTORY) input_inventory(pressed);
+        else if (ui_mode == UI_DIALOGUE)  input_dialogue(pressed);
         else if (ui_mode == UI_AIM)       input_aim(pressed);
         else                              input_play(pressed, keys);
     }

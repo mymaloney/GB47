@@ -76,6 +76,10 @@ def assets():
         "dirs": g.DIRS,
         "uniforms": g.UNIFORMS,
         "transitions": g.TRANSITIONS,
+        "max_npcs": g.MAX_NPCS, "max_switches": g.MAX_SWITCHES,
+        "max_flags": gen_levels.MAX_FLAGS, "verb_max": gen_levels.VERB_MAX,
+        "npc_blocks": list(gen_levels.NPC_BLOCKS),
+        "text_cols": gen_levels.TEXT_COLS, "text_rows": gen_levels.TEXT_ROWS,
         "view_w": g.VIEW_W, "view_h": g.VIEW_H,
         "map_max_w": g.MAP_MAX_W, "map_max_h": g.MAP_MAX_H,
         "map_max_cells": g.MAP_MAX_CELLS,
@@ -119,6 +123,8 @@ def analyze(level):
     if guards:
         checks.append(("takedown", G["SOLVE_USE_TAKEDOWN"]))
         checks.append(("drag", G["SOLVE_USE_DRAG"]))
+    if any(m.get("npcs") for m in level.maps):
+        checks.append(("talk", G["SOLVE_USE_TALK"]))
     if any(gd.get("uniform", "none") != "none" for gd in guards):
         checks.append(("uniform", G["SOLVE_USE_UNIFORM"]))
     for name, bit in checks:
@@ -207,10 +213,19 @@ class Handler(BaseHTTPRequestHandler):
             skip = {(li, mi, x + dx, y + dy) for x, y in req.get("changed", [])
                     for dx in (-2, -1, 0, 1, 2) for dy in (-2, -1, 0, 1, 2)}
             learned = autopaint.learn(req.get("levels", []), cfg, skip)
+            # NPCs and switch cells are painted by hand: leave their art alone
+            keep = [tuple(c) for c in req.get("keep", [])]
             if path == "/api/autopaint":
-                return {"art": ts.format_art(autopaint.autopaint(req["map"], cfg, learned))}
-            return {"art": autopaint.autotile(req["map"], req.get("art"),
-                                              [tuple(c) for c in req["changed"]], cfg, learned)}
+                art = ts.format_art(autopaint.autopaint(req["map"], cfg, learned))
+            else:
+                art = autopaint.autotile(req["map"], req.get("art"),
+                                         [tuple(c) for c in req["changed"]], cfg, learned)
+            return {"art": autopaint.keep_art(art, req.get("art"), keep)}
+        if path == "/api/wrap":       # a message as the Game Boy's box shows it
+            try:
+                return {"lines": gen_levels.wrap_text(req.get("text", ""))}
+            except ValueError as e:
+                return {"problem": str(e)}
         if path == "/api/transition":
             return g.transition(req["kind"], int(req.get("cx", 10)), int(req.get("cy", 8)))
         if path == "/api/build":
@@ -241,7 +256,8 @@ class Handler(BaseHTTPRequestHandler):
                 ok = g.throw(level, s, a["item"], a["x"], a["y"])
             else:
                 ok = g.step(level, s, a["code"])
-            return {"ok": ok, "state": g.encode(s), "view": g.view(level, s, aim)}
+            told = g.said(level) if ok else []
+            return {"ok": ok, "state": g.encode(s), "view": g.view(level, s, aim), "said": told}
         if path == "/api/solve":
             return analyze(level)
         return {"error": "unknown endpoint"}

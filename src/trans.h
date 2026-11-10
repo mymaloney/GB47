@@ -7,7 +7,9 @@
  * on the TRANS_W x TRANS_H grid of screen tiles (the map view plus the two
  * HUD rows) in n = trans_steps() steps: on the way out a tile turns black
  * at step trans_phase(kind, 0, n, ...), on the way in it appears at step
- * trans_phase(kind, 1, n, ...).
+ * trans_phase(kind, 1, n, ...). Tiles change in step order (top to bottom,
+ * left to right within a step), a few per frame: steps set the order, not
+ * the speed.
  *
  * To add one: a TRANS_* number, its step count and pattern in trans.c, and
  * its name in TRANSITIONS in tools/gen_levels.py (same order).
@@ -24,7 +26,7 @@
 #define TRANS_IRIS      4   /* a circle closes on the player, opens from them */
 #define TRANS_DISSOLVE  5   /* tiles drop out in a dither pattern */
 #define TRANS_DIAGONAL  6   /* sweeps from the top-left corner */
-#define TRANS_BLINDS    7   /* horizontal slats close downward */
+#define TRANS_BLINDS    7   /* horizontal slats close downward, line by line */
 #define TRANS_INTERLACE 8   /* alternate rows wipe in opposite directions */
 #define TRANS_COUNT     9
 

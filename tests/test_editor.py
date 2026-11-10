@@ -23,10 +23,9 @@ levels = gen_levels.load()
 assert not gen_levels.validate_all(levels), gen_levels.validate_all(levels)
 
 # generated C must match the committed files
-assert gen_levels.generate_c(levels) == (ROOT / "src" / "levels.c").read_text(), \
-    "src/levels.c is out of date: run make levels"
-assert gen_levels.generate_h(levels) == (ROOT / "src" / "levels.h").read_text(), \
-    "src/levels.h is out of date: run make levels"
+for fname, text in gen_levels.generated_files(levels).items():
+    assert text == (ROOT / "src" / fname).read_text(), \
+        f"src/{fname} is out of date: run make levels"
 
 def with_map(lv, rows, k=0):
     """Copy of a level with map k's rows replaced."""
@@ -257,6 +256,75 @@ assert pat["steps"] == 20 and pat["out"][0] == list(range(20)) and len(pat["out"
 pat = g.transition("iris", 2, 3)
 assert pat["in"][3][2] == 0 and pat["out"][3][2] == pat["steps"] - 1
 assert g.transition("fade", 0, 0)["steps"] == 0
+
+# NPCs, scripts and switch cells: level 3's dog
+dog = levels[2]
+npc, sw = dog["maps"][0]["npcs"][0], dog["maps"][0]["switches"][0]
+assert gen_levels.level_flags(dog) == ["dog"]
+texts = []
+code = gen_levels.compile_script(npc["script"], ["dog"], texts)
+OP = {k: g.G["OP_" + k] for k in ("END", "SAY", "SET", "CLEAR", "IF", "JUMP")}
+assert code == [OP["IF"], 1, 4, OP["SAY"], 0, OP["JUMP"], 4, OP["SAY"], 1, OP["SET"], 1, OP["END"]], code
+assert texts == ["THE DOG WAGS ITS\nTAIL.", "YOU PET THE DOG."]
+assert gen_levels.cell_rows(dog["maps"][0])[sw["y"]][sw["x"]] == "0", "switch cells are digits to the rules"
+c3 = gen_levels.generate_c(levels)
+assert '{ 11, 5, BLOCK_PLAYER | BLOCK_GUARD, "PET", script2_0 },' in c3
+assert "CELL_FLOOR, CELL_EXIT," in c3 and '"YOU PET THE DOG.",' in c3
+assert gen_levels.dumps(levels) == (ROOT / "levels" / "levels.json").read_text(), "levels.json round-trips"
+# played through the real rules: pet the dog, the stairs appear
+ld = g.Level(dog)
+wd = g.new_game(ld)
+wd.part[0].px, wd.part[0].py = 10, 5
+vd = g.view(ld, wd)
+assert vd["prompt"]["talk"] == "PET" and vd["flags"] == []
+stairs = -(1 + 52 * 5)       # tileset tile 52, plain
+assert vd["tiles"][sw["y"]][sw["x"]] == g.T["TILE_FLOOR"]
+assert g.step(ld, wd, g.G["ACT_TALK"]) and g.said(ld) == [["YOU PET THE DOG."]]
+vd = g.view(ld, wd)
+assert vd["flags"] == ["dog"] and vd["tiles"][sw["y"]][sw["x"]] == stairs, vd["tiles"][sw["y"]][sw["x"]]
+assert g.step(ld, wd, g.G["ACT_TALK"]) and g.said(ld) == [["THE DOG WAGS ITS", "TAIL."]]
+assert not g.step(ld, wd, g.G["ACT_RIGHT"]), "the dog is in the way"
+needs = server.analyze(ld)
+assert needs["needs"].get("talk") == "yes" and "TALK" in needs["solve"]["text"], needs
+# text: wrapped to the box, upper-cased, and refused in plain words
+assert gen_levels.wrap_text("a b") == ["A B"]
+assert gen_levels.wrap_text("x" * 18 + " " + "y" * 18 + " z") == ["X" * 18, "Y" * 18, "Z"]
+for bad_text, why in [("it's here", "font has no '"), ("x" * 19, "longer than a line"),
+                      ("word " * 20, "split it"), ("  ", "empty")]:
+    try:
+        gen_levels.wrap_text(bad_text)
+        raise AssertionError(bad_text)
+    except ValueError as e:
+        assert why in str(e), (bad_text, str(e))
+
+
+def scripted(change):
+    lv = json.loads(json.dumps(dog))
+    change(lv["maps"][0])
+    return gen_levels.validate_level(lv)
+
+
+assert any("nothing sets the flag" in e for e in scripted(lambda m: m["npcs"].clear()))
+assert any("needs at least one exit" in e
+           for e in scripted(lambda m: (m["npcs"].clear(), m["switches"].clear())))
+assert any("inside a wall" in e for e in scripted(lambda m: m["npcs"][0].update(x=0, y=0)))
+assert any("guard's route" in e for e in scripted(lambda m: m["npcs"][0].update(
+    x=m["guards"][0]["route"][0][0], y=m["guards"][0]["route"][0][1])))
+assert any("can't say" in e for e in scripted(
+    lambda m: m["npcs"][0]["script"].append({"say": "don't"})))
+assert any("prompt word" in e for e in scripted(lambda m: m["npcs"][0].update(verb="pet the dog")))
+assert any("shares its cell" in e for e in scripted(lambda m: m["switches"][0].update(x=11, y=5)))
+assert any("turns into" in e for e in scripted(lambda m: m["switches"][0].update(on="?")))
+assert any("At most 4 NPCs" in e for e in scripted(lambda m: m["npcs"].extend(
+    [dict(m["npcs"][0], x=6 + i, y=1) for i in range(4)])))
+assert any("8 flags" in e for e in scripted(lambda m: m["npcs"][0]["script"].extend(
+    [{"set": f"f{i}"} for i in range(8)])))
+# auto-paint leaves the dog and the hidden stairs as painted
+import autopaint as ap   # noqa: E402
+m3 = dog["maps"][0]
+assert sorted(ap.scripted_cells(m3)) == [(11, 5), (16, 13)]
+repainted = ap.keep_art(ap.autopaint_rows(m3["map"], tset), m3["art"], ap.scripted_cells(m3))
+assert repainted[5][22:24] == "15" and repainted[13][32:34] == ".."
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])

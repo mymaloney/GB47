@@ -19,6 +19,9 @@
 
 static int failures = 0;
 
+/* For test maps without NPCs or switch cells. */
+#define NO_SCRIPTING 0, { { 0, 0, 0, 0, 0 } }, 0, { { 0, 0, 0, 0, 0, 0 } }
+
 #define CHECK(cond, ...)                                              \
     do {                                                              \
         if (!(cond)) {                                                \
@@ -56,7 +59,7 @@ static const LevelDef test_level = {
     },
     { 2, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT,
+    TRANS_CUT, NO_SCRIPTING
 };
 
 static void test_movement(void)
@@ -148,7 +151,7 @@ static const LevelDef patrol_level = {
     { { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0 } },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT,
+    TRANS_CUT, NO_SCRIPTING
 };
 
 static void test_patrol(void)
@@ -277,7 +280,7 @@ static const LevelDef td_level = {
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT,
+    TRANS_CUT, NO_SCRIPTING
 };
 
 static void test_takedown(void)
@@ -377,7 +380,7 @@ static const LevelDef dz_level = {
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT,
+    TRANS_CUT, NO_SCRIPTING
 };
 
 static void test_disguise_cones(void)
@@ -507,7 +510,7 @@ static const LevelDef big_level = {
     },
     { 1, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT,
+    TRANS_CUT, NO_SCRIPTING
 };
 
 static void test_big_map(void)
@@ -557,7 +560,7 @@ static const LevelDef tile_level = {
     { { DIR_LEFT, 1, { {10, 8} }, DISGUISE_NONE, 0 } },
     { 2, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT,
+    TRANS_CUT, NO_SCRIPTING
 };
 
 static void tiles_reset(char column, char gap)
@@ -592,7 +595,7 @@ static void test_transitions(void)
         for (c = 0; c < sizeof centres / sizeof centres[0]; c++) {
             uint8_t cx = centres[c][0], cy = centres[c][1];
             uint8_t n = trans_steps((uint8_t)kind, cx, cy);
-            CHECK(n >= 4 && n <= 24, "transition %d has %d steps", kind, n);
+            CHECK(n >= 4 && n <= 40, "transition %d has %d steps", kind, n);
             for (in = 0; in < 2; in++) {
                 int first = 0, last = 0;
                 for (y = 0; y < TRANS_H; y++)
@@ -620,6 +623,108 @@ static void test_transitions(void)
         CHECK(levels[kind].transition < TRANS_COUNT, "map %d: unknown transition", kind);
 }
 
+/* NPCs, talking, scripts and switch cells. A dog at (5,3) in an open room;
+ * petting it sets a flag that turns (10,3) from floor into the exit and
+ * (12,3) from floor into wall. */
+static const uint8_t pet_script[] = {
+    OP_IF, 1, 4,   OP_SAY, 7, OP_JUMP, 4,      /* petted before: "wags its tail" */
+                   OP_SAY, 3, OP_SET, 1,       /* else: "you pet the dog", set flag 0 */
+    OP_END,
+};
+static const uint8_t two_lines[] = { OP_SAY, 1, OP_SAY, 2, OP_CLEAR, 1, OP_END };
+static char npc_map[20 * 16 + 1];
+static const LevelDef npc_level = {
+    "NPC", 20, 16, npc_map,
+    1,
+    { { DIR_UP, 1, { {17, 13} }, DISGUISE_NONE, 0 } },     /* far away, looking at a wall */
+    { 0, 0 },
+    0, { 0 }, { 0 }, TRANS_CUT,
+    3,
+    { { 5, 3, BLOCK_PLAYER | BLOCK_GUARD, "PET", pet_script },
+      { 5, 8, 0, "READ", two_lines },                       /* a sign you can walk over */
+      { 15, 3, BLOCK_PLAYER | BLOCK_GUARD, "LOOK", 0 } },   /* nothing to say */
+    2,
+    { { 10, 3, 1, CELL_FLOOR, CELL_EXIT, 0xFF },
+      { 12, 3, 1, CELL_FLOOR, CELL_WALL, 0xFF } },
+};
+
+static void npc_reset(void)
+{
+    int x, y;
+    for (y = 0; y < 16; y++)
+        for (x = 0; x < 20; x++)
+            npc_map[y * 20 + x] = (x == 0 || y == 0 || x == 19 || y == 15) ? '#' : '.';
+    npc_map[3 * 20 + 1] = 'P';
+    npc_map[3 * 20 + 10] = '0';
+    npc_map[3 * 20 + 12] = '1';
+}
+
+static void test_npcs(void)
+{
+    World w, before;
+    GameState *s;
+    SolveStep steps[64];
+    char text[256];
+    int n;
+
+    npc_reset();
+    world_load(&npc_level, 0, &w);
+    s = world_state(&w);
+    undo_clear();
+
+    CHECK(game_talk_target(s) == 0xFF && world_step(&w, ACT_TALK) == 0 && s->turn == 0,
+          "nobody to talk to from the start");
+    world_step(&w, ACT_RIGHT); world_step(&w, ACT_RIGHT); world_step(&w, ACT_RIGHT);
+    CHECK(s->px == 4 && game_talk_target(s) == 0, "next to the dog");
+    CHECK(world_step(&w, ACT_RIGHT) == 0 && s->px == 4, "the dog is in the way");
+    CHECK(game_blocks(5, 3, BLOCK_GUARD) && !game_blocks(5, 3, BLOCK_SIGHT | BLOCK_THROW),
+          "it blocks walking, not sight or throws");
+    CHECK(game_cell(10, 3) == CELL_FLOOR && game_cell(12, 3) == CELL_FLOOR, "switch cells off");
+
+    before = w;
+    undo_push(&w);
+    CHECK(world_step(&w, ACT_TALK) == 1 && s->turn == 4, "petting costs a turn");
+    CHECK(game_said_count() == 1 && game_said(0) == 3, "it says the first-time line");
+    CHECK(s->flags == 1 && s->status == STATUS_PLAYING, "flag set");
+    CHECK(game_cell(10, 3) == CELL_EXIT && game_cell(12, 3) == CELL_WALL,
+          "switch cells follow the flag");
+    CHECK(world_step(&w, ACT_WAIT) == 1 && game_said_count() == 0, "messages last one turn");
+    CHECK(world_step(&w, ACT_TALK) == 1 && game_said_count() == 1 && game_said(0) == 7,
+          "the second time it says the other line");
+
+    /* undo takes the flag, and the exit, back */
+    w = before; world_activate(&w);       /* (as if two more undos) */
+    world_step(&w, ACT_TALK);
+    CHECK(undo_pop(&w) == 1 && s->flags == 0 && game_cell(10, 3) == CELL_FLOOR,
+          "undo hides the exit again");
+    CHECK(memcmp(&w, &before, WORLD_BYTES(&w)) == 0, "undo restores the state exactly");
+
+    /* an NPC that doesn't block: walk onto it, talk from beside it */
+    s->px = 5; s->py = 7;
+    CHECK(game_talk_target(s) == 1, "next to the sign");
+    CHECK(world_step(&w, ACT_TALK) == 1 && game_said_count() == 2 &&
+          game_said(0) == 1 && game_said(1) == 2, "two messages in one turn");
+    CHECK(world_step(&w, ACT_DOWN) == 1 && s->py == 8, "walk over it");
+    CHECK(game_talk_target(s) == 0xFF, "not from on top of it");
+    s->px = 14; s->py = 3;
+    CHECK(game_talk_target(s) == 0xFF && world_step(&w, ACT_TALK) == 0,
+          "an NPC without a script can't be talked to");
+
+    /* guards path round switch cells as they change */
+    s->px = 4; s->py = 3;
+    world_step(&w, ACT_TALK);
+    CHECK(game_blocks(12, 3, BLOCK_GUARD), "the new wall blocks guards");
+
+    /* the level can't be finished without the dog, and the solver finds it */
+    npc_reset();
+    CHECK(solver_run(&npc_level, 0, SOLVE_USE_ALL & ~SOLVE_USE_TALK, NULL, 0, NULL) == 0,
+          "no exit without talking");
+    n = solver_run(&npc_level, 0, SOLVE_USE_ALL, steps, 64, NULL);
+    solver_format(steps, n, text, sizeof text);
+    /* 3 steps to the dog, pet it, then 8 round it to the new exit */
+    CHECK(n == 12 && strstr(text, "TALK"), "solved with a talk in %d: %s", n, text);
+}
+
 /* A patrol leg with something in the way (the editor refuses these, but
  * the rules shouldn't leave the guard stuck): it walks round. */
 static void test_patrol_detour(void)
@@ -629,7 +734,7 @@ static void test_patrol_detour(void)
         1,
         { { DIR_RIGHT, 2, { {3, 3}, {12, 3} }, DISGUISE_NONE, 0 } },
         { 0, 0 },
-        0, { 0 }, { 0 }, TRANS_CUT,
+        0, { 0 }, { 0 }, TRANS_CUT, NO_SCRIPTING
     };
     GameState s;
     int i;
@@ -788,6 +893,21 @@ static void test_level_data(void)
         CHECK(players == (lv->part == 0), "map %d: the start (P) belongs in a level's first map",
               l + 1);
         level_exits += exits;
+        /* NPCs and switch cells: on the map, and a switch cell is marked in
+         * the map with its own digit; one may be the level's exit */
+        CHECK(lv->npc_count <= MAX_NPCS && lv->switch_count <= MAX_SWITCHES,
+              "map %d: too many NPCs or switch cells", l + 1);
+        for (y = 0; y < lv->npc_count; y++)
+            CHECK(lv->npcs[y].x < lv->width && lv->npcs[y].y < lv->height &&
+                  lv->npcs[y].verb && strlen(lv->npcs[y].verb) <= 8,
+                  "map %d: NPC %d is off the map or has no prompt", l + 1, y + 1);
+        for (y = 0; y < lv->switch_count; y++) {
+            const SwitchDef *sw = &lv->switches[y];
+            CHECK(sw->x < lv->width && sw->y < lv->height && sw->flag &&
+                  lv->map[sw->y * lv->width + sw->x] == '0' + y,
+                  "map %d: switch cell %d doesn't match the map", l + 1, y + 1);
+            level_exits += sw->on == CELL_EXIT;
+        }
         if (l + 1 == LEVEL_COUNT || levels[l + 1].part == 0)
             CHECK(level_exits >= 1, "level ending at map %d needs an exit", l + 1);
         CHECK(l == 0 || lv->part == 0 || lv->part == levels[l - 1].part + 1,
@@ -868,7 +988,7 @@ static LevelDef two_maps[2] = {
         { { DIR_DOWN, 2, { {4, 10}, {14, 10} }, DISGUISE_NONE, 0 } },
         { 1, 0 },
         0, { 0, 2, 0, 0 }, { 0, 2, 0, 0 },      /* right -> B, offset 2 */
-        TRANS_CUT,
+        TRANS_CUT, NO_SCRIPTING
     },
     {
         "TWO", 20, 16,
@@ -892,7 +1012,7 @@ static LevelDef two_maps[2] = {
         { { DIR_DOWN, 1, { {3, 10} }, DISGUISE_NONE, 0 } },
         { 0, 0 },
         1, { 0, 0, 0, 1 }, { 0, 0, 0, -2 },     /* left -> A, offset -2 */
-        TRANS_CUT,
+        TRANS_CUT, NO_SCRIPTING
     },
 };
 
@@ -991,6 +1111,7 @@ static const struct {
     const char *what;
 } required[] = {
     { 4, SOLVE_USE_ITEMS,    "items" },
+    { 3, SOLVE_USE_TALK,     "petting the dog" },
     { 5, SOLVE_USE_TAKEDOWN, "a takedown" },
     { 5, SOLVE_USE_DRAG,     "dragging the body" },
     { 6, SOLVE_USE_UNIFORM,  "a disguise" },
@@ -1059,6 +1180,7 @@ int main(void)
     test_tile_types();
     test_patrol_detour();
     test_transitions();
+    test_npcs();
     test_level_data();
     if (failures == 0) {
         test_world();

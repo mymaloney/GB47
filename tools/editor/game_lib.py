@@ -52,6 +52,7 @@ VIEW_W, VIEW_H = lib.editor_info(14), lib.editor_info(15)
 MAX_PARTS = lib.editor_info(17)
 MAX_GUARDS, MAX_WAYPOINTS = lib.editor_info(6), lib.editor_info(7)
 ITEM_TYPES, DISGUISE_TYPES = lib.editor_info(8), lib.editor_info(9)
+MAX_NPCS, MAX_SWITCHES = lib.editor_info(20), lib.editor_info(21)
 
 
 class Point(C.Structure):
@@ -64,13 +65,24 @@ class GuardDef(C.Structure):
                 ("attitude", C.c_char_p)]
 
 
+class NpcDef(C.Structure):
+    _fields_ = [("x", C.c_uint8), ("y", C.c_uint8), ("blocks", C.c_uint8),
+                ("verb", C.c_char_p), ("script", C.POINTER(C.c_uint8))]
+
+
+class SwitchDef(C.Structure):
+    _fields_ = [(n, C.c_uint8) for n in "x y flag off on on_art".split()]
+
+
 class LevelDef(C.Structure):
     _fields_ = [("name", C.c_char_p), ("width", C.c_uint8), ("height", C.c_uint8),
                 ("map", C.c_char_p),
                 ("guard_count", C.c_uint8), ("guards", GuardDef * MAX_GUARDS),
                 ("items", C.c_uint8 * ITEM_TYPES),
                 ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4),
-                ("transition", C.c_uint8)]
+                ("transition", C.c_uint8),
+                ("npc_count", C.c_uint8), ("npcs", NpcDef * MAX_NPCS),
+                ("switch_count", C.c_uint8), ("switches", SwitchDef * MAX_SWITCHES)]
 
 
 class Guard(C.Structure):
@@ -83,7 +95,8 @@ class GameState(C.Structure):
                 ("guard_count", C.c_uint8), ("turn", C.c_uint16),
                 ("items", C.c_uint8 * ITEM_TYPES),
                 ("takedown_left", C.c_uint8), ("takedown_guard", C.c_uint8),
-                ("disguise", C.c_uint8), ("guards", Guard * MAX_GUARDS)]
+                ("disguise", C.c_uint8), ("flags", C.c_uint8),
+                ("guards", Guard * MAX_GUARDS)]
 
 
 class World(C.Structure):
@@ -99,7 +112,8 @@ class SolveStep(C.Structure):
     _fields_ = [("action", C.c_uint8), ("tx", C.c_uint8), ("ty", C.c_uint8)]
 
 
-for idx, struct in [(0, GameState), (1, LevelDef), (2, GuardDef), (3, Guard), (16, World)]:
+for idx, struct in [(0, GameState), (1, LevelDef), (2, GuardDef), (3, Guard), (16, World),
+                    (18, NpcDef), (19, SwitchDef)]:
     if lib.editor_info(idx) != C.sizeof(struct):
         raise RuntimeError(
             f"{struct.__name__} layout in tools/editor/game_lib.py no longer "
@@ -121,6 +135,9 @@ _sig = {
     "game_compute_vision": (None, [S, C.c_uint8, C.c_uint8, C.c_uint8, C.c_uint8,
                                    C.POINTER(C.c_uint8)]),
     "game_takedown_target": (C.c_uint8, [S]),
+    "game_talk_target": (C.c_uint8, [S]),
+    "game_said_count": (C.c_uint8, []),
+    "game_said": (C.c_uint8, [C.c_uint8]),
     "game_uniform_here": (C.c_uint8, [S]),
     "game_body_adjacent": (C.c_uint8, [S]),
     "game_attitude": (C.c_uint8, [S, C.c_uint8]),
@@ -142,9 +159,7 @@ for name, (res, args) in _sig.items():
 # Map character, CELL_* number and tile graphic for each kind of cell.
 CELL_NAMES = ["FLOOR", "WALL", "EXIT", "DOOR", "WINDOW", "RAILING", "SECURITY",
               "CURTAIN", "MESH", "VENT"]
-CELL_CHARS = {".": "FLOOR", "P": "FLOOR", "#": "WALL", "E": "EXIT", "D": "DOOR",
-              "W": "WINDOW", "R": "RAILING", "S": "SECURITY", "C": "CURTAIN",
-              "M": "MESH", "V": "VENT"}
+CELL_CHARS = gen_levels.CELL_OF
 assert all(G["CELL_" + n] == i for i, n in enumerate(CELL_NAMES)) and \
     G["CELL_TYPES"] == len(CELL_NAMES), "CELL_* in game.h changed: update game_lib.py"
 CELL_TILES = [T["TILE_" + n] for n in CELL_NAMES]
@@ -185,6 +200,9 @@ class Level:
         self.table = (LevelDef * len(maps))()
         links = gen_levels.link_table(data)
         name = self._b(data["name"])
+        # scripts as the ROM gets them; a SAY's number indexes self.texts
+        self.flags = gen_levels.level_flags(data)
+        self.texts = []
         # painted art per map: grid of tileset tiles (None = built-in), and
         # how many variants each tile has
         self.art, self.art_kinds = [], []
@@ -197,7 +215,30 @@ class Level:
             d.name = name
             rows = m["map"]
             d.width, d.height = len(rows[0]), len(rows)
-            d.map = self._b("".join(rows))
+            d.map = self._b("".join(gen_levels.cell_rows(m)))
+            local = sorted(gen_levels.art_usage(m))
+            npcs = m.get("npcs", [])[:MAX_NPCS]
+            d.npc_count = len(npcs)
+            for i, n in enumerate(npcs):
+                nd = d.npcs[i]
+                nd.x, nd.y = n["x"], n["y"]
+                nd.blocks = {"move": G["BLOCK_PLAYER"] | G["BLOCK_GUARD"], "none": 0,
+                             "all": G["BLOCK_ALL"]}[n.get("blocks", "move")]
+                nd.verb = self._b(n["verb"])
+                if n.get("script"):
+                    code = gen_levels.compile_script(n["script"], self.flags, self.texts)
+                    buf = (C.c_uint8 * len(code))(*code)
+                    self._keep.append(buf)
+                    nd.script = C.cast(buf, C.POINTER(C.c_uint8))
+            switches = m.get("switches", [])[:MAX_SWITCHES]
+            d.switch_count = len(switches)
+            for i, sw in enumerate(switches):
+                sd = d.switches[i]
+                sd.x, sd.y = sw["x"], sw["y"]
+                sd.flag = 1 << self.flags.index(sw["flag"])
+                sd.off = G["CELL_" + CELL_CHARS[rows[sw["y"]][sw["x"]]]]
+                sd.on = G["CELL_" + CELL_CHARS[sw["on"]]]
+                sd.on_art = local.index(sw["on_art"]) if sw.get("on_art") is not None and local else 255
             guards = m.get("guards", [])[:MAX_GUARDS]
             d.guard_count = len(guards)
             for i, g in enumerate(guards):
@@ -260,6 +301,11 @@ def throw(level, world, item, x, y):
     return bool(lib.world_throw(C.byref(world), item, x, y))
 
 
+def said(level):
+    """What the action just taken said: each message as its lines."""
+    return [level.texts[lib.game_said(i)].split("\n") for i in range(lib.game_said_count())]
+
+
 def view(level, world, aim_item=None):
     """Everything the screen needs, computed the same way as src/main.c."""
     lib.world_use(level.table)
@@ -271,6 +317,11 @@ def view(level, world, aim_item=None):
     lib.game_compute_vision(C.byref(state), 0, 0, w, h, vis)
     tiles, aim = [], []
     art, kinds = level.art[world.cur], level.art_kinds[world.cur]
+    # switch cells whose flag is set show their other look (as draw_tiles)
+    switched = {(sw["x"], sw["y"]): sw.get("on_art")
+                for sw in level.maps[world.cur].get("switches", [])
+                if state.flags & (1 << level.flags.index(sw["flag"]))}
+    talk = lib.game_talk_target(C.byref(state))
     for y in range(h):
         row, arow = [], []
         for x in range(w):
@@ -280,6 +331,8 @@ def view(level, world, aim_item=None):
             # same choices as draw_tiles() in src/main.c; painted tiles are
             # sent as -(1 + tile * 5 + variant)
             painted = art[y][x] if art else None
+            if art and (x, y) in switched:
+                painted = switched[(x, y)]
             if painted is not None:
                 k = kinds[painted]
                 if k >= 5 and can and cell == G["CELL_FLOOR"]:
@@ -343,7 +396,9 @@ def view(level, world, aim_item=None):
             "takedown": lib.game_takedown_target(C.byref(state)) != 0xFF,
             "uniform": lib.game_uniform_here(C.byref(state)) != 0xFF,
             "body_adjacent": bool(lib.game_body_adjacent(C.byref(state))),
+            "talk": cdef.npcs[talk].verb.decode() if talk != 0xFF else None,
         },
+        "flags": [f for i, f in enumerate(level.flags) if state.flags & (1 << i)],
         "guards": guards,
     }
 

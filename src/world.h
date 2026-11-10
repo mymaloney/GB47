@@ -5,8 +5,8 @@
  * the map the player is in is "live": guards in the others stand still
  * until the player comes back. Walking off an edge that links to another
  * map moves the player there (one turn); guards in the new map get one
- * look at the arrival spot but don't move that turn. Items, disguise and
- * the turn counter carry over. A takedown in progress or a body being
+ * look at the arrival spot but don't move that turn. Items, disguise,
+ * script flags and the turn counter carry over. A takedown in progress or a body being
  * dragged can't cross.
  *
  * Maps are kept separate because of RAM: guards can't see, hear or walk
