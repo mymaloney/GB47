@@ -6,9 +6,12 @@ cone and solver run goes through src/game.c and tools/solver.c.
 import base64
 import ctypes as C
 import re
+import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "tools"))
+import tileset as ts   # noqa: E402
 LIB_PATH = ROOT / "build" / "libgame.so"
 
 
@@ -166,6 +169,22 @@ class Level:
             links[(ln["from"], ln["edge"])] = (ln["to"], ln.get("offset", 0))
             links[(ln["to"], OPPOSITE[ln["edge"]])] = (ln["from"], -ln.get("offset", 0))
         name = self._b(data["name"])
+        # painted art per map: grid of tileset tiles (None = built-in), and
+        # how many variants each tile has (same rule as tools/gen_levels.py)
+        self.art, self.art_kinds = [], []
+        for m in maps:
+            if m.get("art"):
+                grid = ts.parse_art(m["art"])
+                usage = {}
+                for row, arow in zip(m["map"], grid):
+                    for ch, v in zip(row, arow):
+                        if v is not None:
+                            usage.setdefault(v, set()).add(ch)
+                self.art.append(grid)
+                self.art_kinds.append({v: ts.slots_for(c) for v, c in usage.items()})
+            else:
+                self.art.append(None)
+                self.art_kinds.append({})
         for k, m in enumerate(maps):
             d = self.table[k]
             d.name = name
@@ -243,13 +262,26 @@ def view(level, world, aim_item=None):
     vis = (C.c_uint8 * (w * h))()
     lib.game_compute_vision(C.byref(state), 0, 0, w, h, vis)
     tiles, aim = [], []
+    art, kinds = level.art[world.cur], level.art_kinds[world.cur]
     for y in range(h):
         row, arow = [], []
         for x in range(w):
             cell, seen = lib.game_cell(x, y), vis[y * w + x]
             can = aim_item is not None and lib.game_can_throw(C.byref(state), aim_item, x, y)
             arow.append(1 if can else 0)
-            # same choices as draw_tiles() in src/main.c
+            # same choices as draw_tiles() in src/main.c; painted tiles are
+            # sent as -(1 + tile * 5 + variant)
+            painted = art[y][x] if art else None
+            if painted is not None:
+                k = kinds[painted]
+                if k >= 5 and can and cell == G["CELL_FLOOR"]:
+                    v = ts.AIM_SEEN if seen == G["VIS_SEEN"] else ts.AIM
+                elif k >= 3 and seen:
+                    v = ts.SEEN if seen == G["VIS_SEEN"] else ts.WATCH
+                else:
+                    v = ts.BASE
+                row.append(-(1 + painted * 5 + v))
+                continue
             if cell == G["CELL_FLOOR"]:
                 if can:
                     t = T["TILE_AIM_SEEN"] if seen == G["VIS_SEEN"] else T["TILE_AIM"]

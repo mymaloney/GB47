@@ -21,6 +21,10 @@ JSON format, one object per level:
                                            Whole screens of 20x16: 1-3
                                            across, 1-3 down, at most 2048
                                            tiles (so not 3x3)
+        "art": ["0a0a....", ...],          optional painted look: two hex
+                                           digits per cell = tileset tile
+                                           (tilesets/), ".." = built-in
+                                           graphic for the cell's kind
         "guards": [{
           "facing":   "right",             up/right/down/left
           "route":    [[1, 5], [18, 5]],   patrol loop, starts at the first
@@ -44,8 +48,12 @@ Walking off a linked edge enters the other map at the matching tile, so
 openings on both sides must line up (validate_level checks this).
 """
 import json
+import re
 import sys
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import tileset as ts   # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 JSON_PATH = ROOT / "levels" / "levels.json"
@@ -61,6 +69,23 @@ OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
 UNIFORMS = ["none", "guard", "officer"]
 ITEMS = ["stone", "bottle"]
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
+
+
+def art_slots_available():
+    """Background tiles left for painted art: 256 minus the built-in ones
+    (src/tiles.h)."""
+    m = re.search(r"#define BKG_TILE_COUNT (\d+)", (ROOT / "src" / "tiles.h").read_text())
+    return 256 - int(m.group(1))
+
+
+_tileset = None
+
+
+def tileset():
+    global _tileset
+    if _tileset is None:
+        _tileset = ts.load()
+    return _tileset
 
 # Map characters: (name, blocks player+bodies, guards, sight, throws).
 # Must match the table in src/game.h.
@@ -171,7 +196,42 @@ def validate_map(m):
                         if what:
                             errs.append(f"{leg} walks through a {what} at ({x},{y}).")
                             break
+    errs += validate_art(m)
     return errs
+
+
+def art_usage(m):
+    """{tileset tile: set of map chars it's painted on} for one map."""
+    used = {}
+    if not m.get("art"):
+        return used
+    for row, arow in zip(m["map"], ts.parse_art(m["art"])):
+        for ch, v in zip(row, arow):
+            if v is not None:
+                used.setdefault(v, set()).add(ch)
+    return used
+
+
+def validate_art(m):
+    art = m.get("art")
+    if not art:
+        return []
+    rows = m["map"]
+    if len(art) != len(rows) or any(len(a) != 2 * len(rows[0]) for a in art):
+        return ["Art layer doesn't match the map's size."]
+    if any(not re.fullmatch(r"([0-9a-f]{2}|\.\.)*", a) for a in art):
+        return ["Art layer has invalid entries (two hex digits or '..' per cell)."]
+    n = len(tileset()["tiles"])
+    used = art_usage(m)
+    bad = sorted(v for v in used if v >= n)
+    if bad:
+        return [f"Art uses tile {bad[0]}, but the tileset has {n} tiles."]
+    need = sum(ts.slots_for(chars) for chars in used.values())
+    have = art_slots_available()
+    if need > have:
+        return [f"Art needs {need} Game Boy tile slots; there's room for {have}. "
+                "Use fewer different tiles, especially on floor (5 slots each)."]
+    return []
 
 
 def edge_tiles(m, edge):
@@ -367,7 +427,49 @@ def generate_c(levels):
         base += len(lv["maps"])
     out.append("};")
     out.append("")
+    out += generate_art(levels)
     return "\n".join(out)
+
+
+def generate_art(levels):
+    """Tileset tiles used anywhere (as 2bpp data) and each map's MapArt."""
+    maps = [m for lv in map(upgrade, levels) for m in lv["maps"]]
+    used = sorted({v for m in maps for v in art_usage(m)})
+    index = {v: i for i, v in enumerate(used)}
+    tiles = tileset()["tiles"]
+    out = ["/* Tileset tiles used by any map (16 bytes each), from tilesets/. */",
+           "const uint8_t art_tile_data[] = {"]
+    for v in used:
+        out.append(f"    /* tileset tile {v} */ " + ", ".join(f"0x{b:02X}" for b in ts.to_2bpp(tiles[v])) + ",")
+    if not used:
+        out.append("    0")
+    out.append("};")
+    out.append("")
+    refs = []
+    for k, m in enumerate(maps):
+        usage = art_usage(m)
+        if not usage:
+            refs.append("0")
+            continue
+        grid = ts.parse_art(m["art"])
+        local = sorted(usage)                      # tileset tiles this map uses
+        lidx = {v: i for i, v in enumerate(local)}
+        data, rows = ts.rle_rows([[0xFF if v is None else lidx[v] for v in row] for row in grid])
+        data += [0, 0]                             # end marker
+        name = f"art{k}"
+        out.append(f"static const uint8_t {name}_tiles[] = {{ {', '.join(str(index[v]) for v in local)} }};")
+        out.append(f"static const uint8_t {name}_kinds[] = {{ "
+                   f"{', '.join(str(ts.slots_for(usage[v])) for v in local)} }};")
+        out.append(f"static const uint8_t {name}_rle[] = {{ {', '.join(str(b) for b in data)} }};")
+        out.append(f"static const uint16_t {name}_rows[] = {{ {', '.join(str(r) for r in rows)} }};")
+        out.append(f"static const MapArt {name} = {{ {len(local)}, {name}_tiles, {name}_kinds, "
+                   f"{name}_rle, {name}_rows }};")
+        refs.append(f"&{name}")
+    out.append("")
+    out.append("/* Art for each entry of levels[] (0 = built-in graphics only). */")
+    out.append("const MapArt *const level_art[LEVEL_COUNT] = { " + ", ".join(refs) + " };")
+    out.append("")
+    return out
 
 
 def generate_h(levels):
@@ -378,10 +480,13 @@ def generate_h(levels):
         "#define LEVELS_H",
         "",
         '#include "game.h"',
+        '#include "art.h"',
         "",
         "/* One entry per map; a level's maps are consecutive (part 0 first). */",
         f"#define LEVEL_COUNT {count}",
         "extern const LevelDef levels[LEVEL_COUNT];",
+        "extern const uint8_t art_tile_data[];          /* 16 bytes per tile */",
+        "extern const MapArt *const level_art[LEVEL_COUNT];",
         "",
         "#endif",
         "",
@@ -402,6 +507,10 @@ def dumps(levels):
             ml = ["      {", '        "map": [']
             ml.append(",\n".join(f"          {json.dumps(r)}" for r in m["map"]))
             ml.append("        ],")
+            if m.get("art"):
+                ml.append('        "art": [')
+                ml.append(",\n".join(f"          {json.dumps(r)}" for r in m["art"]))
+                ml.append("        ],")
             gl = []
             for g in m.get("guards", []):
                 gl.append("          " + json.dumps({

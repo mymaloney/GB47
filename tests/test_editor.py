@@ -31,6 +31,7 @@ def with_map(lv, rows, k=0):
     """Copy of a level with map k's rows replaced."""
     lv = json.loads(json.dumps(lv))
     lv["maps"][k]["map"] = rows
+    lv["maps"][k].pop("art", None)
     return lv
 
 
@@ -114,6 +115,56 @@ for ch, (name, b_player, b_guard, b_sight, b_throw) in gen_levels.TILES.items():
     want = (b_player * g.G["BLOCK_PLAYER"] | b_guard * g.G["BLOCK_GUARD"] |
             b_sight * g.G["BLOCK_SIGHT"] | b_throw * g.G["BLOCK_THROW"])
     assert blocks == want, f"tile {ch} ({name}): C says {blocks}, Python says {want}"
+
+# painted art: the Game Boy's variant maker (src/art.c) and run-length
+# decoder agree with tools/tileset.py, for every tile in the tileset
+import ctypes as C   # noqa: E402
+import tileset as ts   # noqa: E402
+art_variant = g.lib.art_variant
+art_variant.argtypes = [C.POINTER(C.c_uint8), C.c_uint8, C.POINTER(C.c_uint8)]
+tset = ts.load()
+for n, px in enumerate(tset["tiles"]):
+    src = (C.c_uint8 * 16)(*ts.to_2bpp(px))
+    for kind in range(5):
+        dst = (C.c_uint8 * 16)()
+        art_variant(src, kind, dst)
+        assert list(dst) == ts.to_2bpp(ts.variant(px, kind)), f"tile {n} variant {kind}"
+
+
+class MapArt(C.Structure):
+    _fields_ = [("count", C.c_uint8), ("tiles", C.POINTER(C.c_uint8)),
+                ("kinds", C.POINTER(C.c_uint8)), ("rle", C.POINTER(C.c_uint8)),
+                ("rows", C.POINTER(C.c_uint16))]
+
+
+g.lib.art_row.argtypes = [C.POINTER(MapArt), C.c_uint8, C.c_uint8, C.c_uint8, C.POINTER(C.c_uint8)]
+grid = [[None, None, 3, 3, 3, 0, 0, None, 7, 7] * 4, [1] * 40]
+data, rows = ts.rle_rows([[0xFF if v is None else v for v in r] for r in grid])
+data += [0, 0]
+rle = (C.c_uint8 * len(data))(*data)
+offs = (C.c_uint16 * len(rows))(*rows)
+ma = MapArt(0, None, None, rle, offs)
+for y, row in enumerate(grid):
+    for x0, w in [(0, 20), (3, 20), (17, 20), (20, 20), (9, 1)]:
+        out = (C.c_uint8 * 20)()
+        g.lib.art_row(C.byref(ma), y, x0, w, out)
+        want = [0xFF if v is None else v for v in row[x0:x0 + w]]
+        assert list(out)[:w] == want, (y, x0, list(out)[:w], want)
+
+# art layers: level 1 is painted; generated data and validation
+lv1 = levels[0]["maps"][0]
+assert lv1.get("art") and "level_art[LEVEL_COUNT] = { &art0" in gen_levels.generate_c(levels)
+bad_art = json.loads(json.dumps(levels[0]))
+bad_art["maps"][0]["art"][0] = bad_art["maps"][0]["art"][0][:-2]
+assert any("doesn't match" in e for e in gen_levels.validate_level(bad_art))
+greedy = json.loads(json.dumps(levels[0]))     # 100 different tiles on floor
+greedy["maps"][0]["map"] = ["#" * 20] + ["#" + "." * 18 + "#"] * 14 + ["#" * 20]
+greedy["maps"][0]["map"][1] = "#P" + "." * 17 + "#"
+greedy["maps"][0]["map"][2] = "#E" + "." * 17 + "#"
+greedy["maps"][0]["guards"] = []
+greedy["maps"][0]["art"] = ts.format_art(
+    [[(y * 20 + x) % 100 for x in range(20)] for y in range(16)])
+assert any("tile slots" in e for e in gen_levels.validate_level(greedy))
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])

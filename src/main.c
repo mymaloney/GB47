@@ -26,6 +26,7 @@
 
 #include "game.h"
 #include "world.h"
+#include "art.h"
 #include "levels.h"
 #include "tiles.h"
 
@@ -64,6 +65,13 @@ static uint16_t    scroll_x, scroll_y;      /* the same, in pixels */
 static uint8_t     select_armed;            /* SELECT pressed while playing */
 static uint8_t     looking;                 /* SELECT held and panned */
 static uint8_t     look_x, look_y;          /* screen before looking */
+
+/* Painted art (art.h). Its tiles go into VRAM after the built-in ones. */
+#define ART_SLOT0 BKG_TILE_COUNT
+static const MapArt *art;                   /* current map's art, or 0 */
+static uint8_t     art_map = 0xFF;          /* levels[] index it was loaded for */
+static uint8_t     art_slot[256 - BKG_TILE_COUNT];   /* first slot of each local tile */
+static uint8_t     art_buf[VIEW_W];         /* local tiles of one screen row */
 
 static uint8_t     ui_mode;
 static uint8_t     inv_item;     /* highlighted / chosen item type */
@@ -193,11 +201,22 @@ static void draw_tiles(uint8_t x0, uint8_t y0, uint8_t w, uint8_t h)
 
     for (y = 0; y < h; y++) {
         wy = y0 + y;
+        if (art) art_row(art, wy, x0, w, art_buf);
         for (x = 0; x < w; x++, v++) {
             wx   = x0 + x;
             cell = game_cell(wx, wy);
             seen = *v;
-            if (cell == CELL_FLOOR) {
+            if (art && art_buf[x] != ART_NONE) {
+                /* painted tile: pick the variant for cones / aiming */
+                uint8_t k = art_buf[x], slot = art_slot[k];
+                aim = (ui_mode == UI_AIM) && cell == CELL_FLOOR &&
+                      game_can_throw(&state, inv_item, wx, wy);
+                if (art->kinds[k] >= 5 && aim)
+                    slot += seen == VIS_SEEN ? ART_AIM_SEEN : ART_AIM;
+                else if (art->kinds[k] >= 3 && seen)
+                    slot += seen == VIS_SEEN ? ART_SEEN : ART_WATCH;
+                row_buf[x] = slot;
+            } else if (cell == CELL_FLOOR) {
                 aim = (ui_mode == UI_AIM) && game_can_throw(&state, inv_item, wx, wy);
                 if (aim)                    row_buf[x] = seen == VIS_SEEN ? TILE_AIM_SEEN : TILE_AIM;
                 else if (seen == VIS_SEEN)  row_buf[x] = TILE_SEEN;
@@ -415,11 +434,35 @@ static void select_released(void)
 /* Level flow                                                          */
 /* ------------------------------------------------------------------ */
 
+/* Load the current map's painted tiles (and the variants they need for
+ * cones and aiming) into VRAM after the built-in tiles. */
+static void load_art(void)
+{
+    uint8_t k, slot = ART_SLOT0, v, buf[16], was_on = LCDC_REG & LCDCF_ON;
+    const uint8_t *src;
+
+    art_map = world.part_def[world.cur];
+    art = level_art[art_map];
+    if (!art) return;
+    if (was_on) DISPLAY_OFF;           /* lots of VRAM writes: do them blank */
+    for (k = 0; k < art->count; k++) {
+        art_slot[k] = slot;
+        src = art_tile_data + (uint16_t)art->tiles[k] * 16;
+        for (v = 0; v < art->kinds[k]; v++) {
+            art_variant(src, v, buf);
+            set_bkg_data(slot++, 1, buf);
+        }
+    }
+    if (was_on) DISPLAY_ON;
+}
+
 /* Point `state` at the map the player is in (after anything that can
- * change it: loading, a step that crosses an edge, undo). */
+ * change it: loading, a step that crosses an edge, undo), loading that
+ * map's art if it changed. */
 static void sync(void)
 {
     st = world_state(&world);
+    if (world.part_def[world.cur] != art_map) load_art();
 }
 
 /* The first map of the level after the one starting at idx (wrapping). */
@@ -442,6 +485,7 @@ static void load_level(uint8_t idx)
     looking   = 0;
     select_armed = 0;
     world_load(levels, idx, &world);
+    art_map = 0xFF;          /* always reload: a new level */
     sync();
     undo_clear();
     for (level_num = 0, i = 0; i <= idx; i++)

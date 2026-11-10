@@ -50,6 +50,21 @@
         <button data-tool="route" title="Add waypoints to the selected guard; drag to move, right-click to remove (6)"><b>6</b> Route</button>
       </div>
       <div class="toolbar palette" id="palette"><span class="toolbar-label">Paint</span></div>
+      <div class="art-panel">
+        <div class="toolbar">
+          <span class="toolbar-label">Art</span>
+          <button data-tool="art-erase" title="Remove painted art: cells go back to the built-in look (0)"><b>0</b> Erase art</button>
+          <label class="check"><input type="checkbox" id="art-only"> Look only (keep behaviour)</label>
+          <label class="check"><input type="checkbox" id="show-behaviour" checked> Show behaviour</label>
+        </div>
+        <canvas id="tileset" aria-label="Tileset: click a tile to paint with it"></canvas>
+        <div class="art-tile-row">
+          <span id="art-tile-info" class="muted"></span>
+          <label class="inline">When painted, set behaviour to
+            <select id="art-behaviour"></select></label>
+        </div>
+        <p id="art-budget" class="hint"></p>
+      </div>
       <p id="tool-hint" class="hint"></p>
       <div class="size-row">
         <label class="inline">Screens

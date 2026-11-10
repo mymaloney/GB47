@@ -81,11 +81,19 @@ function makeTile(px, transparent) {
   return c;
 }
 
-function drawBkg(t, tx, ty) { ctx.drawImage(bkgTiles[t], tx * TILE, ty * TILE, TILE, TILE); }
+let artImgs = [];      // [tileset tile][variant] canvases
+let behaviour = {};    // tileset tile (string) -> map char painted with it
+let artTile = 0;       // selected tileset tile
+
+/* Background tile image: built-in ids are >= 0; painted art comes from the
+ * server and the edit view as -(1 + tile * 5 + variant). */
+const tileImg = (t) => t < 0 ? artImgs[Math.floor((-t - 1) / 5)][(-t - 1) % 5] : bkgTiles[t];
+
+function drawBkg(t, tx, ty) { ctx.drawImage(tileImg(t), tx * TILE, ty * TILE, TILE, TILE); }
 function drawSpr(t, tx, ty) { ctx.drawImage(sprTiles[t], tx * TILE, ty * TILE, TILE, TILE); }
 /* draw at a pixel offset (playtest camera), in Game Boy pixels */
 function drawBkgPx(t, gx, gy) {
-  ctx.drawImage(bkgTiles[t], gx * PLAY_SCALE, gy * PLAY_SCALE, 8 * PLAY_SCALE, 8 * PLAY_SCALE);
+  ctx.drawImage(tileImg(t), gx * PLAY_SCALE, gy * PLAY_SCALE, 8 * PLAY_SCALE, 8 * PLAY_SCALE);
 }
 function drawSprPx(t, gx, gy) {
   ctx.drawImage(sprTiles[t], gx * PLAY_SCALE, gy * PLAY_SCALE, 8 * PLAY_SCALE, 8 * PLAY_SCALE);
@@ -150,7 +158,12 @@ function hudRows(lv, idx, v, ui) {
 
 function localTiles(lv) {
   const byChar = Object.fromEntries(A.tiles.map((t) => [t.char, t.tile]));
-  return lv.map.map((r) => [...r].map((c) => byChar[c] ?? A.T.TILE_WALL));
+  const art = lv.art;
+  return lv.map.map((r, y) => [...r].map((c, x) => {
+    const a = art && art[y].slice(2 * x, 2 * x + 2);
+    if (a && a !== "..") return -(1 + parseInt(a, 16) * 5);
+    return byChar[c] ?? A.T.TILE_WALL;
+  }));
 }
 
 // ---- tile palette: built from the server's table (tools/gen_levels.py)
@@ -220,7 +233,53 @@ function renderEdit() {
   }
 
   drawLinkMarkers();
+  if ($("show-behaviour").checked && lv.art) drawBehaviourLetters(lv);
   updateSizeInfo(lv);
+  updateArtBudget(lv);
+}
+
+/* Painted art can hide what a cell does: label painted cells whose
+ * behaviour isn't what that tile normally means (e.g. a wall-looking tile
+ * on a walkable cell). Plain floor under decoration isn't labelled. */
+function drawBehaviourLetters(lv) {
+  ctx.save();
+  ctx.font = `bold ${Math.max(9, TILE * 0.55)}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  lv.map.forEach((r, y) => [...r].forEach((c, x) => {
+    const code = lv.art[y].slice(2 * x, 2 * x + 2);
+    if (code === "..") return;
+    const usual = behaviour[String(parseInt(code, 16))];
+    if (c === "P" || c === usual || (c === "." && !usual)) return;
+    const cx = x * TILE + TILE / 2, cy = y * TILE + TILE / 2;
+    ctx.fillStyle = "rgba(15, 20, 17, 0.6)";
+    ctx.fillRect(cx - TILE * 0.32, cy - TILE * 0.32, TILE * 0.64, TILE * 0.64);
+    ctx.fillStyle = "#f2b705";
+    ctx.fillText(c, cx, cy + 0.5);
+  }));
+  ctx.restore();
+}
+
+/* Game Boy tile slots this map's art needs (as tools/tileset.py slots_for:
+ * 5 for tiles on floor, 3 on exits/mesh, 1 elsewhere). */
+function artSlots(lv) {
+  if (!lv.art) return { tiles: 0, slots: 0 };
+  const used = {};
+  lv.map.forEach((r, y) => [...r].forEach((c, x) => {
+    const a = lv.art[y].slice(2 * x, 2 * x + 2);
+    if (a === "..") return;
+    const need = ".P".includes(c) ? 5 : "EM".includes(c) ? 3 : 1;
+    used[a] = Math.max(used[a] || 0, need);
+  }));
+  return { tiles: Object.keys(used).length, slots: Object.values(used).reduce((s, n) => s + n, 0) };
+}
+
+function updateArtBudget(lv) {
+  const u = artSlots(lv);
+  $("art-budget").textContent = u.tiles
+    ? `This map paints ${u.tiles} different tiles, using ${u.slots} of ${A.art_slots} Game Boy tile slots.`
+    : "Pick a tile and paint: unpainted cells use the built-in look.";
+  $("art-budget").classList.toggle("errors", u.slots > A.art_slots);
 }
 
 /* Dashed lines on the screen boundaries: the Game Boy shows one screen at
@@ -283,6 +342,11 @@ function resizeMap(w, h) {
     rows.push((old + "#".repeat(w)).slice(0, w));
   }
   lv.map = rows;
+  if (lv.art) {
+    const art = [];
+    for (let y = 0; y < h; y++) art.push(((lv.art[y] || "") + "..".repeat(w)).slice(0, 2 * w));
+    lv.art = art;
+  }
   changed();
 }
 
@@ -321,7 +385,7 @@ function drawRoute(g, i, selected) {
 
 // ------------------------------------------------------- edit history
 
-function snapshot() { return JSON.stringify({ levels, cur }); }
+function snapshot() { return JSON.stringify({ levels, cur, behaviour }); }
 
 function pushUndo() {
   undoStack.push(snapshot());
@@ -332,6 +396,7 @@ function pushUndo() {
 function restore(s) {
   const o = JSON.parse(s);
   levels = o.levels;
+  if (o.behaviour) { behaviour = o.behaviour; drawTileset(); }
   cur = Math.min(o.cur, levels.length - 1);
   curMap = Math.min(curMap, level().maps.length - 1);
   if (selGuard >= cmap().guards.length) selGuard = -1;
@@ -390,6 +455,34 @@ function setCell(x, y, c) {
   return true;
 }
 
+/* Paint (or with n = null, erase) art on one cell; unless "look only" is
+ * on, also set the cell's behaviour to the tile's (keeping the start). */
+function paintArt(x, y, n) {
+  const m = cmap();
+  if (!m.art) {
+    if (n === null) return false;
+    m.art = m.map.map((r) => "..".repeat(r.length));
+  }
+  const code = n === null ? ".." : n.toString(16).padStart(2, "0");
+  let changed_ = false;
+  if (m.art[y].slice(2 * x, 2 * x + 2) !== code) {
+    m.art[y] = m.art[y].slice(0, 2 * x) + code + m.art[y].slice(2 * x + 2);
+    changed_ = true;
+  }
+  const b = n !== null && behaviour[String(n)];
+  if (b && !$("art-only").checked) {
+    const keepStart = m.map[y][x] === "P" && !A.tiles.find((d) => d.char === b).blocks.player;
+    if (!keepStart && m.map[y][x] !== b) {
+      if (b === "P") return changed_;
+      const row = m.map[y];
+      m.map[y] = row.slice(0, x) + b + row.slice(x + 1);
+      changed_ = true;
+    }
+  }
+  if (m.art.every((r) => /^(\.\.)*$/.test(r))) delete m.art;   // nothing painted
+  return changed_;
+}
+
 function guardAt(x, y) {
   return cmap().guards.findIndex((g) => g.route[0][0] === x && g.route[0][1] === y);
 }
@@ -412,6 +505,8 @@ function addWaypoint(g, x, y) {
 
 function applyTool(x, y, e, first) {
   const lv = cmap();
+  if (tool.startsWith("art:")) return paintArt(x, y, parseInt(tool.slice(4), 10));
+  if (tool === "art-erase") return paintArt(x, y, null);
   const paint = tool.startsWith("tile:") ? tool.slice(5) : null;
   if (paint) return setCell(x, y, paint);
   if (tool === "start") return first ? setCell(x, y, "P") : false;
@@ -487,10 +582,21 @@ function hint(msg) { $("tool-hint").textContent = msg; }
 
 function setTool(t) {
   tool = t;
-  document.querySelectorAll("#toolbar button, #palette button").forEach((b) =>
+  document.querySelectorAll("#toolbar button, #palette button, .art-panel button[data-tool]").forEach((b) =>
     b.classList.toggle("active", b.dataset.tool === t));
   const tile = t.startsWith("tile:") && A.tiles.find((x) => x.char === t.slice(5));
-  hint(tile ? tileHint(tile) : TOOL_HINTS[t]);
+  if (t.startsWith("art:")) {
+    artTile = parseInt(t.slice(4), 10);
+    drawTileset();
+    const b = behaviour[String(artTile)];
+    const d = b && A.tiles.find((x) => x.char === b);
+    hint(`Painting tileset tile ${artTile}` + (d && !$("art-only").checked
+      ? `: also makes the cell a ${d.name}.` : ": changes only the look."));
+  } else if (t === "art-erase") {
+    hint("Click or drag to remove painted art; the cell's behaviour stays.");
+  } else {
+    hint(tile ? tileHint(tile) : TOOL_HINTS[t]);
+  }
 }
 
 // ------------------------------------------------------------- panels
@@ -801,6 +907,69 @@ async function solve() {
   } finally {
     $("btn-solve").disabled = false;
   }
+}
+
+// ------------------------------------------------------------- tileset
+
+const TS_SCALE = 3;
+
+function buildTileset() {
+  const ts = A.tileset;
+  behaviour = { ...ts.behaviour };
+  artImgs = ts.tiles.map((variants) => variants.map((px) => makeTile(px, false)));
+  const c = $("tileset");
+  const rows = Math.ceil(ts.tiles.length / ts.columns);
+  c.width = ts.columns * 8 * TS_SCALE;
+  c.height = rows * 8 * TS_SCALE;
+  c.addEventListener("click", (e) => {
+    const r = c.getBoundingClientRect();
+    const x = Math.floor((e.clientX - r.left) / (r.width / ts.columns));
+    const y = Math.floor((e.clientY - r.top) / (r.height / rows));
+    const n = y * ts.columns + x;
+    if (n < ts.tiles.length) setTool("art:" + n);
+  });
+  const sel = $("art-behaviour");
+  sel.add(new Option("nothing (look only)", ""));
+  A.tiles.filter((d) => d.char !== "P").forEach((d) => sel.add(new Option(`${d.name} (${d.char})`, d.char)));
+  sel.addEventListener("change", () => {
+    if (sel.value) behaviour[String(artTile)] = sel.value;
+    else delete behaviour[String(artTile)];
+    setDirty(true);
+    drawTileset();
+    setTool("art:" + artTile);
+  });
+  $("art-only").addEventListener("change", () => tool.startsWith("art:") && setTool(tool));
+  $("show-behaviour").addEventListener("change", () => renderEdit());
+  drawTileset();
+}
+
+function drawTileset() {
+  const ts = A.tileset;
+  const c = $("tileset");
+  const g = c.getContext("2d");
+  const s = 8 * TS_SCALE;
+  g.imageSmoothingEnabled = false;
+  ts.tiles.forEach((_, n) => {
+    const x = (n % ts.columns) * s, y = Math.floor(n / ts.columns) * s;
+    g.drawImage(artImgs[n][0], x, y, s, s);
+    const b = behaviour[String(n)];
+    if (b) {                       // small corner badge with the map letter
+      g.fillStyle = "rgba(15, 20, 17, 0.75)";
+      g.fillRect(x + s - 10, y + s - 10, 10, 10);
+      g.fillStyle = "#f2b705";
+      g.font = "bold 9px ui-monospace, monospace";
+      g.textAlign = "center";
+      g.textBaseline = "middle";
+      g.fillText(b, x + s - 5, y + s - 4.5);
+    }
+  });
+  if (tool.startsWith("art:")) {
+    g.strokeStyle = "#e4572e";
+    g.lineWidth = 3;
+    g.strokeRect((artTile % ts.columns) * s + 1.5, Math.floor(artTile / ts.columns) * s + 1.5, s - 3, s - 3);
+  }
+  $("art-tile-info").textContent = `Tile ${artTile}`;
+  $("art-behaviour").value = behaviour[String(artTile)] || "";
 }
 
 // =================================================================== PLAY
@@ -1159,7 +1328,7 @@ window.addEventListener("keydown", async (e) => {
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redoEdit(); return; }
-    const tools = { 4: "start", 5: "guard", 6: "route" };
+    const tools = { 4: "start", 5: "guard", 6: "route", 0: "art-erase" };
     if (tools[e.key]) { setTool(tools[e.key]); return; }
     const tile = !e.ctrlKey && !e.metaKey &&
       A.tiles.find((x) => x.char !== "P" && tileKey(x.char) === e.key.toUpperCase().replace(/^([123])$/, "$1"));
@@ -1229,7 +1398,7 @@ function deleteGuard() {
 }
 
 async function save() {
-  const res = await api("/api/save", { levels });
+  const res = await api("/api/save", { levels, behaviour });
   if (res.ok) {
     setDirty(false);
     $("save-state").textContent = "Saved to levels/levels.json and src/levels.c";
@@ -1253,7 +1422,7 @@ async function build() {
 }
 
 function wire() {
-  document.querySelectorAll("#toolbar button").forEach((b) =>
+  document.querySelectorAll("#toolbar button, .art-panel button[data-tool]").forEach((b) =>
     b.addEventListener("click", () => setTool(b.dataset.tool)));
   $("tab-edit").addEventListener("click", enterEdit);
   $("tab-play").addEventListener("click", () => mode !== "play" && enterPlay());
@@ -1358,6 +1527,7 @@ async function init() {
   });
   wire();
   buildPalette();
+  buildTileset();
   setTool("tile:#");
   setDirty(false);
   renderAll();

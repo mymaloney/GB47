@@ -169,3 +169,10 @@ dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); paddi
 .map-tabs .tab { padding: 4px 12px; font-size: 13px; }
 .links { display: grid; grid-template-columns: auto 1fr 4.5em; gap: 4px 8px; align-items: center; font-size: 13px; }
 .links span { color: var(--muted); }
+
+.art-panel { margin-top: 8px; }
+.art-panel .toolbar { align-items: center; }
+#tileset { display: block; margin-top: 6px; image-rendering: pixelated; cursor: pointer;
+  border-radius: 4px; background: #e0f8d0; max-width: 100%; }
+.art-tile-row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; margin-top: 6px; font-size: 13px; }
+.art-tile-row select { width: auto; }

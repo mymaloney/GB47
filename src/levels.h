@@ -3,9 +3,12 @@
 #define LEVELS_H
 
 #include "game.h"
+#include "art.h"
 
 /* One entry per map; a level's maps are consecutive (part 0 first). */
 #define LEVEL_COUNT 10
 extern const LevelDef levels[LEVEL_COUNT];
+extern const uint8_t art_tile_data[];          /* 16 bytes per tile */
+extern const MapArt *const level_art[LEVEL_COUNT];
 
 #endif

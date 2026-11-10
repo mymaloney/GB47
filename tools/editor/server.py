@@ -28,6 +28,7 @@ try:
 except OSError:
     sys.exit("build/libgame.so is missing. Start the editor with: make editor")
 import gen_levels
+import tileset as ts
 
 PORT = int(os.environ.get("EDITOR_PORT", "8047"))
 STATIC = {
@@ -70,10 +71,23 @@ def assets():
         "name_max": gen_levels.NAME_MAX,
         "font_chars": "".join(sorted(gen_levels.FONT_CHARS)),
         # building blocks: map char, name, background tile, what it blocks
+        # the tileset for painting: every tile's 5 variants as shades
+        "tileset": tileset_assets(),
+        "art_slots": gen_levels.art_slots_available(),
         "tiles": [{"char": ch, "name": name,
                    "tile": g.CELL_TILES[g.G["CELL_" + g.CELL_CHARS[ch]]],
                    "blocks": {"player": bp, "guards": bg, "sight": bs, "throws": bt}}
                   for ch, (name, bp, bg, bs, bt) in gen_levels.TILES.items()],
+    }
+
+
+def tileset_assets():
+    t = ts.load()
+    return {
+        "columns": t["columns"],
+        "license": t.get("license", ""),
+        "tiles": [[ts.variant(px, k) for k in range(5)] for px in t["tiles"]],
+        "behaviour": {str(k): v for k, v in t["behaviour"].items()},
     }
 
 
@@ -150,6 +164,9 @@ class Handler(BaseHTTPRequestHandler):
             return {"errors": gen_levels.validate_level(req["level"])}
         if path == "/api/save":
             errs = gen_levels.save(req["levels"])
+            if not errs and "behaviour" in req:   # tileset tile behaviours
+                ts.save_behaviour({int(k): v for k, v in req["behaviour"].items()
+                                   if v in gen_levels.TILES})
             return {"ok": not errs, "errors": errs}
         if path == "/api/build":
             p = subprocess.run(["make"], cwd=ROOT, capture_output=True, text=True,

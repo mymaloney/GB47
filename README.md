@@ -24,6 +24,8 @@ stealth with social stealth (disguises, dialogue) and combat.
   mesh screens and vents, each blocking a different mix of movement,
   sight and throws
 - **Linked maps:** a level can be up to 4 maps joined at their edges
+- **Tileset painting:** paint a level's look from a tileset image
+  (`tilesets/`), separately from what each cell does
 - 9 levels, each checked solvable by an automated solver
 - **Level editor** with in-editor playtesting and a built-in solver
 
@@ -39,6 +41,13 @@ This needs only `gcc` and Python 3 (no extra packages). It builds the game
 rules into `build/libgame.so`, starts a local server, and opens
 `http://127.0.0.1:8047` in your browser. Stop it with Ctrl+C.
 
+- **Art:** pick a tile from the **tileset** under the palette and paint
+  with it. It also sets the cell's behaviour if the tile has one (shown
+  as a letter on the tile); tick **Look only** to change just the look.
+  **Erase art** (`0`) returns cells to the built-in look. The **When
+  painted, set behaviour to** menu changes a tile's behaviour (saved to the
+  tileset settings). **Show behaviour** labels painted cells whose
+  behaviour isn't what that tile normally means.
 - **Maps:** each level has tabs Map 1, Map 2, …; **+ Map** adds one (up
   to 4). The **Links** panel joins the current map's edges to other
   maps, with an offset; linked edges are marked on the map with where they
@@ -119,6 +128,33 @@ don't. In `levels.json` a level has `maps` (each with `map` and `guards`)
 and `links` (`from`, `edge`, `to`, `offset`). In `src/levels.c` each map
 is one `LevelDef`; a level's maps are consecutive, and `part` and `link`
 tie them together. `src/world.c` does the crossing and undo.
+
+### Painting with a tileset
+
+Each map has two layers:
+
+- **Behaviour** (the map letters: wall, floor, door…) decides the rules.
+- **Art** decides the look: which tileset tile is drawn on each cell.
+  Cells without art use the built-in graphics for their kind, so levels
+  don't need painting at all.
+
+The tileset is `tilesets/dungeon.png` (CC0, 8×8 tiles) with settings in
+`tilesets/dungeon.json`. Colours are turned into the Game Boy's 4 shades
+by brightness; `thresholds` sets the cut-offs. Each tile can have a
+**behaviour** (`"36": "D"` makes tile 36 a door): painting with it sets
+the cell's behaviour too, so painting a wall tile makes a wall. Tiles
+without one only change the look.
+
+On the Game Boy, each map loads the tiles it uses into video memory when
+you enter it (the screen blanks for a moment). Cones and the aiming dots
+still have to show on painted cells, so the game makes shaded copies of
+each tile as it loads: a tile used only on walls needs 1 of the 195 free
+tile slots, one on exits or mesh 3, one on floor 5. The editor shows the
+count, and the problem list says if a map uses too many.
+
+To use your own tileset, put the PNG in `tilesets/` and point `image` in
+`tilesets/dungeon.json` at it. Keep the same tile positions, or repaint,
+since levels refer to tiles by number.
 
 ### Building blocks
 
@@ -315,7 +351,9 @@ gives up after 2 million and reports "too big to tell".
 | `levels/levels.json` | **Level data** (source of truth): maps, guard routes, uniforms and attitudes, starting items. |
 | `src/levels.c`, `levels.h` | Generated from the JSON by `tools/gen_levels.py`. Don't edit. |
 | `tools/editor/` | Level editor: `server.py` (local server), `game_lib.py` (Python bridge to the C rules), and the page. |
-| `tools/solver.c` | Breadth-first solver, shared by the tests and the editor. |
+| `tools/solver.c` | A* solver, shared by the tests and the editor. |
+| `tilesets/` | Tileset images and their settings (shade thresholds, tile behaviours). |
+| `src/art.c`, `tools/tileset.py` | Painted art: map art layers, shaded copies for cones and aiming, and the tileset loader (with a standard-library PNG reader, `tools/png.py`). |
 | `src/main.c` | Game Boy side: input, drawing the map/sprites/HUD. Only reads `GameState`. |
 | `tools/gen_tiles.py` | Turns ASCII pixel art into `src/tiles.c`/`tiles.h`. Run `make tiles` after editing the art. |
 | `tests/test_game.c` | Unit tests, plus solver checks for every level. |
