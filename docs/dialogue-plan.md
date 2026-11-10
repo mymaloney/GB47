@@ -52,7 +52,7 @@ So, in priority order:
 
 ## Step 1 (blocker): make room in ROM
 
-Bank 0 has **88 bytes free**, and the flat 32 KB is ~80% used. The
+Bank 0 has **88 bytes free**, and the flat 32 KB is ~83% used. The
 dialogue code, the script interpreter, the text and the font won't fit
 until something moves into switchable banks. Do this first, as its own
 commit, and keep every test and level behaving the same.
@@ -134,6 +134,8 @@ while a flag is clear and another once it's set.
   no `GameState`; keep a pointer to the active one, like the existing
   `level` pointer, set in `game_load()`/`game_use()`/`world_activate()`.
 - Keep `game_cell()` fast. It's the hottest function in the game.
+- Call `game_map_changed()` when a flag flips a switch cell, so cached
+  guard paths are thrown away.
 - For level 3, the exit cell becomes a switch: floor (no art, or floor
   art 87) until the "dog petted" flag is set, then `E` with stairs art
   52.

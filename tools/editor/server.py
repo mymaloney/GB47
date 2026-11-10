@@ -38,6 +38,17 @@ STATIC = {
     "/editor.css": ("editor.css", "text/css; charset=utf-8"),
 }
 LOCK = threading.Lock()   # game.c keeps global state: one request at a time
+ORIGINS = {f"http://{h}:{PORT}" for h in ("127.0.0.1", "localhost")}
+
+
+def allowed(headers):
+    """Only the editor's own page may talk to the server. Host must be this
+    machine by name: another site's name pointed at 127.0.0.1 (DNS
+    rebinding) is refused. A cross-site page's Origin is refused too."""
+    if f"http://{headers.get('Host', '')}" not in ORIGINS:
+        return False
+    origin = headers.get("Origin")
+    return origin is None or origin in ORIGINS
 
 
 def assets():
@@ -64,6 +75,7 @@ def assets():
         "items": g.ITEMS,
         "dirs": g.DIRS,
         "uniforms": g.UNIFORMS,
+        "transitions": g.TRANSITIONS,
         "view_w": g.VIEW_W, "view_h": g.VIEW_H,
         "map_max_w": g.MAP_MAX_W, "map_max_h": g.MAP_MAX_H,
         "map_max_cells": g.MAP_MAX_CELLS,
@@ -100,14 +112,14 @@ def analyze(level):
     result = {"solve": full, "needs": {}}
     if full["length"] <= 0:
         return result
-    data = level.data
+    guards = [gd for m in level.maps for gd in m.get("guards", [])]
     checks = []
-    if any(data.get("items", {}).values()):
+    if any(level.data.get("items", {}).values()):
         checks.append(("items", G["SOLVE_USE_ITEMS"]))
-    if data.get("guards"):
+    if guards:
         checks.append(("takedown", G["SOLVE_USE_TAKEDOWN"]))
         checks.append(("drag", G["SOLVE_USE_DRAG"]))
-    if any(gd.get("uniform", "none") != "none" for gd in data.get("guards", [])):
+    if any(gd.get("uniform", "none") != "none" for gd in guards):
         checks.append(("uniform", G["SOLVE_USE_UNIFORM"]))
     for name, bit in checks:
         r = g.solve(level, G["SOLVE_USE_ALL"] & ~bit)
@@ -130,7 +142,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = self.path.split("?")[0]
-        if path in STATIC:
+        if not allowed(self.headers):
+            self.send_json({"error": "forbidden"}, 403)
+        elif path in STATIC:
             name, ctype = STATIC[path]
             body = (HERE / name).read_bytes()
             self.send_response(200)
@@ -147,9 +161,7 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"error": "not found"}, 404)
 
     def do_POST(self):
-        # Reject cross-site requests: only the editor page may call the API.
-        origin = self.headers.get("Origin")
-        if origin and not re.fullmatch(r"http://(127\.0\.0\.1|localhost):%d" % PORT, origin):
+        if not allowed(self.headers):
             self.send_json({"error": "forbidden"}, 403)
             return
         try:
@@ -199,6 +211,8 @@ class Handler(BaseHTTPRequestHandler):
                 return {"art": ts.format_art(autopaint.autopaint(req["map"], cfg, learned))}
             return {"art": autopaint.autotile(req["map"], req.get("art"),
                                               [tuple(c) for c in req["changed"]], cfg, learned)}
+        if path == "/api/transition":
+            return g.transition(req["kind"], int(req.get("cx", 10)), int(req.get("cy", 8)))
         if path == "/api/build":
             p = subprocess.run(["make"], cwd=ROOT, capture_output=True, text=True,
                                timeout=600)

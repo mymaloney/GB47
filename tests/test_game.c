@@ -3,7 +3,7 @@
  *
  *   make test
  *
- * Besides unit checks, this runs a breadth-first solver over every level to
+ * Besides unit checks, this runs the A* solver over every level to
  * prove it can be completed, and prints the shortest solution. Run it every
  * time you edit a level.
  */
@@ -15,6 +15,7 @@
 #include "../src/levels.h"
 #include "../tools/solver.h"
 #include "../src/world.h"
+#include "../src/trans.h"
 
 static int failures = 0;
 
@@ -55,12 +56,16 @@ static const LevelDef test_level = {
     },
     { 2, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_movement(void)
 {
     GameState s;
     game_load(&test_level, &s);
+    for (int i = 0; i < ITEM_TYPES; i++)
+        CHECK(item_defs[i].range <= SOLVE_MAX_RANGE,
+              "%s out-ranges the solver: raise SOLVE_MAX_RANGE", item_defs[i].name);
     CHECK(s.px == 1 && s.py == 1, "player start parsed");
     CHECK(game_step(&s, ACT_UP) == 0, "walking into wall is not a turn");
     CHECK(s.turn == 0, "turn not spent");
@@ -102,6 +107,20 @@ static void test_caught_and_undo(void)
     CHECK(world_step(&w, ACT_RIGHT) == 0, "no moves after caught");
     CHECK(undo_pop(&w) == 1, "undo works");
     CHECK(memcmp(&w, &before, WORLD_BYTES(&w)) == 0, "undo restores state");
+
+    /* a marked turn that didn't happen costs no history, even when full:
+     * exactly UNDO_DEPTH turns can be taken back */
+    world_load(&test_level, 0, &w);
+    undo_clear();
+    for (i = 0; i < UNDO_DEPTH + 3; i++) {
+        undo_mark(&w);
+        CHECK(world_step(&w, ACT_UP) == 0, "wall");     /* not committed */
+        undo_mark(&w);
+        if (world_step(&w, ACT_WAIT)) undo_commit();
+    }
+    CHECK(s->turn == UNDO_DEPTH + 3, "waited");
+    for (i = 0; i < UNDO_DEPTH; i++) CHECK(undo_pop(&w) == 1, "undo %d", i);
+    CHECK(undo_pop(&w) == 0 && s->turn == 3, "history holds UNDO_DEPTH turns");
 }
 
 /* The original level 1 layout, fixed here so these tests don't change
@@ -129,6 +148,7 @@ static const LevelDef patrol_level = {
     { { DIR_RIGHT, 2, { {1, 5}, {18, 5} }, DISGUISE_NONE, 0 } },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_patrol(void)
@@ -257,6 +277,7 @@ static const LevelDef td_level = {
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_takedown(void)
@@ -356,6 +377,7 @@ static const LevelDef dz_level = {
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_disguise_cones(void)
@@ -485,6 +507,7 @@ static const LevelDef big_level = {
     },
     { 1, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void test_big_map(void)
@@ -534,6 +557,7 @@ static const LevelDef tile_level = {
     { { DIR_LEFT, 1, { {10, 8} }, DISGUISE_NONE, 0 } },
     { 2, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
+    TRANS_CUT,
 };
 
 static void tiles_reset(char column, char gap)
@@ -552,6 +576,81 @@ static void tiles_load(GameState *s, int px, int py)
     game_load(&tile_level, s);
     s->px = (uint8_t)px;
     s->py = (uint8_t)py;
+}
+
+/* Level transitions: every screen tile changes exactly once, at a step
+ * inside the animation, and the animation has no dead steps at either end. */
+static void test_transitions(void)
+{
+    static const uint8_t centres[][2] = { {10, 8}, {0, 0}, {19, 15}, {1, 7}, {18, 1} };
+    unsigned c;
+    int kind, in, x, y;
+
+    CHECK(trans_steps(TRANS_CUT, 10, 8) == 0 && trans_steps(TRANS_FADE, 10, 8) == 0 &&
+          trans_steps(TRANS_COUNT, 10, 8) == 0, "cut and fade aren't tile patterns");
+    for (kind = TRANS_FADE + 1; kind < TRANS_COUNT; kind++)
+        for (c = 0; c < sizeof centres / sizeof centres[0]; c++) {
+            uint8_t cx = centres[c][0], cy = centres[c][1];
+            uint8_t n = trans_steps((uint8_t)kind, cx, cy);
+            CHECK(n >= 4 && n <= 24, "transition %d has %d steps", kind, n);
+            for (in = 0; in < 2; in++) {
+                int first = 0, last = 0;
+                for (y = 0; y < TRANS_H; y++)
+                    for (x = 0; x < TRANS_W; x++) {
+                        uint8_t p = trans_phase((uint8_t)kind, (uint8_t)in, n, (uint8_t)x,
+                                                (uint8_t)y, cx, cy);
+                        CHECK(p < n, "transition %d: tile (%d,%d) at step %d of %d",
+                              kind, x, y, p, n);
+                        if (p == 0) first = 1;
+                        if (p == n - 1) last = 1;
+                    }
+                CHECK(first && last, "transition %d (in=%d, centre %d,%d) has dead steps",
+                      kind, in, cx, cy);
+            }
+        }
+    /* the iris closes on the player: their tile is the last to go, the
+     * first to come back */
+    {
+        uint8_t n = trans_steps(TRANS_IRIS, 3, 12);
+        CHECK(trans_phase(TRANS_IRIS, 0, n, 3, 12, 3, 12) == n - 1 &&
+              trans_phase(TRANS_IRIS, 1, n, 3, 12, 3, 12) == 0, "iris centred on the player");
+    }
+    /* every level names a transition that exists */
+    for (kind = 0; kind < LEVEL_COUNT; kind++)
+        CHECK(levels[kind].transition < TRANS_COUNT, "map %d: unknown transition", kind);
+}
+
+/* A patrol leg with something in the way (the editor refuses these, but
+ * the rules shouldn't leave the guard stuck): it walks round. */
+static void test_patrol_detour(void)
+{
+    static const LevelDef blocked = {
+        "DETOUR", 20, 16, tile_map,
+        1,
+        { { DIR_RIGHT, 2, { {3, 3}, {12, 3} }, DISGUISE_NONE, 0 } },
+        { 0, 0 },
+        0, { 0 }, { 0 }, TRANS_CUT,
+    };
+    GameState s;
+    int i;
+
+    tiles_reset(0, 0);
+    tile_map[3 * 20 + 7] = '#';
+    game_load(&blocked, &s);
+    s.px = 1; s.py = 13;
+    for (i = 0; i < 11; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 12 && s.guards[0].y == 3, "guard walked round the block (%d,%d)",
+          s.guards[0].x, s.guards[0].y);
+    CHECK(s.guards[0].next_wp == 0 && s.guards[0].facing == DIR_LEFT, "and turned for home");
+    CHECK(s.status == STATUS_PLAYING, "player unseen");
+
+    /* the walking distances are remembered between turns, but not across a
+     * change to the map */
+    tiles_reset(0, 0);
+    game_load(&blocked, &s);
+    s.px = 1; s.py = 13;
+    for (i = 0; i < 9; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.guards[0].x == 12 && s.guards[0].y == 3, "straight there once it's clear");
 }
 
 static void test_tile_types(void)
@@ -626,6 +725,15 @@ static void test_tile_types(void)
         game_step(&s, ACT_WAIT);
     CHECK(s.guards[0].x == 5 && s.guards[0].y == 8, "guard came through the security door");
     CHECK(s.status == STATUS_PLAYING, "player unseen");
+    /* a body lying in the security door can't be pushed: the player would
+     * have to step into the doorway */
+    tiles_load(&s, 6, 8);
+    s.guards[0].mode = GUARD_BODY;
+    s.guards[0].x = 7; s.guards[0].y = 8;
+    CHECK(!game_can_drag(&s, DIR_RIGHT) && game_step(&s, ACT_DRAG + DIR_RIGHT) == 0 &&
+          s.px == 6, "can't push a body through a security door");
+    CHECK(game_step(&s, ACT_DRAG + DIR_LEFT) == 1 && s.guards[0].x == 6,
+          "but can drag it out of the doorway");
 
     /* vent: the player crawls through, guards can't, it hides you */
     tiles_reset('V', 0);
@@ -760,6 +868,7 @@ static LevelDef two_maps[2] = {
         { { DIR_DOWN, 2, { {4, 10}, {14, 10} }, DISGUISE_NONE, 0 } },
         { 1, 0 },
         0, { 0, 2, 0, 0 }, { 0, 2, 0, 0 },      /* right -> B, offset 2 */
+        TRANS_CUT,
     },
     {
         "TWO", 20, 16,
@@ -783,6 +892,7 @@ static LevelDef two_maps[2] = {
         { { DIR_DOWN, 1, { {3, 10} }, DISGUISE_NONE, 0 } },
         { 0, 0 },
         1, { 0, 0, 0, 1 }, { 0, 0, 0, -2 },     /* left -> A, offset -2 */
+        TRANS_CUT,
     },
 };
 
@@ -947,6 +1057,8 @@ int main(void)
     test_take_uniform();
     test_big_map();
     test_tile_types();
+    test_patrol_detour();
+    test_transitions();
     test_level_data();
     if (failures == 0) {
         test_world();

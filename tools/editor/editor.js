@@ -695,6 +695,7 @@ function renderProps() {
       box.appendChild(l);
     });
   }
+  $("lv-transition").value = lv.transition || "fade";
   A.items.forEach((it) => {
     const key = it.name.toLowerCase();
     $("item-" + key).value = (lv.items || {})[key] || 0;
@@ -1381,6 +1382,126 @@ async function restartPlay() {
   renderPlay();
 }
 
+// ----- level transitions: the dip to black between levels (main.c's
+// transition()). The patterns come from src/trans.c through the server.
+
+const FRAME_MS = 1000 / 60;
+const TRANSITION_NAMES = {
+  cut: "Cut (no animation)", fade: "Fade", wipe: "Wipe", curtain: "Curtain",
+  iris: "Iris (circle)", dissolve: "Dissolve (dither)", diagonal: "Diagonal wipe",
+  blinds: "Blinds", interlace: "Interlace",
+};
+let transitionRunning = false;
+
+function grabCanvas() {
+  const c = document.createElement("canvas");
+  c.width = canvas.width;
+  c.height = canvas.height;
+  c.getContext("2d").drawImage(canvas, 0, 0);
+  return c;
+}
+
+function blackout() {
+  ctx.fillStyle = PALETTE[3];
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+}
+
+/* The picture with every Game Boy shade k steps darker (the palette fade). */
+function darker(shot, k) {
+  const c = grabCanvas();
+  const g = c.getContext("2d");
+  g.drawImage(shot, 0, 0);
+  const img = g.getImageData(0, 0, c.width, c.height);
+  const rgb = PALETTE.map((hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)));
+  const d = img.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const shade = d[i] > 0xb4 ? 0 : d[i] > 0x5e ? 1 : d[i] > 0x1e ? 2 : 3;   // by red
+    const [r, gr, b] = rgb[Math.min(3, shade + k)];
+    d[i] = r; d[i + 1] = gr; d[i + 2] = b;
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+/* Play one half of a transition on the canvas. into = false: from `shot`
+ * (what the canvas shows) to black; true: from black back to `shot`.
+ * (cx, cy) is the player's screen tile, for the iris. Timing as the ROM. */
+async function playTransition(kind, into, shot, cx, cy) {
+  if (kind === "cut") {
+    if (into) ctx.drawImage(shot, 0, 0); else blackout();
+    return;
+  }
+  if (kind === "fade") {
+    for (let s = 1; s <= 3; s++) {
+      ctx.drawImage(darker(shot, into ? 3 - s : s), 0, 0);
+      await sleep(5 * FRAME_MS);
+    }
+    return;
+  }
+  const pat = await api("/api/transition", { kind, cx, cy });
+  const grid = into ? pat.in : pat.out;
+  // square cells across the picture's width: exactly the Game Boy's tiles
+  // in a playtest; on the edit view (a whole map) the pattern repeats down
+  const cell = canvas.width / grid[0].length;
+  const rows = Math.ceil(canvas.height / cell);
+  ctx.fillStyle = PALETTE[3];
+  for (let step = 0; step < pat.steps; step++) {
+    for (let y = 0; y < rows; y++) {
+      grid[y % grid.length].forEach((at, x) => {
+        if (at !== step) return;
+        if (into) ctx.drawImage(shot, x * cell, y * cell, cell, cell, x * cell, y * cell, cell, cell);
+        else ctx.fillRect(x * cell, y * cell, cell, cell);
+      });
+    }
+    await sleep((pat.steps <= 10 ? 4 : 2) * FRAME_MS);
+  }
+}
+
+/* The iris closes on the player; anywhere else, on the middle. */
+function transitionCentre() {
+  if (mode === "play" && P) {
+    const x = P.view.player[0] - P.cam.x, y = P.view.player[1] - P.cam.y;
+    if (x >= 0 && x < A.view_w && y >= 0 && y < A.view_h) return [x, y];
+  }
+  return [A.view_w / 2, A.view_h / 2];
+}
+
+/* Playtest: the level is finished. Dip to black and start it again (the
+ * ROM goes on to the next level the same way). */
+async function finishPlay() {
+  const kind = P.lv.transition || "fade";
+  transitionRunning = true;
+  try {
+    await playTransition(kind, false, grabCanvas(), ...transitionCentre());
+    blackout();
+    await sleep(300);
+    await restartPlay();
+    const shot = grabCanvas();
+    blackout();
+    await playTransition(kind, true, shot, ...transitionCentre());
+  } finally {
+    transitionRunning = false;
+  }
+}
+
+/* The Preview button: play the level's transition on whatever is shown. */
+async function previewTransition() {
+  if (transitionRunning || (P && P.busy)) return;
+  transitionRunning = true;
+  const kind = level().transition || "fade";
+  const shot = grabCanvas();
+  const centre = transitionCentre();
+  try {
+    await playTransition(kind, false, shot, ...centre);
+    blackout();
+    await sleep(300);
+    await playTransition(kind, true, shot, ...centre);
+  } finally {
+    transitionRunning = false;
+    if (mode === "play" && P) renderPlay(); else renderEdit();
+  }
+}
+
 async function undoPlay() {
   if (P.ui.mode !== "play" || !P.undo.length) return;
   P.state = P.undo.pop();
@@ -1463,7 +1584,7 @@ async function onPlayKey(btn, dir) {
   }
 
   // play mode
-  if (v.status === G.STATUS_WON) { if (btn === "A") await restartPlay(); return; }
+  if (v.status === G.STATUS_WON) { if (btn === "A") await finishPlay(); return; }
   if (v.status !== G.STATUS_PLAYING) return;
   if (btn === "B") {
     if (v.prompt.takedown) await doTakedown();
@@ -1632,7 +1753,7 @@ function newLevel() {
   const map = emptyRoom();
   map[1] = "#P" + map[1].slice(2);
   map[14] = map[14].slice(0, 18) + "E#";
-  return { name: "NEW LEVEL", notes: "", items: { stone: 0, bottle: 0 },
+  return { name: "NEW LEVEL", notes: "", items: { stone: 0, bottle: 0 }, transition: "fade",
            maps: [{ map, guards: [] }], links: [] };
 }
 
@@ -1732,6 +1853,16 @@ function wire() {
     level().name = el.value;
   });
   textField("lv-notes", (el) => { level().notes = el.value; });
+
+  A.transitions.forEach((t) => $("lv-transition").add(new Option(TRANSITION_NAMES[t] || t, t)));
+  $("lv-transition").addEventListener("change", (e) => {
+    pushUndo();
+    level().transition = e.target.value;
+    if (P) P.lv.transition = e.target.value;   // a playtest under way uses it too
+    changed();
+    previewTransition();
+  });
+  $("trans-preview").addEventListener("click", previewTransition);
 
   A.dirs.forEach((d) => $("g-facing").add(new Option(d, d)));
   A.uniforms.forEach((u) => $("g-uniform").add(new Option(u === "none" ? "none" : u.toUpperCase(), u)));

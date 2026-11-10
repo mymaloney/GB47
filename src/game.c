@@ -44,6 +44,7 @@ void game_use(const LevelDef *lvl)
     uint8_t  y;
     uint16_t at = 0;
 
+    if (lvl != level) game_map_changed();
     level = lvl;
     map_w = lvl->width;
     map_h = lvl->height;
@@ -58,6 +59,7 @@ void game_load(const LevelDef *lvl, GameState *s)
     /* zero everything (incl. padding) so states compare with memcmp */
     memset(s, 0, sizeof(GameState));
     game_use(lvl);
+    game_map_changed();     /* a new game: assume nothing about the map */
     s->px = 1;
     s->py = 1;
 
@@ -296,19 +298,32 @@ static uint8_t body_spotted(const GameState *s)
 #define NO_PATH 0xFF
 #define QUEUE_SIZE 1024   /* ring buffer; holds the BFS frontier only */
 
+#define NO_TARGET 0xFF    /* dist_x when dist[] holds nothing usable */
+
 static uint8_t dist[MAP_MAX_CELLS];   /* dist[row_start[y] + x] */
 static uint8_t queue_x[QUEUE_SIZE];
 static uint8_t queue_y[QUEUE_SIZE];
+static uint8_t dist_x = NO_TARGET, dist_y;   /* the tile dist[] was filled for */
 
 #define DIST(x, y) dist[row_start[y] + (x)]
 
+void game_map_changed(void)
+{
+    dist_x = NO_TARGET;
+}
+
 /* Fill dist[] with walking distance to (x, y), ignoring guards and the
- * player. Unreachable tiles get NO_PATH. */
+ * player. Unreachable tiles get NO_PATH. The distances depend only on the
+ * map, so they are kept until another tile is asked for: a guard walking
+ * to a noise (or back) over several turns searches the map once. */
 static void distances_to(uint8_t x, uint8_t y)
 {
     uint16_t head = 0, tail = 0;
     uint8_t  cx, cy, nx, ny, nd, d;
 
+    if (x == dist_x && y == dist_y) return;
+    dist_x = x;
+    dist_y = y;
     memset(dist, NO_PATH, (uint16_t)map_w * map_h);
     DIST(x, y) = 0;
     queue_x[0] = x;
@@ -437,13 +452,17 @@ static uint8_t guard_patrol(GameState *s, uint8_t idx)
     ny     = g->y + dir_dy[dir];
     g->facing = dir;
 
-    if (nx == s->px && ny == s->py)
-        return game_attitude(s, idx) != ATT_BLIND;  /* blind guards wait */
-    if (game_blocks(nx, ny, BLOCK_GUARD) || guard_at(s, nx, ny, idx))
-        return 0;   /* blocked: wait this turn */
-
-    g->x = nx;
-    g->y = ny;
+    if (game_blocks(nx, ny, BLOCK_GUARD)) {
+        /* The straight line to the waypoint is blocked (levels from the
+         * editor never do this): find a way round rather than wait forever. */
+        if (step_toward(s, idx, target->x, target->y) == STEP_BUMP) return 1;
+    } else {
+        if (nx == s->px && ny == s->py)
+            return game_attitude(s, idx) != ATT_BLIND;  /* blind guards wait */
+        if (guard_at(s, nx, ny, idx)) return 0;   /* blocked: wait this turn */
+        g->x = nx;
+        g->y = ny;
+    }
 
     /* Reached the waypoint: pick the next one and turn to face it, so the
      * cone always shows where the guard is about to walk. */
@@ -646,6 +665,11 @@ static uint8_t plan_drag(const GameState *s, uint8_t dir, uint8_t *bx, uint8_t *
 
     if (s->status != STATUS_PLAYING || s->takedown_left) return 0xFF;
 
+    /* either way the player steps to (nx,ny): it must be enterable (a body
+     * can lie where the player can't go, e.g. a guard taken down on a
+     * security door) */
+    if (!tile_free(s, nx, ny)) return 0xFF;
+
     /* push: body straight ahead moves one further */
     b = body_at(s, nx, ny);
     if (b != 0xFF) {
@@ -658,7 +682,6 @@ static uint8_t plan_drag(const GameState *s, uint8_t dir, uint8_t *bx, uint8_t *
     /* drag: an adjacent body follows into the tile we leave. Prefer the
      * one directly behind, then up/right/down/left. Not while standing on
      * a body (the two would end up stacked). */
-    if (!tile_free(s, nx, ny)) return 0xFF;
     if (body_at(s, s->px, s->py) != 0xFF) return 0xFF;
     b = body_at(s, s->px - dir_dx[dir], s->py - dir_dy[dir]);
     for (d = 0; b == 0xFF && d < 4; d++)
@@ -728,9 +751,10 @@ uint8_t game_can_throw(const GameState *s, uint8_t item, uint8_t x, uint8_t y)
     uint8_t d;
 
     if (item >= ITEM_TYPES || s->items[item] == 0) return 0;
-    if (game_blocks(x, y, BLOCK_THROW)) return 0;   /* also bounds-checks */
+    /* cheapest test first: aiming asks about every tile on screen */
     d = game_distance(s->px, s->py, x, y);
     if (d == 0 || d > item_defs[item].range) return 0;
+    if (game_blocks(x, y, BLOCK_THROW)) return 0;   /* also bounds-checks */
     return line_of_sight((int8_t)s->px, (int8_t)s->py, (int8_t)x, (int8_t)y, BLOCK_THROW);
 }
 

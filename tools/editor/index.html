@@ -117,6 +117,11 @@
     <label>Name <input id="lv-name" maxlength="12" spellcheck="false"></label>
     <label>Notes <textarea id="lv-notes" rows="2" placeholder="Design notes (kept as a comment in levels.c)"></textarea></label>
     <div class="items" id="lv-items"></div>
+    <label for="lv-transition">Transition <span class="muted">(when the level is finished)</span></label>
+    <div class="trans-row">
+      <select id="lv-transition"></select>
+      <button id="trans-preview" type="button" title="Play it on the picture">Preview</button>
+    </div>
 
     <div id="links-section">
       <h2>Links <span class="muted">(this map's edges)</span></h2>

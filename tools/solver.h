@@ -14,6 +14,10 @@
 #define SOLVE_USE_ITEMS    8
 #define SOLVE_USE_ALL      15
 
+/* Longest throw the solver tries. item_defs[].range must not exceed it
+ * (checked by tests/test_game.c). */
+#define SOLVE_MAX_RANGE 6
+
 #define SOLVE_THROW 0x80      /* SolveStep.action = SOLVE_THROW | item */
 
 typedef struct {

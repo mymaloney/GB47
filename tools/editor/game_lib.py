@@ -11,6 +11,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
+import gen_levels   # noqa: E402
 import tileset as ts   # noqa: E402
 LIB_PATH = ROOT / "build" / "libgame.so"
 
@@ -38,6 +39,7 @@ def _parse_defines(path):
 
 G = _parse_defines(ROOT / "src" / "game.h")     # game constants
 G.update(_parse_defines(ROOT / "tools" / "solver.h"))  # SOLVE_USE_*
+G.update(_parse_defines(ROOT / "src" / "trans.h"))     # TRANS_*
 T = _parse_defines(ROOT / "src" / "tiles.h")    # tile/sprite indices
 
 lib = C.CDLL(str(LIB_PATH))
@@ -67,7 +69,8 @@ class LevelDef(C.Structure):
                 ("map", C.c_char_p),
                 ("guard_count", C.c_uint8), ("guards", GuardDef * MAX_GUARDS),
                 ("items", C.c_uint8 * ITEM_TYPES),
-                ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4)]
+                ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4),
+                ("transition", C.c_uint8)]
 
 
 class Guard(C.Structure):
@@ -121,6 +124,7 @@ _sig = {
     "game_uniform_here": (C.c_uint8, [S]),
     "game_body_adjacent": (C.c_uint8, [S]),
     "game_attitude": (C.c_uint8, [S, C.c_uint8]),
+    "world_use": (None, [L]),
     "world_load": (None, [L, C.c_uint8, Wp]),
     "world_activate": (None, [Wp]),
     "world_step": (C.c_uint8, [Wp, C.c_uint8]),
@@ -128,6 +132,8 @@ _sig = {
     "solver_run": (C.c_int, [L, C.c_uint8, C.c_int, C.POINTER(SolveStep), C.c_int,
                              C.POINTER(C.c_int)]),
     "solver_format": (None, [C.POINTER(SolveStep), C.c_int, C.c_char_p, C.c_int]),
+    "trans_steps": (C.c_uint8, [C.c_uint8] * 3),
+    "trans_phase": (C.c_uint8, [C.c_uint8] * 7),
 }
 for name, (res, args) in _sig.items():
     f = getattr(lib, name)
@@ -146,12 +152,24 @@ CELL_BLOCKS = list((C.c_uint8 * len(CELL_NAMES)).in_dll(lib, "cell_blocks"))
 
 ITEM_DEFS = (ItemDef * ITEM_TYPES).in_dll(lib, "item_defs")
 ITEMS = [{"name": d.name.decode(), "range": d.range, "noise": d.noise} for d in ITEM_DEFS]
-DIRS = ["up", "right", "down", "left"]
-UNIFORMS = ["none", "guard", "officer"]
+DIRS = gen_levels.DIRS            # DIR_* order
+UNIFORMS = gen_levels.UNIFORMS    # DISGUISE_* order
+TRANSITIONS = gen_levels.TRANSITIONS
+assert [G["TRANS_" + n.upper()] for n in TRANSITIONS] == list(range(G["TRANS_COUNT"])), \
+    "TRANS_* in src/trans.h changed: update TRANSITIONS in tools/gen_levels.py"
 
 
-DIRS_C = ["up", "right", "down", "left"]   # DIR_* order
-OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
+def transition(kind, cx, cy):
+    """A transition's pattern, from the same code the ROM plays: the step
+    at which each screen tile goes black ("out") and comes back ("in"),
+    rows of TRANS_W. steps = 0 means it isn't tile-based (cut, fade)."""
+    k = TRANSITIONS.index(kind)
+    w, h = G["TRANS_W"], G["TRANS_H"]
+    cx, cy = min(max(cx, 0), w - 1), min(max(cy, 0), h - 1)
+    n = lib.trans_steps(k, cx, cy)
+    grid = [[[lib.trans_phase(k, into, n, x, y, cx, cy) for x in range(w)] for y in range(h)]
+            for into in (0, 1)]
+    return {"kind": kind, "steps": n, "out": grid[0], "in": grid[1]}
 
 
 class Level:
@@ -159,32 +177,21 @@ class Level:
     Map 0 is where the player starts; links point within the table."""
 
     def __init__(self, data):
+        data = gen_levels.upgrade(data)    # old one-map levels -> "maps"
         self.data = data
         self._keep = []
-        maps = data.get("maps") or [{"map": data["map"], "guards": data.get("guards", [])}]
+        maps = data["maps"]
         self.maps = maps
         self.table = (LevelDef * len(maps))()
-        links = {}
-        for ln in data.get("links", []):
-            links[(ln["from"], ln["edge"])] = (ln["to"], ln.get("offset", 0))
-            links[(ln["to"], OPPOSITE[ln["edge"]])] = (ln["from"], -ln.get("offset", 0))
+        links = gen_levels.link_table(data)
         name = self._b(data["name"])
         # painted art per map: grid of tileset tiles (None = built-in), and
-        # how many variants each tile has (same rule as tools/gen_levels.py)
+        # how many variants each tile has
         self.art, self.art_kinds = [], []
         for m in maps:
-            if m.get("art"):
-                grid = ts.parse_art(m["art"])
-                usage = {}
-                for row, arow in zip(m["map"], grid):
-                    for ch, v in zip(row, arow):
-                        if v is not None:
-                            usage.setdefault(v, set()).add(ch)
-                self.art.append(grid)
-                self.art_kinds.append({v: ts.slots_for(c) for v, c in usage.items()})
-            else:
-                self.art.append(None)
-                self.art_kinds.append({})
+            usage = gen_levels.art_usage(m)
+            self.art.append(ts.parse_art(m["art"]) if m.get("art") else None)
+            self.art_kinds.append({v: ts.slots_for(c) for v, c in usage.items()})
         for k, m in enumerate(maps):
             d = self.table[k]
             d.name = name
@@ -207,7 +214,8 @@ class Level:
                 for i, it in enumerate(ITEMS):
                     d.items[i] = items.get(it["name"].lower(), 0)
             d.part = k
-            for di, dname in enumerate(DIRS_C):
+            d.transition = TRANSITIONS.index(data["transition"])
+            for di, dname in enumerate(DIRS):
                 if (k, dname) in links:
                     to, off = links[(k, dname)]
                     d.link[di] = to + 1
@@ -243,18 +251,18 @@ def new_game(level, disguise=None, map_index=0):
 
 
 def step(level, world, code):
-    lib.world_load(level.table, 0, C.byref(World()))   # point world.c at this table
+    lib.world_use(level.table)    # the world came from an earlier request
     return bool(lib.world_step(C.byref(world), code))
 
 
 def throw(level, world, item, x, y):
-    lib.world_load(level.table, 0, C.byref(World()))
+    lib.world_use(level.table)
     return bool(lib.world_throw(C.byref(world), item, x, y))
 
 
 def view(level, world, aim_item=None):
     """Everything the screen needs, computed the same way as src/main.c."""
-    lib.world_load(level.table, 0, C.byref(World()))
+    lib.world_use(level.table)
     lib.world_activate(C.byref(world))
     state = world.part[world.cur]
     cdef = level.table[world.cur]

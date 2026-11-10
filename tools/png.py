@@ -7,6 +7,7 @@ alpha and RGBA, 8 bits per channel, with tRNS transparency.
 """
 import struct
 import zlib
+from pathlib import Path
 
 
 def _paeth(a, b, c):
@@ -18,7 +19,7 @@ def _paeth(a, b, c):
 
 
 def read_png(path):
-    data = open(path, "rb").read()
+    data = Path(path).read_bytes()
     if data[:8] != b"\x89PNG\r\n\x1a\n":
         raise ValueError(f"{path} is not a PNG file")
     pos, idat, palette, trns = 8, b"", [], None

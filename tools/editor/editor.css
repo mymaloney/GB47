@@ -193,3 +193,7 @@ dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); paddi
 .tile-previews canvas { image-rendering: pixelated; display: block; margin: 0 auto 4px; border-radius: 3px; }
 
 .check.autotile { margin-top: 6px; font-size: 13px; }
+
+/* level transition: the choice and its Preview button on one line */
+.trans-row { display: flex; gap: 6px; margin: 2px 0 8px; }
+.trans-row select { flex: 1; width: auto; }

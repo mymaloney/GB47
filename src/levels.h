@@ -4,6 +4,7 @@
 
 #include "game.h"
 #include "art.h"
+#include "trans.h"
 
 /* One entry per map; a level's maps are consecutive (part 0 first). */
 #define LEVEL_COUNT 10

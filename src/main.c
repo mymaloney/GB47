@@ -4,7 +4,8 @@
  *
  * Controls (playing):
  *   D-pad        move one tile (spends a turn); you can walk over bodies
- *   A            wait one turn            (after escaping: next level)
+ *   A            wait one turn            (after escaping: next level,
+ *                through the level's transition)
  *   B            take down an adjacent guard, or take the uniform of
  *                the body you stand on (when prompted)
  *   B + D-pad    hold B to drag a body behind you, or push one ahead
@@ -27,6 +28,7 @@
 #include "game.h"
 #include "world.h"
 #include "art.h"
+#include "trans.h"
 #include "levels.h"
 #include "tiles.h"
 
@@ -48,23 +50,29 @@
 #define WIN_ROWS (3 + ITEM_TYPES)
 #define WIN_Y    (144 - WIN_ROWS * 8)
 
+#define TILE_BLACK TILE_WALL   /* flat black: what a transition covers with */
+#define PAL_NORMAL 0xE4        /* 11 10 01 00: index 0 = white ... 3 = black */
+#define PAL_BLACK  0xFF
+#define STASH_ROW  8             /* window map rows 8-25: never on screen */
+
 #define RESTART_HOLD   45   /* frames START must be held to restart */
 #define TAKEDOWN_PAUSE 24   /* frames shown per automatic takedown turn */
 
 static World       world;    /* every map of the current level */
 static GameState  *st;       /* the map the player is in: see sync() */
 #define state (*st)
-static World       before;   /* snapshot taken before each turn, for undo */
 static uint8_t     level_idx;    /* levels[] index of the level's first map */
 static uint8_t     level_num;    /* 1-based number shown in the HUD */
-static uint8_t     vision[VIEW_W * VIEW_H];
+/* Vision of the screen being drawn; a transition keeps its pattern here
+ * (one step per screen tile, HUD rows included). */
+static uint8_t     vision[TRANS_W * TRANS_H];
+static uint8_t     lcd_stays_on;            /* loading mid-transition: no blanking */
 static uint8_t     row_buf[32];
 
 static uint8_t     cam_x, cam_y;            /* top-left of the shown screen, tiles */
 static uint16_t    scroll_x, scroll_y;      /* the same, in pixels */
 static uint8_t     select_armed;            /* SELECT pressed while playing */
 static uint8_t     looking;                 /* SELECT held and panned */
-static uint8_t     look_x, look_y;          /* screen before looking */
 
 /* Painted art (art.h). Its tiles go into VRAM after the built-in ones. */
 #define ART_SLOT0 BKG_TILE_COUNT
@@ -146,7 +154,10 @@ static uint8_t next_item(uint8_t from, uint8_t step)
 
 static void draw_hud(void)
 {
-    if (ui_mode == UI_INVENTORY) return;   /* the window shows the inventory */
+    if (ui_mode == UI_INVENTORY) {   /* the window shows the inventory */
+        hud_msg = 0;                 /* don't show a stale message later */
+        return;
+    }
 
     /* Row 1: "1 FIRST STEPS   T012" or "THROW STONE     T012" */
     clear_row_buf();
@@ -209,9 +220,10 @@ static void draw_tiles(uint8_t x0, uint8_t y0, uint8_t w, uint8_t h)
             if (art && art_buf[x] != ART_NONE) {
                 /* painted tile: pick the variant for cones / aiming */
                 uint8_t k = art_buf[x], slot = art_slot[k];
-                aim = (ui_mode == UI_AIM) && cell == CELL_FLOOR &&
+                /* only tiles painted on floor have aiming variants */
+                aim = art->kinds[k] >= 5 && (ui_mode == UI_AIM) && cell == CELL_FLOOR &&
                       game_can_throw(&state, inv_item, wx, wy);
-                if (art->kinds[k] >= 5 && aim)
+                if (aim)
                     slot += seen == VIS_SEEN ? ART_AIM_SEEN : ART_AIM;
                 else if (art->kinds[k] >= 3 && seen)
                     slot += seen == VIS_SEEN ? ART_SEEN : ART_WATCH;
@@ -415,9 +427,8 @@ static void select_released(void)
 {
     if (!select_armed) return;
     select_armed = 0;
-    if (looking) {             /* put the camera back where it was */
+    if (looking) {             /* back to the player's screen */
         looking = 0;
-        move_camera(look_x, look_y);
         redraw();
         return;
     }
@@ -444,7 +455,10 @@ static void load_art(void)
     art_map = world.part_def[world.cur];
     art = level_art[art_map];
     if (!art) return;
-    if (was_on) DISPLAY_OFF;           /* lots of VRAM writes: do them blank */
+    /* lots of VRAM writes: do them with the screen off (faster), unless a
+     * transition has it black already and a blank would flash */
+    if (lcd_stays_on) was_on = 0;
+    if (was_on) DISPLAY_OFF;
     for (k = 0; k < art->count; k++) {
         art_slot[k] = slot;
         src = art_tile_data + (uint16_t)art->tiles[k] * 16;
@@ -495,17 +509,108 @@ static void load_level(uint8_t idx)
 }
 
 /* ------------------------------------------------------------------ */
+/* Level transitions (patterns: trans.h)                               */
+/* ------------------------------------------------------------------ */
+
+static void set_palettes(uint8_t p)
+{
+    BGP_REG  = p;
+    OBP0_REG = p;
+}
+
+static void wait_frames(uint8_t n)
+{
+    while (n--) vsync();
+}
+
+/* Screen tile (x, y): the map view, then the HUD's two rows in the window. */
+static void screen_tile(uint8_t x, uint8_t y, uint8_t t)
+{
+    if (y < VIEW_H) set_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31, t);
+    else            set_win_tile_xy(x, y - VIEW_H, t);
+}
+
+/* Each shade one darker per step, until everything is black. */
+static const uint8_t fade_pal[4] = { PAL_NORMAL, 0xF9, 0xFE, PAL_BLACK };
+
+/* in = 0: dip to black. in = 1: come back from black; the new screen must
+ * already be drawn (unseen, under the all-black palette). */
+static void transition(uint8_t kind, uint8_t in)
+{
+    uint8_t  n, step, x, y;
+    uint8_t  cx = state.px - cam_x, cy = state.py - cam_y;
+    uint8_t *v;
+
+    if (cx >= TRANS_W || cy >= VIEW_H) {     /* player not on this screen */
+        cx = TRANS_W / 2;
+        cy = VIEW_H / 2;
+    }
+    n = trans_steps(kind, cx, cy);
+    if (!n) {                            /* fade: palettes only */
+        for (step = 1; step < 4; step++) {
+            set_palettes(fade_pal[in ? 3 - step : step]);
+            wait_frames(5);
+        }
+        return;
+    }
+
+    if (!in) HIDE_SPRITES;
+
+    /* Work out every tile's step once (vision[] is free until the next
+     * draw). Coming back, also move the new screen's tiles to a part of
+     * the window map that is never shown, and cover the screen. */
+    v = vision;
+    for (y = 0; y < TRANS_H; y++)
+        for (x = 0; x < TRANS_W; x++) {
+            *v++ = trans_phase(kind, in, n, x, y, cx, cy);
+            if (in) {
+                set_win_tile_xy(x, STASH_ROW + y,
+                    y < VIEW_H ? get_bkg_tile_xy((cam_x + x) & 31, (cam_y + y) & 31)
+                               : get_win_tile_xy(x, y - VIEW_H));
+                screen_tile(x, y, TILE_BLACK);
+            }
+        }
+    if (in) set_palettes(PAL_NORMAL);
+
+    for (step = 0; step < n; step++) {
+        v = vision;
+        for (y = 0; y < TRANS_H; y++)
+            for (x = 0; x < TRANS_W; x++)
+                if (*v++ == step)
+                    screen_tile(x, y, in ? get_win_tile_xy(x, STASH_ROW + y) : TILE_BLACK);
+        wait_frames(n <= 10 ? 3 : 1);    /* short ones would be over too soon */
+    }
+
+    if (in) SHOW_SPRITES;
+    else    set_palettes(PAL_BLACK);
+}
+
+/* The level is finished: on to the next, through this level's transition. */
+static void advance_level(void)
+{
+    uint8_t kind = levels[level_idx].transition;
+
+    if (kind == TRANS_CUT || kind >= TRANS_COUNT) {
+        load_level(next_level(level_idx));
+        return;
+    }
+    transition(kind, 0);
+    lcd_stays_on = 1;
+    load_level(next_level(level_idx));
+    lcd_stays_on = 0;
+    transition(kind, 1);
+}
+
+/* ------------------------------------------------------------------ */
 /* Input per mode                                                      */
 /* ------------------------------------------------------------------ */
 
 /* Run one turn; push undo and redraw if it happened. */
 static uint8_t do_action(uint8_t action)
 {
-    /* SDCC can't initialise a struct from another struct in its
-     * declaration ("needs curly braces"), so assign separately. */
-    before = world;
+    undo_mark(&world);
     if (!world_step(&world, action)) return 0;
-    undo_push(&before);
+    undo_commit();
     sync();          /* the step may have crossed into another map */
     redraw();
     return 1;
@@ -545,7 +650,7 @@ static void input_play(uint8_t pressed, uint8_t keys)
     uint8_t dir;
 
     if (state.status == STATUS_WON) {
-        if (pressed & J_A) load_level(next_level(level_idx));
+        if (pressed & J_A) advance_level();
         return;
     }
     if (state.status != STATUS_PLAYING) return;   /* START to undo */
@@ -569,10 +674,6 @@ static void input_play(uint8_t pressed, uint8_t keys)
         else if ((pressed & J_LEFT) && nx > 0)                        nx -= VIEW_W;
         else if ((pressed & J_RIGHT) && nx + VIEW_W < game_width())   nx += VIEW_W;
         if (pressed & (J_UP | J_DOWN | J_LEFT | J_RIGHT)) {
-            if (!looking) {
-                look_x = cam_x;
-                look_y = cam_y;
-            }
             looking = 1;
             move_camera(nx, ny);
             draw_sprites();
@@ -631,9 +732,9 @@ static void input_aim(uint8_t pressed)
         return;
     }
     if (pressed & J_A) {
-        before = world;   /* separate assignment: see do_action() */
+        undo_mark(&world);
         if (world_throw(&world, inv_item, aim_x, aim_y)) {
-            undo_push(&before);
+            undo_commit();
             ui_mode = UI_PLAY;
             redraw();
         } else {
@@ -699,8 +800,8 @@ void main(void)
     uint8_t keys, prev = 0, pressed, released;
 
     DISPLAY_OFF;
-    BGP_REG  = 0xE4;   /* 11 10 01 00: index 0 = white ... 3 = black */
-    OBP0_REG = 0xE4;
+    BGP_REG  = PAL_NORMAL;
+    OBP0_REG = PAL_NORMAL;
     set_bkg_data(0, BKG_TILE_COUNT, bkg_tile_data);
     set_sprite_data(0, SPRITE_TILE_COUNT, sprite_tile_data);
     move_win(7, HUD_WIN_Y);   /* the HUD: bottom two rows, never scrolls */

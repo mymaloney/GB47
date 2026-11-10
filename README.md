@@ -26,6 +26,9 @@ stealth with social stealth (disguises, dialogue) and combat.
 - **Linked maps:** a level can be up to 4 maps joined at their edges
 - **Tileset painting:** paint a level's look from a tileset image
   (`tilesets/`), separately from what each cell does
+- **Level transitions:** finishing a level dips to black and back in the
+  style chosen for that level: fade, wipe, curtain, iris (a circle closing
+  on you), dissolve, diagonal wipe, blinds, interlace, or a plain cut
 - 9 levels, each checked solvable by an automated solver
 - **Level editor** with in-editor playtesting and a built-in solver
 
@@ -66,6 +69,10 @@ rules into `build/libgame.so`, starts a local server, and opens
   it. **Close loop** adds the corner needed to walk back to the start.
 - Per guard: facing, uniform, and attitude to each disguise.
 - Per level: name, design notes, and starting stones/bottles.
+- **Transition**: how the screen dips to black when the level is finished.
+  Choosing one plays it on the picture (so does **Preview**), and finishing
+  a level in Playtest plays it too. The patterns come from the same code
+  the ROM uses (`src/trans.c`).
 - **Cones preview:** shows every guard's starting cone as seen by a player
   in your own clothes, the GUARD uniform, or the OFFICER uniform.
 - **Problems** are listed live, in plain language: missing start, a route
@@ -93,7 +100,7 @@ Levels live in `levels/levels.json` (format documented at the top of
 | Button | Action |
 |---|---|
 | D-pad | Move one tile (spends a turn); you can walk over bodies |
-| A | Wait one turn / next level after escaping |
+| A | Wait one turn / next level after escaping (through the level's transition) |
 | B | Take down an adjacent guard (`B:TAKEDOWN`), or put on the uniform of the body you're standing on (`B:TAKE UNIFORM`) |
 | Hold B + D-pad | Drag a body behind you, or push one in front of you |
 | SELECT (tap) | Open inventory |
@@ -357,8 +364,8 @@ make usage
 
 prints how full the ROM banks and RAM are (GBDK's `romusage`); CI prints
 it on every build. Levels currently live in the first 32 KB of the
-cartridge with the code, and that is now full: about 6.8 KB is left
-(only 88 bytes in bank 0), and WRAM has about 1.3 KB left. Level data
+cartridge with the code, and that is now full: about 5.5 KB is left
+(only 88 bytes in bank 0), and WRAM has about 1.4 KB left. Level data
 moves into switchable ROM banks before the next feature (step 1 of
 `docs/dialogue-plan.md`).
 
@@ -397,6 +404,7 @@ gives up after 2 million and reports "too big to tell".
 | `tools/solver.c` | A* solver, shared by the tests and the editor. |
 | `tilesets/` | Tileset images and their settings (shade thresholds, tile behaviours). |
 | `src/art.c`, `tools/tileset.py` | Painted art: map art layers, shaded copies for cones and aiming, and the tileset loader (with a standard-library PNG reader, `tools/png.py`). |
+| `src/trans.c`, `trans.h` | Level transition patterns (which screen tile changes at which step). No hardware access: `main.c` plays them, the editor previews them. |
 | `src/main.c` | Game Boy side: input, drawing the map/sprites/HUD. Only reads `GameState`. |
 | `tools/gen_tiles.py` | Turns ASCII pixel art into `src/tiles.c`/`tiles.h`. Run `make tiles` after editing the art. |
 | `tests/test_game.c` | Unit tests, plus solver checks for every level. |

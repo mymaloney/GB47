@@ -3,7 +3,7 @@
  *
  * Everything in game.c is deterministic and depends only on the level data
  * and the GameState passed in. That gives us:
- *   - cheap undo (a GameState is ~30 bytes; just snapshot it),
+ *   - cheap undo (a GameState is ~50 bytes; just snapshot it),
  *   - puzzles that always play out the same way,
  *   - the ability to compile and test the rules on a PC (see tests/).
  */
@@ -163,6 +163,9 @@ typedef struct {
     uint8_t     part;
     uint8_t     link[4];
     int8_t      link_offset[4];
+    /* TRANS_* (trans.h): how the screen dips to black when this level is
+     * finished. Only looks, and only read from a level's first map. */
+    uint8_t     transition;
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */
@@ -196,6 +199,11 @@ void game_load(const LevelDef *lvl, GameState *s);
 /* Make lvl the current map without touching any game state, e.g. to
  * resume a map the player left earlier. */
 void game_use(const LevelDef *lvl);
+
+/* Forget cached pathfinding. Call it when what guards can walk on may have
+ * changed behind the current LevelDef pointer (game_load and a change of
+ * map already do). */
+void game_map_changed(void);
 
 /* The player steps into this map at (x, y) from a neighbouring one: counts
  * as a turn, wins on an exit, and guards who can see the spot catch them,

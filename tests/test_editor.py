@@ -8,6 +8,7 @@ import if not), that a level round-trips through the JSON generator, and
 that playtest steps and the solver work through the shared library.
 """
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -221,6 +222,41 @@ before = ts.parse_art(base)
 assert after[8][10] is not None and after[8][10] != before[8][10], "pillar drawn"
 changed = {(x, y) for y in range(16) for x in range(20) if after[y][x] != before[y][x]}
 assert changed and all(abs(x - 10) <= 1 and abs(y - 8) <= 1 for x, y in changed), changed
+
+# a malformed link is reported, not a crash
+bad_edge = json.loads(json.dumps(two))
+bad_edge["links"][0]["edge"] = "sideways"
+assert any("edge must be" in e for e in gen_levels.validate_level(bad_edge))
+
+# the editor's Solve says which mechanics a level needs (level 5: CLEANUP)
+os.environ["EDITOR_NO_BROWSER"] = "1"
+import server   # noqa: E402
+ok_host = f"127.0.0.1:{server.PORT}"
+assert server.allowed({"Host": ok_host})
+assert server.allowed({"Host": f"localhost:{server.PORT}", "Origin": f"http://{ok_host}"})
+assert not server.allowed({"Host": f"evil.example:{server.PORT}"}), "DNS rebinding"
+assert not server.allowed({"Host": ok_host, "Origin": "http://evil.example"}), "cross-site"
+assert not server.allowed({})
+needs = server.analyze(g.Level(levels[4]))["needs"]
+assert needs.get("takedown") == "yes" and needs.get("drag") == "yes", needs
+
+# level transitions: names match TRANS_*, the choice reaches the ROM data,
+# and the editor's preview pattern comes from the C code
+assert all(lv["transition"] in gen_levels.TRANSITIONS for lv in levels)
+iris = json.loads(json.dumps(levels[0]))
+iris["transition"] = "iris"
+assert g.Level(iris).table[0].transition == g.G["TRANS_IRIS"]
+assert "        TRANS_IRIS,\n" in gen_levels.generate_c([iris])
+assert '"transition": "iris"' in gen_levels.dumps([iris])
+old = {k: v for k, v in levels[0].items() if k != "transition"}     # made before transitions
+assert gen_levels.upgrade(old)["transition"] == "fade" and not gen_levels.validate_level(old)
+iris["transition"] = "spin"
+assert any("Transition must be" in e for e in gen_levels.validate_level(iris))
+pat = g.transition("wipe", 10, 8)
+assert pat["steps"] == 20 and pat["out"][0] == list(range(20)) and len(pat["out"]) == 18
+pat = g.transition("iris", 2, 3)
+assert pat["in"][3][2] == 0 and pat["out"][3][2] == pat["steps"] - 1
+assert g.transition("fade", 0, 0)["steps"] == 0
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])
