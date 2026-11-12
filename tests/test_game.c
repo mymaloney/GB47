@@ -939,6 +939,108 @@ static void test_access(void)
     CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_ALARM, "a body in a legal area is still a body");
 }
 
+/* Pickups and portals. An open room: two stones lie at (3,1); a portal
+ * links (6,1) with (15,10) in the same map; a second map is reached only
+ * through the portal at (8,1), which comes out at (2,2) there. A guard in
+ * map 2 at (6,2) faces left, toward where you arrive. */
+static char pp_map[20 * 16 + 1], pp_map2[20 * 16 + 1];
+static LevelDef pp_levels[2];
+
+static void pp_reset(void)
+{
+    int x, y;
+    for (y = 0; y < 16; y++)
+        for (x = 0; x < 20; x++) {
+            char c = (x == 0 || y == 0 || x == 19 || y == 15) ? '#' : '.';
+            pp_map[y * 20 + x] = c;
+            pp_map2[y * 20 + x] = c;
+        }
+    pp_map[1 * 20 + 1] = 'P';
+    pp_map2[14 * 20 + 18] = 'E';
+    memset(pp_levels, 0, sizeof pp_levels);
+    pp_levels[0].name = "PICKUPS"; pp_levels[0].width = 20; pp_levels[0].height = 16;
+    pp_levels[0].map = pp_map;
+    pp_levels[0].pickup_count = 1;
+    pp_levels[0].pickups[0].x = 3; pp_levels[0].pickups[0].y = 1;
+    pp_levels[0].pickups[0].item = ITEM_STONE; pp_levels[0].pickups[0].count = 2;
+    pp_levels[0].portal_count = 3;
+    pp_levels[0].portals[0].x = 6;  pp_levels[0].portals[0].y = 1;  pp_levels[0].portals[0].to = 1;
+    pp_levels[0].portals[0].tx = 15; pp_levels[0].portals[0].ty = 10;
+    pp_levels[0].portals[1].x = 15; pp_levels[0].portals[1].y = 10; pp_levels[0].portals[1].to = 1;
+    pp_levels[0].portals[1].tx = 6; pp_levels[0].portals[1].ty = 1;
+    pp_levels[0].portals[2].x = 8;  pp_levels[0].portals[2].y = 1;  pp_levels[0].portals[2].to = 2;
+    pp_levels[0].portals[2].tx = 2; pp_levels[0].portals[2].ty = 2;
+    pp_levels[1] = pp_levels[0];
+    pp_levels[1].map = pp_map2; pp_levels[1].part = 1;
+    pp_levels[1].pickup_count = 0;
+    pp_levels[1].portal_count = 1;
+    pp_levels[1].portals[0].x = 2; pp_levels[1].portals[0].y = 2; pp_levels[1].portals[0].to = 1;
+    pp_levels[1].portals[0].tx = 8; pp_levels[1].portals[0].ty = 1;
+    pp_levels[1].guard_count = 1;
+    pp_levels[1].guards[0].facing = DIR_LEFT; pp_levels[1].guards[0].wp_count = 1;
+    pp_levels[1].guards[0].wp[0].x = 12; pp_levels[1].guards[0].wp[0].y = 12;
+}
+
+static void test_pickups_portals(void)
+{
+    World w, before;
+    GameState *s;
+    SolveStep steps[64];
+    char text[256];
+    int n;
+
+    pp_reset();
+    world_load(pp_levels, 0, &w);
+    CHECK(w.part_count == 2, "a map reached only by a portal is part of the level");
+    s = world_state(&w);
+    undo_clear();
+    CHECK(s->items[ITEM_STONE] == 0 && game_pickup_at(s, 3, 1) == 0, "two stones lie at (3,1)");
+    before = w;
+    undo_push(&w);
+    world_step(&w, ACT_RIGHT);
+    world_step(&w, ACT_RIGHT);
+    CHECK(s->px == 3 && s->items[ITEM_STONE] == 2 && s->picked == 1, "walk onto them: picked up");
+    CHECK(game_pickup_at(s, 3, 1) == 0xFF, "and they're gone");
+    world_step(&w, ACT_LEFT);
+    world_step(&w, ACT_RIGHT);
+    CHECK(s->items[ITEM_STONE] == 2, "only once");
+    w = before; world_activate(&w);
+    s = world_state(&w);
+    CHECK(s->items[ITEM_STONE] == 0 && game_pickup_at(s, 3, 1) == 0, "undo puts them back");
+
+    /* a portal in the same map: one turn, and you come out at the other end */
+    s->px = 5; s->py = 1;
+    s->turn = 0;
+    CHECK(world_step(&w, ACT_RIGHT) == 1 && s->px == 15 && s->py == 10 && s->turn == 1,
+          "step onto (6,1): out at (15,10)");
+    CHECK(world_step(&w, ACT_LEFT) == 1 && s->px == 14, "arriving doesn't send you back");
+    CHECK(world_step(&w, ACT_RIGHT) == 1 && s->px == 6 && s->py == 1, "and it works both ways");
+
+    /* no dragging a body through */
+    s->px = 5; s->py = 1;
+    s->guard_count = 1;
+    s->guards[0].mode = GUARD_BODY; s->guards[0].x = 4; s->guards[0].y = 1;
+    CHECK(!game_can_drag(s, DIR_RIGHT), "a body can't follow you into a portal");
+    s->guard_count = 0;
+
+    /* into another map */
+    s->px = 7; s->py = 1;
+    CHECK(world_step(&w, ACT_RIGHT) == 1 && w.cur == 1, "step onto (8,1): into map 2");
+    s = world_state(&w);
+    CHECK(s->px == 2 && s->py == 2 && s->items[ITEM_STONE] == 0, "at (2,2), with your things");
+    CHECK(world_step(&w, ACT_UP) == 1 && world_step(&w, ACT_DOWN) == 1 && w.cur == 0,
+          "and back through it");
+
+    /* the solver uses portals, and knows they can be shortcuts */
+    pp_reset();
+    n = solver_run(pp_levels, 0, SOLVE_USE_ALL, steps, 64, NULL);
+    solver_format(steps, n, text, sizeof text);
+    /* 9 steps to the portal at (8,1), as walking right goes through the one
+     * at (6,1) (it's a detour either way), then from (2,2) to the exit at
+     * (18,14): 16 + 12 */
+    CHECK(n == 9 + 28, "solved through the portal in %d: %s", n, text);
+}
+
 /* A patrol leg with something in the way (the editor refuses these, but
  * the rules shouldn't leave the guard stuck): it walks round. */
 static void test_patrol_detour(void)
@@ -1420,6 +1522,7 @@ int main(void)
     test_transitions();
     test_npcs();
     test_walking_talker();
+    test_pickups_portals();
     test_level_data();
     if (failures == 0) {
         test_world();

@@ -101,6 +101,25 @@ rules into `build/libgame.so`, starts a local server, and opens
   flag is set, e.g. floor that becomes the exit. It is drawn with a dashed
   outline and a faint picture of what it becomes. Per switch cell: the
   flag, what it turns into, and the tileset tile it then shows.
+- **Pickup** (`9`): click a cell to put an item there (up to 8 per map);
+  set which item and how many in the Pickups panel. Walking onto it puts
+  it in the player's inventory. Click one to select it, drag to move it.
+- **Portal** (`O`): click one end, then the other: on the same map, or
+  click another map's tab in between, for stairs between floors. Stepping
+  onto either end puts the player on the other. Each end is drawn as a
+  numbered ring (`1→M2`: portal 1, leading to map 2); the Portals panel
+  lists them, and ✕ deletes one. Drag an end to move it. A map reached
+  only by a portal needs no linked edge.
+- **Select** (`Q`): drag a box over cells. Drag inside it to move what's
+  there (terrain, art, zones, and the characters' route points, pickups,
+  switch cells and portal ends on those cells); the cells left behind
+  become wall. Arrow keys nudge the selection a cell, Shift+arrows a whole
+  screen. Delete clears it to wall; Ctrl+C / Ctrl+V copy and paste the
+  terrain, art and zones (pasted at the selection); Ctrl+A selects the
+  whole map; Esc lets go. Anything pushed off the map is dropped, and the
+  hint line says so; Ctrl+Z undoes any of it. (To make a map smaller,
+  move its contents with Select, then pick fewer **Screens**: resizing
+  keeps the top-left.)
 - **Zones** (the panel on the right, shared by every map of the level):
   name each area of the level and set, per outfit, whether wearing it
   there is **L**egal, **T**respassing or **H**ostile. **+ Zone** adds one
@@ -393,6 +412,18 @@ hostile to the suit and the room on the left only trespassing. The rules are `AC
 of disguises `DISGUISE_TYPES` in the generated `src/levels.h`; cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and
 `HOSTILE_HALF`.
 
+### Pickups and portals
+
+A **pickup** is an item (a stone or a bottle, any number) lying on a
+cell: walk onto it and it's yours. Undo puts it back.
+
+A **portal** joins two cells of a level, on the same map or on two maps
+(stairs from a ground floor to an upper floor). Stepping onto one end
+puts you on the other in the same turn, like walking off a linked edge:
+on another map, its characters get a look at you but don't move that
+turn. Arriving on a portal doesn't send you back; step off and on again
+to go back. You can't drag a body through one.
+
 ### Characters, talking, scripts and switch cells
 
 Everyone in a map is a character: guards, the dog, anyone. They all work
@@ -415,7 +446,7 @@ Each character has a **look**: six 8×8 sprites (facing up, right, down,
 left, being taken down, a body) in `tilesets/characters.png`, one row
 per look, named in `tilesets/characters.json`. Paint them in the editor.
 The player's look depends on the disguise worn (see Disguises in the
-editor). The Game Boy has room for 42 looks, the player's included.
+editor). The Game Boy has room for 41 looks, the player's included.
 
 Scripts set and clear the level's flags, and switch cells follow them at
 once. Undo takes flags back like everything else. In Playtest, the line
@@ -468,10 +499,10 @@ and 8 KB of RAM (`src/far.h` has the layout):
 
 | Bank | Holds | Free |
 |---|---|---|
-| 0 | the rules, GBDK | 2.6 KB |
-| 1 | `main.c`, built-in tiles, the level table, scripts and text, looks | 6.0 KB |
-| 2 | map cells and zone maps | 11.8 KB |
-| 3 | painted art | 13.7 KB |
+| 0 | the rules, GBDK | 1.7 KB |
+| 1 | `main.c`, built-in tiles, the level table, scripts and text, looks | 4.0 KB |
+| 2 | map cells and zone maps | 9.4 KB |
+| 3 | painted art | 12.9 KB |
 
 About 5.4 KB of the 8 KB of work RAM is free; the current map and the
 pathfinding arrays live in cartridge RAM. Emulators will write a `.sav`

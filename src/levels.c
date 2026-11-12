@@ -57,6 +57,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules0,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 2: NEW LEVEL */
     {
@@ -81,6 +85,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         level_zones1,   /* zones */
         zone_rules1,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 3: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
     {
@@ -103,6 +111,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules2,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 4: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
     {
@@ -126,6 +138,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules3,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 5: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
     {
@@ -147,6 +163,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules4,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 6: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
     {
@@ -169,6 +189,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules5,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 7: DRESS CODE - The hall is hostile to your suit (huge cones) but legal in a guard's uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
     {
@@ -192,6 +216,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         level_zones6,   /* zones */
         zone_rules6,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 8: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
     {
@@ -215,6 +243,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules7,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 9: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
     {
@@ -237,6 +269,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules8,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 10: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
     {
@@ -258,6 +294,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules9,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
     /* 10: ANNEX, map 2 */
     {
@@ -280,6 +320,10 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         0,   /* zones */
         zone_rules9,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        0,
+        { { 0, 0, 0, 0, 0 } },   /* portals */
     },
 };
 

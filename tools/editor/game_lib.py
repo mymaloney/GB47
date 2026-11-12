@@ -67,6 +67,17 @@ class GuardDef(C.Structure):
                 ("verb", C.c_char_p), ("script", C.POINTER(C.c_uint8))]
 
 
+MAX_PICKUPS, MAX_PORTALS = lib.editor_info(25), lib.editor_info(26)
+
+
+class PickupDef(C.Structure):
+    _fields_ = [(n, C.c_uint8) for n in "x y item count".split()]
+
+
+class PortalDef(C.Structure):
+    _fields_ = [(n, C.c_uint8) for n in "x y to tx ty".split()]
+
+
 class SwitchDef(C.Structure):
     _fields_ = [(n, C.c_uint8) for n in "x y flag off on on_art".split()]
 
@@ -79,7 +90,9 @@ class LevelDef(C.Structure):
                 ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4),
                 ("transition", C.c_uint8),
                 ("switch_count", C.c_uint8), ("switches", SwitchDef * MAX_SWITCHES),
-                ("zones", C.POINTER(C.c_uint8)), ("zone_rules", C.POINTER(C.c_uint8))]
+                ("zones", C.POINTER(C.c_uint8)), ("zone_rules", C.POINTER(C.c_uint8)),
+                ("pickup_count", C.c_uint8), ("pickups", PickupDef * MAX_PICKUPS),
+                ("portal_count", C.c_uint8), ("portals", PortalDef * MAX_PORTALS)]
 
 
 class Guard(C.Structure):
@@ -92,7 +105,7 @@ class GameState(C.Structure):
                 ("guard_count", C.c_uint8), ("turn", C.c_uint16),
                 ("items", C.c_uint8 * ITEM_TYPES),
                 ("takedown_left", C.c_uint8), ("takedown_guard", C.c_uint8),
-                ("disguise", C.c_uint8), ("flags", C.c_uint8),
+                ("disguise", C.c_uint8), ("flags", C.c_uint8), ("picked", C.c_uint8),
                 ("guards", Guard * MAX_GUARDS)]
 
 
@@ -110,7 +123,7 @@ class SolveStep(C.Structure):
 
 
 for idx, struct in [(0, GameState), (1, LevelDef), (2, GuardDef), (3, Guard), (16, World),
-                    (19, SwitchDef)]:
+                    (19, SwitchDef), (23, PickupDef), (24, PortalDef)]:
     if lib.editor_info(idx) != C.sizeof(struct):
         raise RuntimeError(
             f"{struct.__name__} layout in tools/editor/game_lib.py no longer "
@@ -261,6 +274,17 @@ class Level:
                 d.zones = C.cast(buf, C.POINTER(C.c_uint8))
             if data.get("zones"):                       # the level's rules, shared
                 d.zone_rules = C.cast(self.zone_rules, C.POINTER(C.c_uint8))
+            pk = m.get("pickups", [])[:MAX_PICKUPS]
+            d.pickup_count = len(pk)
+            for i, p in enumerate(pk):
+                d.pickups[i].x, d.pickups[i].y = p["x"], p["y"]
+                d.pickups[i].item = gen_levels.ITEMS.index(p["item"])
+                d.pickups[i].count = p.get("count", 1)
+            ends = [(e, o) for _, _, e, o in gen_levels.portal_ends(data) if e["map"] == k]
+            d.portal_count = min(len(ends), MAX_PORTALS)
+            for i, (e, o) in enumerate(ends[:MAX_PORTALS]):
+                pd = d.portals[i]
+                pd.x, pd.y, pd.to, pd.tx, pd.ty = e["x"], e["y"], o["map"] + 1, o["x"], o["y"]
             d.part = k
             d.transition = TRANSITIONS.index(data["transition"])
             for di, dname in enumerate(DIRS):
@@ -389,7 +413,10 @@ def view(level, world, aim_item=None):
     return {
         "map": world.cur, "w": w, "h": h,
         "tiles": tiles,
-        "sprites": sprites + noise,
+        "sprites": sprites + noise + [
+            {"t": T["SPR_ITEM"] + cdef.pickups[i].item, "x": cdef.pickups[i].x, "y": cdef.pickups[i].y}
+            for i in range(cdef.pickup_count) if not state.picked & (1 << i)],
+        "picked": state.picked,
         "aim": aim if aim_item is not None else None,
         "status": state.status,
         "turn": state.turn,

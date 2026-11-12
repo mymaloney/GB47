@@ -61,6 +61,10 @@ JSON format, one object per level:
                                            zones each cell is in, a hex
                                            digit per cell (rows like the
                                            map). Default: all zone 0
+        "pickups": [{                      optional: items lying around;
+          "x": 3, "y": 4,                  walking onto one picks it up
+          "item": "stone", "count": 1      (at most 8 per map)
+        }],
         "switches": [{                     optional: cells that change when
           "x": 16, "y": 13,                a flag is set
           "flag": "dog",
@@ -81,6 +85,11 @@ JSON format, one object per level:
                                            suit, L for the rest. At most 16
                                            zones. Default: one zone,
                                            "everywhere", all defaults
+      "portals": [{                        optional: linked pairs of cells
+        "a": {"map": 0, "x": 5, "y": 2},   (stairs, a lift...): stepping
+        "b": {"map": 1, "x": 3, "y": 9}    onto one end puts you on the
+      }],                                  other, maybe in another map. At
+                                           most 8 ends per map
       "links": [{                          joins two maps' edges (both ways)
         "from": 0, "edge": "right",        map index and which of its edges
         "to": 1,                           the map beyond that edge
@@ -135,6 +144,7 @@ TRANSITIONS = ["cut", "fade", "wipe", "curtain", "iris", "dissolve", "diagonal",
                "blinds", "interlace"]
 DEFAULT_TRANSITION = "fade"
 MAX_SWITCHES, MAX_FLAGS = 8, 8
+MAX_PICKUPS, MAX_PORTALS = 8, 8       # per map, as in src/game.h
 VERB_MAX = 8
 TEXT_COLS, TEXT_ROWS = 18, 3          # the message box (src/main.c)
 # Access: per outfit, what a zone is for someone wearing it (ACCESS_* in
@@ -438,6 +448,69 @@ def zone_rule_bytes(lv):
             b[d >> 2] |= ACCESS.index(zone_rule(z, u)) << (2 * (d & 3))
         out += b
     return out
+
+
+def portal_ends(lv):
+    """[(portal index, "a"/"b", end, other end)] for the level's portals."""
+    out = []
+    for i, pt in enumerate(lv.get("portals", [])):
+        if isinstance(pt, dict) and isinstance(pt.get("a"), dict) and isinstance(pt.get("b"), dict):
+            out += [(i, "a", pt["a"], pt["b"]), (i, "b", pt["b"], pt["a"])]
+    return out
+
+
+def validate_pickups_portals(lv):
+    """Problems with the level's pickups (per map) and portals."""
+    errs, maps = [], lv["maps"]
+    multi = len(maps) > 1
+    used = {}                           # (map, x, y) -> what is there
+
+    def place(k, x, y, what):
+        """Check a thing's cell in map k: on the map, somewhere you can
+        stand, not shared. Returns a problem or None."""
+        if not (isinstance(k, int) and 0 <= k < len(maps)):
+            return f"{what} is in a map that doesn't exist."
+        rows = maps[k]["map"]
+        if not (isinstance(x, int) and isinstance(y, int) and 0 <= y < len(rows) and 0 <= x < len(rows[0])):
+            return f"{what} is off the map."
+        name, blocks_player = TILES[rows[y][x]][:2]
+        if blocks_player:
+            return f"{what} at ({x},{y}) is on a {name}, where you can't stand."
+        if any(sw.get("x") == x and sw.get("y") == y for sw in maps[k].get("switches", [])):
+            return f"{what} at ({x},{y}) is on a switch cell."
+        if (k, x, y) in used:
+            return f"{what} at ({x},{y}) shares its cell with {used[(k, x, y)]}."
+        used[(k, x, y)] = what[0].lower() + what[1:]
+        return None
+
+    for k, m in enumerate(maps):
+        prefix = f"Map {k + 1}: " if multi else ""
+        pk = m.get("pickups", [])
+        if len(pk) > MAX_PICKUPS:
+            errs.append(prefix + f"At most {MAX_PICKUPS} pickups in a map (has {len(pk)}).")
+        for i, p in enumerate(pk):
+            what = f"Pickup {i + 1}"
+            if p.get("item") not in ITEMS:
+                errs.append(prefix + f"{what} must be one of: {', '.join(ITEMS)}.")
+            c = p.get("count", 1)
+            if not (isinstance(c, int) and 1 <= c <= 99):
+                errs.append(prefix + f"{what}: how many is 1-99.")
+            e = place(k, p.get("x"), p.get("y"), what)
+            if e:
+                errs.append(prefix + e)
+    ends = portal_ends(lv)
+    if len(ends) != 2 * len(lv.get("portals", [])):
+        errs.append("Every portal needs two ends, a and b, each with a map, x and y.")
+    for k in range(len(maps)):
+        n = sum(1 for _, _, end, _ in ends if end.get("map") == k)
+        if n > MAX_PORTALS:
+            errs.append((f"Map {k + 1}: " if multi else "") +
+                        f"At most {MAX_PORTALS} portal ends in a map (has {n}).")
+    for i, side, end, _ in ends:
+        e = place(end.get("map"), end.get("x"), end.get("y"), f"Portal {i + 1}'s end {side}")
+        if e:
+            errs.append(e)
+    return errs
 
 
 def validate_zones(lv):
@@ -898,18 +971,26 @@ def validate_links(lv):
                             f"{b + 1} leads into "
                             f"{'nothing' if other is None else 'a ' + TILES[other][0]} "
                             f"in map {a + 1}.")
-    # every map reachable from the first
+    # every map reachable from the first, through links or portals
     table = link_table({"links": good})
+    steps = [(src, dst) for (src, _), (dst, _) in table.items()]
+    for pt in lv.get("portals", []):
+        try:
+            a, b = pt["a"]["map"], pt["b"]["map"]
+        except (KeyError, TypeError):
+            continue
+        steps += [(a, b), (b, a)]
     reach, todo = {0}, [0]
     while todo:
         m = todo.pop()
-        for (src, _), (dst, _) in table.items():
+        for src, dst in steps:
             if src == m and dst not in reach:
                 reach.add(dst)
                 todo.append(dst)
     for m in range(len(maps)):
         if m not in reach:
-            errs.append(f"Map {m + 1} isn't linked to the rest of the level.")
+            errs.append(f"Map {m + 1} isn't linked to the rest of the level "
+                        "(by an edge or a portal).")
     return errs
 
 
@@ -949,6 +1030,7 @@ def validate_level(lv):
     if map_errs:
         return errs
     errs += validate_zones(lv)
+    errs += validate_pickups_portals(lv)
 
     # scripts and switch cells (the maps themselves are sound by now)
     set_flags = {st["set"] for sc in level_scripts(lv) for st in script_steps(sc)
@@ -1120,6 +1202,16 @@ def generate_c(levels):
             out.append(f"        {'0' if zones_default(m) else f'level_zones{base + k}'},"
                        "   /* zones */")
             out.append(f"        {f'zone_rules{n}' if n in rule_tables else '0'},")
+            pk = m.get("pickups", [])
+            out.append(f"        {len(pk)},")
+            out.append("        { " + (", ".join(
+                f"{{ {p['x']}, {p['y']}, ITEM_{p['item'].upper()}, {p.get('count', 1)} }}"
+                for p in pk) or "{ 0, 0, 0, 0 }") + " },   /* pickups */")
+            here = [(end, other) for _, _, end, other in portal_ends(lv) if end["map"] == k]
+            out.append(f"        {len(here)},")
+            out.append("        { " + (", ".join(
+                f"{{ {end['x']}, {end['y']}, {base + other['map'] + 1}, {other['x']}, {other['y']} }}"
+                for end, other in here) or "{ 0, 0, 0, 0, 0 }") + " },   /* portals */")
             out.append("    },")
         base += len(lv["maps"])
     out.append("};")
@@ -1290,7 +1382,7 @@ def dumps(levels):
                 ml.append('        "zone_map": [')
                 ml.append(",\n".join(f"          {json.dumps(r)}" for r in m["zone_map"]))
                 ml.append("        ]")
-            for key in ("switches",):              # only where there are any
+            for key in ("pickups", "switches"):    # only where there are any
                 if m.get(key):
                     ml[-1] += ","
                     ml.append(f'        "{key}": [\n' +
@@ -1304,6 +1396,10 @@ def dumps(levels):
                                       "offset": ln.get("offset", 0)})
               for ln in lv.get("links", [])]
         lines.append('    "links": [' + ("\n" + ",\n".join(ll) + "\n    ]" if ll else "]"))
+        if lv.get("portals"):
+            lines[-1] += ","
+            lines.append('    "portals": [\n' + ",\n".join(
+                "      " + json.dumps({"a": pt["a"], "b": pt["b"]}) for pt in lv["portals"]) + "\n    ]")
         lines.append("  }")
         parts.append("\n".join(lines))
     return "[\n" + ",\n".join(parts) + "\n]\n"

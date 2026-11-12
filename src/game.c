@@ -791,6 +791,50 @@ static uint8_t tile_free(const GameState *s, uint8_t x, uint8_t y)
     return !game_blocks(x, y, BLOCK_PLAYER) && !guard_at(s, x, y, 0xFF);
 }
 
+/* ---- Pickups and portals ---- */
+
+uint8_t game_portal_at(uint8_t x, uint8_t y)
+{
+    const PortalDef *p = level->portals;
+    uint8_t i, n = level->portal_count;
+    for (i = 0; i < n; i++, p++)
+        if (p->x == x && p->y == y) return i;
+    return 0xFF;
+}
+
+uint8_t game_pickup_at(const GameState *s, uint8_t x, uint8_t y)
+{
+    const PickupDef *p = level->pickups;
+    uint8_t i, n = level->pickup_count, left = (uint8_t)~s->picked;
+    for (i = 0; i < n; i++, p++, left >>= 1)
+        if ((left & 1) && p->x == x && p->y == y) return i;
+    return 0xFF;
+}
+
+/* Pick up whatever still lies where the player now stands. */
+static void take_pickup(GameState *s)
+{
+    uint8_t i = game_pickup_at(s, s->px, s->py), n, *have;
+    const PickupDef *p;
+    if (i == 0xFF) return;
+    p = &level->pickups[i];
+    s->picked |= (uint8_t)(1 << i);
+    have = &s->items[p->item];
+    n = *have + p->count;               /* both at most 99: fits */
+    *have = n > 99 ? 99 : n;
+}
+
+uint8_t game_teleport(GameState *s, uint8_t x, uint8_t y)
+{
+    said_n = 0;
+    game_set_flags(s->flags);
+    s->px = x;
+    s->py = y;
+    take_pickup(s);
+    finish_turn(s, 0, 0, 0, 0);
+    return 1;
+}
+
 /* Work out a drag/push in direction dir. Returns the body index (0xFF if
  * illegal) and sets *bx,*by to where the body ends up. */
 static uint8_t plan_drag(const GameState *s, uint8_t dir, uint8_t *bx, uint8_t *by)
@@ -803,8 +847,8 @@ static uint8_t plan_drag(const GameState *s, uint8_t dir, uint8_t *bx, uint8_t *
 
     /* either way the player steps to (nx,ny): it must be enterable (a body
      * can lie where the player can't go, e.g. a guard taken down on a
-     * security door) */
-    if (!tile_free(s, nx, ny)) return 0xFF;
+     * security door), and not a portal (a body can't follow) */
+    if (!tile_free(s, nx, ny) || game_portal_at(nx, ny) != 0xFF) return 0xFF;
 
     /* push: body straight ahead moves one further */
     b = body_at(s, nx, ny);
@@ -854,6 +898,7 @@ uint8_t game_step(GameState *s, uint8_t action)
         if (!tile_free(s, nx, ny)) return 0;   /* walls and standing guards */
         s->px = nx;
         s->py = ny;
+        take_pickup(s);
     } else if (action >= ACT_DRAG && action < ACT_DRAG + 4) {
         uint8_t dir = action - ACT_DRAG;
         b = plan_drag(s, dir, &bx, &by);
@@ -862,6 +907,7 @@ uint8_t game_step(GameState *s, uint8_t action)
         s->py += dir_dy[dir];
         s->guards[b].x = bx;
         s->guards[b].y = by;
+        take_pickup(s);
         suspicious = 1;
     } else if (action == ACT_UNIFORM) {
         b = game_uniform_here(s);
@@ -929,6 +975,7 @@ uint8_t game_arrive(GameState *s, uint8_t x, uint8_t y)
     s->py     = y;
     s->status = STATUS_PLAYING;
     s->turn++;
+    take_pickup(s);
     if (game_cell(x, y) == CELL_EXIT) s->status = STATUS_WON;
     else check_detection(s, 0);
     return 1;

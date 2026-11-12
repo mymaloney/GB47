@@ -34,6 +34,10 @@ int editor_info(int what)
     case 19: return sizeof(SwitchDef);
     case 21: return MAX_SWITCHES;
     case 22: return MAX_SAID;
+    case 23: return sizeof(PickupDef);
+    case 24: return sizeof(PortalDef);
+    case 25: return MAX_PICKUPS;
+    case 26: return MAX_PORTALS;
     default: return -1;
     }
 }

@@ -49,6 +49,9 @@
         <button data-tool="guard" title="Add a character (a guard, a dog, anyone), or click one to select it (5)"><b>5</b> Character</button>
         <button data-tool="route" title="Add waypoints to the selected character; drag to move, right-click to remove (6)"><b>6</b> Route</button>
         <button data-tool="switch" title="Add a cell that changes when a flag is set (e.g. stairs that appear), or click one to select it (7)"><b>7</b> Switch cell</button>
+        <button data-tool="pickup" title="Put an item down for the player to pick up, or click one to select it; drag to move (9)"><b>9</b> Pickup</button>
+        <button data-tool="portal" title="Link two cells (stairs, a lift...): click one end, then the other, on any map of the level (O)"><b>O</b> Portal</button>
+        <button data-tool="select" title="Drag a box to select; drag it to move, arrows nudge (Shift: a screen), Delete clears, Ctrl+C/V copy and paste, Ctrl+A all (Q)"><b>Q</b> Select</button>
       </div>
       <div class="toolbar palette" id="palette"><span class="toolbar-label">Paint</span></div>
       <div class="toolbar access-bar" id="zone-bar">
@@ -194,6 +197,22 @@
         <button id="g-delete" class="danger">Delete character</button>
       </div>
     </div>
+
+    <h2>Pickups <span id="pk-count" class="muted">(this map)</span></h2>
+    <div id="pk-list" class="guard-list"></div>
+    <div id="pk-props" class="guard-props" hidden>
+      <div class="two">
+        <label>Item <select id="pk-item"></select></label>
+        <label>How many <input id="pk-count-in" type="number" min="1" max="99"></label>
+      </div>
+      <div class="row-buttons"><button id="pk-delete" class="danger">Delete pickup</button></div>
+    </div>
+
+    <h2>Portals <span id="pt-count" class="muted">(the whole level)</span></h2>
+    <div id="pt-list" class="zone-list"></div>
+    <p class="hint">Stepping onto one end puts you on the other, maybe on another
+      map. Use the Portal tool (O): click one end, then the other (switch map
+      tabs in between for stairs to another floor).</p>
 
     <h2>Switch cells <span id="sw-count" class="muted">(this map)</span></h2>
     <div id="sw-list" class="guard-list"></div>

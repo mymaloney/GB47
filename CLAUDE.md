@@ -79,11 +79,11 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
 - Build warnings show up only in the GBDK build, not in gcc. Keep it
   warning-free.
 - **ROM banks** (MBC5, 64 KB; details in `src/far.h`):
-  - Bank 0 (2.6 KB free): files with no `#pragma bank`: `game.c`,
+  - Bank 0 (1.7 KB free): files with no `#pragma bank`: `game.c`,
     `world.c`, `art.c`, `trans.c`, `far.c`, plus GBDK. It can't overflow
     into bank 1 any more, so this is the tight one: **new rules code goes
     here, and there isn't much room.**
-  - Bank 1 (6.0 KB free): `main.c`, `tiles.c`, `levels.c` (the level
+  - Bank 1 (4.0 KB free): `main.c`, `tiles.c`, `levels.c` (the level
     table, scripts, text). Always mapped, like bank 0.
   - Banks 2 and 3 (12-14 KB free): map cells and painted art. Only
     `far_read()` and `art_row()` map them in, and only code in bank 0 may
@@ -114,9 +114,21 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   - The first `BKG_TILE_COUNT` (61) are built in (`src/tiles.c`, generated
     by `tools/gen_tiles.py`).
   - Painted art uses the rest (195 slots per map).
-- VRAM sprite tiles: the built-in ones (`SPRITE_TILE_COUNT`, 4: stripped
-  body, cursor, noise), then 6 per look, so 42 looks at most, the
-  player's included (`validate_all` checks).
+- VRAM sprite tiles: the built-in ones (`SPRITE_TILE_COUNT`, 6: stripped
+  body, cursor, noise, the two pickup items), then 6 per look, so 41
+  looks at most, the player's included (`validate_all` checks).
+- **Pickups and portals**: `LevelDef.pickups` (per map, `"pickups"` in the
+  JSON) and `LevelDef.portals` (one entry per end in each map; the JSON
+  has `"portals"` per level as `a`/`b` pairs, expanded by
+  `portal_ends()`). `GameState.picked` is a bit per pickup. Plain moves
+  onto a portal are handled in `world_step` (`use_portal`: same map ->
+  `game_teleport`, another map -> `enter`, like an edge crossing);
+  `world_load` follows portals to find a level's maps. The solver's
+  heuristic counts portals (`compute_portals` in `solver.c`): any new way
+  of moving must keep it a lower bound.
+- **Crimes** (suspicious acts, takedowns in progress) are caught with the
+  big cone by every watching guard (`player_spotted`, `body_spotted`);
+  bodies with the normal cone.
 - **Disguises** are data: `"disguises"` in `tilesets/characters.json`
   (name + look; the first is always "suit", your own clothes; at most
   `DISGUISE_MAX` 8). `gen_levels.UNIFORMS` is read from it (and reloaded

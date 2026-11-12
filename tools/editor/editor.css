@@ -253,3 +253,7 @@ dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); paddi
 .disguise-row input, .disguise-row select { background: var(--panel); }
 .disguise-row select { grid-column: 2; }
 .disguise-row button { padding: 3px 8px; }
+
+/* portals list */
+.portal-row { grid-template-columns: auto 1fr auto; font-size: 13px; }
+.portal-row .swatch { color: #fff; }

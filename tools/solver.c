@@ -37,6 +37,10 @@ static int     exit_count;
  * when leaving map p through dir, to an exit in that next map (0 if it
  * has none: the exit may be further on). */
 static int     beyond[MAX_PARTS][4];
+/* after[p][i]: fewest steps from the far end of portal end i of map p to
+ * an exit (a lower bound: see compute_portals). */
+static int     after[MAX_PARTS][MAX_PORTALS];
+static const LevelDef *tbl_;
 
 #define HEAD(i)  ((Head *)(pool + (size_t)(i) * stride))
 #define WORLD(i) ((World *)(pool + (size_t)(i) * stride + sizeof(Head)))
@@ -62,8 +66,54 @@ static int find(const World *w, uint32_t *slot)
     return -1;
 }
 
+/* Which map of the world is level table entry t (-1 if none). */
+static int part_of(const World *w, int t)
+{
+    int q;
+    for (q = 0; q < w->part_count; q++)
+        if (w->part_def[q] == t) return q;
+    return -1;
+}
+
+/* Lower bound on the walk from (x, y) in map p to an exit, ignoring walls:
+ * straight to an exit there, or into one of its portals and on from the
+ * far end. A map with linked edges might lead anywhere: 0. */
+static int bound_from(const World *w, int p, int x, int y)
+{
+    const LevelDef *def = &tbl_[w->part_def[p]];
+    int i, d, best = 0x7FFF;
+    if (def->link[0] || def->link[1] || def->link[2] || def->link[3]) return 0;
+    for (i = 0; i < exit_count; i++) {
+        if (exit_part[i] != p) continue;
+        d = game_distance((uint8_t)x, (uint8_t)y, exit_x[i], exit_y[i]);
+        if (d < best) best = d;
+    }
+    for (i = 0; i < def->portal_count; i++) {
+        d = game_distance((uint8_t)x, (uint8_t)y, def->portals[i].x, def->portals[i].y) + after[p][i];
+        if (d < best) best = d;
+    }
+    return best == 0x7FFF ? 0 : best;
+}
+
+/* Fill after[][]: start from 0 (a safe bound) and tighten a few rounds;
+ * every round is still a lower bound, so stopping early is fine. */
+static void compute_portals(const World *w)
+{
+    int round, p, i, q;
+    memset(after, 0, sizeof after);
+    for (round = 0; round < 2 * MAX_PORTALS; round++)
+        for (p = 0; p < w->part_count; p++) {
+            const LevelDef *def = &tbl_[w->part_def[p]];
+            for (i = 0; i < def->portal_count; i++) {
+                q = part_of(w, def->portals[i].to - 1);
+                after[p][i] = q < 0 ? 0 : bound_from(w, q, def->portals[i].tx, def->portals[i].ty);
+            }
+        }
+}
+
 /* Lower bound on turns left, ignoring walls: walk to the nearest exit in
- * this map, or to a linked edge, cross, and walk on to an exit there. */
+ * this map, or into a portal and on from its far end, or to a linked
+ * edge, cross, and walk on to an exit there. */
 static int heuristic(const World *w)
 {
     const GameState *s   = &w->part[w->cur];
@@ -73,6 +123,10 @@ static int heuristic(const World *w)
     for (i = 0; i < exit_count; i++) {
         if (exit_part[i] != w->cur) continue;
         d = game_distance(s->px, s->py, exit_x[i], exit_y[i]);
+        if (d < best) best = d;
+    }
+    for (i = 0; i < def->portal_count; i++) {
+        d = game_distance(s->px, s->py, def->portals[i].x, def->portals[i].y) + after[w->cur][i];
         if (d < best) best = d;
     }
     if (def->link[DIR_UP]    && s->py + 1 + on[DIR_UP] < best)     best = s->py + 1 + on[DIR_UP];
@@ -108,6 +162,12 @@ static void compute_beyond(const LevelDef *tbl, const World *w)
                     any = 1;
                     if (game_distance((uint8_t)x, (uint8_t)y, exit_x[i], exit_y[i]) < best)
                         best = game_distance((uint8_t)x, (uint8_t)y, exit_x[i], exit_y[i]);
+                }
+                for (i = 0; i < nd->portal_count; i++) {   /* or through its portals */
+                    int dp = game_distance((uint8_t)x, (uint8_t)y, nd->portals[i].x,
+                                           nd->portals[i].y) + after[q][i];
+                    any = 1;
+                    if (dp < best) best = dp;
                 }
             }
             beyond[p][d] = any ? best : 0;
@@ -182,6 +242,8 @@ int solver_run(const LevelDef *tbl, uint8_t first, int use, SolveStep *steps,
         if (states) *states = 0;
         return 0;
     }
+    tbl_ = tbl;
+    compute_portals(&start);
     compute_beyond(tbl, &start);
     world_activate(&start);
 

@@ -542,6 +542,70 @@ with tempfile.TemporaryDirectory() as tmp:
         gen_levels.forget_tilesets()
 assert g.UNIFORMS == shipped
 
+# pickups and portals: a copy of level 1 with a second map reached only by
+# a portal (stairs), and two stones lying next to the start
+pp = json.loads(json.dumps(levels[0]))
+pp.pop("zones", None)
+m0 = pp["maps"][0]
+start = next((x, y) for y, r in enumerate(m0["map"]) for x, c in enumerate(r) if c == "P")
+floor = [(x, y) for y, r in enumerate(m0["map"]) for x, c in enumerate(r) if c == "."]
+near = min(floor, key=lambda c: abs(c[0] - start[0]) + abs(c[1] - start[1]))
+stairs = floor[-1]
+m1 = json.loads(json.dumps(m0))
+m1["map"] = [r.replace("P", ".").replace("E", ".") for r in m1["map"]]
+m1.pop("art", None)
+m1["guards"] = []
+m0["pickups"] = [{"x": near[0], "y": near[1], "item": "stone", "count": 2}]
+pp["maps"].append(m1)
+pp["portals"] = [{"a": {"map": 0, "x": stairs[0], "y": stairs[1]},
+                  "b": {"map": 1, "x": stairs[0], "y": stairs[1]}}]
+assert gen_levels.validate_level(pp) == [], gen_levels.validate_level(pp)
+text = gen_levels.dumps([pp])
+back = json.loads(text)[0]
+assert back["portals"] == pp["portals"] and back["maps"][0]["pickups"] == m0["pickups"]
+cpp = gen_levels.generate_c([pp])
+assert f"{{ {near[0]}, {near[1]}, ITEM_STONE, 2 }} }},   /* pickups */" in cpp
+assert f"{{ {stairs[0]}, {stairs[1]}, 2, {stairs[0]}, {stairs[1]} }} }},   /* portals */" in cpp
+# played through the real rules: walk onto the stones, then up the stairs
+lp = g.Level(pp)
+wp = g.new_game(lp)
+sp = wp.part[0]
+sp.px, sp.py = near
+vp = g.view(lp, wp)
+assert any(t["t"] == g.T["SPR_ITEM_STONE"] for t in vp["sprites"]), "the stones are drawn"
+sp.px, sp.py = start
+sp.px, sp.py = near[0] + (1 if m0["map"][near[1]][near[0] + 1] == "." else -1), near[1]
+d = g.DIRS.index("left" if sp.px > near[0] else "right")
+assert g.step(lp, wp, d) and wp.part[0].items[0] == 2 and wp.part[0].picked == 1, "picked up"
+assert not any(t["t"] == g.T["SPR_ITEM_STONE"] for t in g.view(lp, wp)["sprites"]), "and gone"
+# next to the stairs, step on: map 2
+sx, sy = stairs
+for dd, (dx, dy) in enumerate([(0, -1), (1, 0), (0, 1), (-1, 0)]):
+    if m0["map"][sy - dy][sx - dx] == ".":
+        wp.part[0].px, wp.part[0].py = sx - dx, sy - dy
+        break
+assert g.step(lp, wp, dd) and wp.cur == 1 and (wp.part[1].px, wp.part[1].py) == stairs, "upstairs"
+assert wp.part[1].items[0] == 2, "with the stones"
+# mistakes, in plain words
+
+
+def pped(change):
+    lv = json.loads(json.dumps(pp))
+    change(lv)
+    return gen_levels.validate_level(lv)
+
+
+assert any("where you can't stand" in e for e in pped(lambda lv: lv["portals"][0]["a"].update(x=0, y=0)))
+assert any("isn't linked to the rest" in e for e in pped(lambda lv: lv.pop("portals")))
+assert any("map that doesn't exist" in e for e in pped(lambda lv: lv["portals"][0]["b"].update(map=5)))
+assert any("two ends" in e for e in pped(lambda lv: lv["portals"][0].pop("b")))
+assert any("shares its cell" in e for e in pped(
+    lambda lv: lv["maps"][0]["pickups"][0].update(x=stairs[0], y=stairs[1])))
+assert any("must be one of" in e for e in pped(lambda lv: lv["maps"][0]["pickups"][0].update(item="key")))
+assert any("1-99" in e for e in pped(lambda lv: lv["maps"][0]["pickups"][0].update(count=0)))
+assert any("At most 8 pickups" in e for e in pped(lambda lv: lv["maps"][0]["pickups"].extend(
+    [{"x": x, "y": y, "item": "stone", "count": 1} for x, y in floor[1:10]])))
+
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])
 assert any("player start" in e for e in gen_levels.validate_level(bad))

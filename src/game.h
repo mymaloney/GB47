@@ -187,6 +187,30 @@ typedef struct {
                                 clear, the cell's own art is used. */
 } SwitchDef;
 
+/* ---- Pickups and portals ----
+ *
+ * A pickup is an item lying on a cell: walking onto it puts it in your
+ * inventory (GameState.picked remembers which are gone, so undo brings
+ * them back). A portal is one end of a linked pair: stepping onto it puts
+ * you on the other end, in the same turn, maybe in another map of the
+ * level (world.c), like walking off a linked edge. Arriving on a portal
+ * doesn't send you back; you can't drag a body through one. */
+#define MAX_PICKUPS 8     /* per map (bits of GameState.picked) */
+#define MAX_PORTALS 8     /* portal ends per map */
+
+typedef struct {
+    uint8_t x, y;
+    uint8_t item;            /* ITEM_* */
+    uint8_t count;
+} PickupDef;
+
+typedef struct {
+    uint8_t x, y;            /* this end */
+    uint8_t to;              /* 1 + index in the level table of the map the
+                                other end is in (maybe this one) */
+    uint8_t tx, ty;          /* the other end */
+} PortalDef;
+
 /* ---- Static level data (lives in ROM) ---- */
 
 /* A character: a guard, or anyone else in the map (a dog, a cleaner...).
@@ -250,6 +274,10 @@ typedef struct {
      * ZONE_RULE_BYTES per zone, in the level table (always mapped). 0 = a
      * single zone with ACCESS_DEFAULT. */
     const uint8_t *zone_rules;
+    uint8_t     pickup_count;
+    PickupDef   pickups[MAX_PICKUPS];
+    uint8_t     portal_count;
+    PortalDef   portals[MAX_PORTALS];
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */
@@ -275,6 +303,7 @@ typedef struct {
     uint8_t  disguise;            /* the disguise the player is wearing */
     uint8_t  flags;               /* the level's script flags (carried
                                      between its maps like the items) */
+    uint8_t  picked;              /* bit i: this map's pickups[i] is taken */
     Guard    guards[MAX_GUARDS];
 } GameState;
 
@@ -326,6 +355,18 @@ uint8_t game_guard_at(const GameState *s, uint8_t x, uint8_t y);
  * where your outfit is legal, guards catch you doing them in their normal
  * cone. */
 uint8_t game_step(GameState *s, uint8_t action);
+
+/* Index in the current map's portals of the portal end on (x, y), or 0xFF. */
+uint8_t game_portal_at(uint8_t x, uint8_t y);
+
+/* Index in the current map's pickups of an item still lying on (x, y), or
+ * 0xFF. */
+uint8_t game_pickup_at(const GameState *s, uint8_t x, uint8_t y);
+
+/* Step into a portal whose other end, (x, y), is in this map: the player
+ * lands there, picks up what lies there, and the turn plays out. The
+ * caller (world_step) has checked the move is legal. Returns 1. */
+uint8_t game_teleport(GameState *s, uint8_t x, uint8_t y);
 
 /* Index of the character ACT_TALK would talk to, or 0xFF. */
 uint8_t game_talk_target(const GameState *s);

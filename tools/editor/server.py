@@ -78,7 +78,7 @@ def assets():
         "dirs": g.DIRS,
         **disguise_assets(),
         "transitions": g.TRANSITIONS,
-        "max_switches": g.MAX_SWITCHES,
+        "max_switches": g.MAX_SWITCHES, "max_pickups": g.MAX_PICKUPS, "max_portals": g.MAX_PORTALS,
         "max_flags": gen_levels.MAX_FLAGS, "verb_max": gen_levels.VERB_MAX,
         "access": gen_levels.ACCESS, "access_names": gen_levels.ACCESS_NAMES,
         "max_zones": gen_levels.MAX_ZONES, "zone_digits": gen_levels.ZONE_DIGITS,

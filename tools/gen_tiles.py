@@ -314,6 +314,27 @@ SPRITES = [
         "..#..#..",
         "........",
     ]),
+    # Pickups lying on the floor, in ITEM_* order (game.h)
+    ("SPR_ITEM_STONE", [
+        "........",
+        "........",
+        "........",
+        "...##...",
+        "..#::#..",
+        ".#::::#.",
+        ".#xxxx#.",
+        "..####..",
+    ]),
+    ("SPR_ITEM_BOTTLE", [
+        "...##...",
+        "...xx...",
+        "...##...",
+        "..#::#..",
+        "..#::#..",
+        "..#xx#..",
+        "..#xx#..",
+        "...##...",
+    ]),
 ]
 
 
@@ -366,7 +387,8 @@ def main():
           f"#define BKG_TILE_COUNT {len(bkg)}", ""]
     for i, (n, _) in enumerate(SPRITES):
         h.append(f"#define {n} {i}")
-    h += ["/* Character looks (levels.h), the player's too, are loaded after these. */"]
+    h += ["#define SPR_ITEM  SPR_ITEM_STONE   /* + ITEM_*: a pickup on the floor */",
+          "/* Character looks (levels.h), the player's too, are loaded after these. */"]
     h += [f"#define SPRITE_TILE_COUNT {len(spr)}", "",
           "extern const uint8_t bkg_tile_data[];",
           "extern const uint8_t sprite_tile_data[];", "", "#endif", ""]

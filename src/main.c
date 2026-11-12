@@ -45,6 +45,7 @@
 #define SPRITE_GUARD  1   /* 1..4 */
 #define SPRITE_CURSOR 5
 #define SPRITE_NOISE  6   /* 6..9, one per guard */
+#define SPRITE_PICKUP 10  /* 10..17, one per pickup */
 
 /* Input modes */
 #define UI_PLAY      0
@@ -384,6 +385,17 @@ static void draw_sprites(void)
         } else {
             move_sprite(spr, 0, 0);     /* off screen */
             move_sprite(noise, 0, 0);
+        }
+    }
+    /* items still lying where they were left */
+    for (i = 0; i < MAX_PICKUPS; i++) {
+        const LevelDef *d = world_def(&world);
+        uint8_t spr = SPRITE_PICKUP + i;
+        if (i < d->pickup_count && !(state.picked & (1 << i))) {
+            set_sprite_tile(spr, SPR_ITEM + d->pickups[i].item);
+            place_sprite(spr, d->pickups[i].x, d->pickups[i].y);
+        } else {
+            move_sprite(spr, 0, 0);
         }
     }
     draw_cursor();

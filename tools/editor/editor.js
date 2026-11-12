@@ -18,7 +18,11 @@ const TOOL_HINTS = {
   route: "Click to add waypoints to the selected character (corners are added for you). Drag a point to move it; right-click to remove it.",
   zone: "Click or drag to put cells in the zone picked in the Zones panel. Shift+click fills the whole room.",
   switch: "Click a tile to make it a switch cell: it changes (e.g. into the exit) when a script sets its flag. Click one to select it; drag to move it.",
+  pickup: "Click a floor tile to put an item there for the player to pick up (set what and how many on the right). Click one to select it; drag to move it.",
+  portal: "Click one end of a portal, then the other: on this map, or switch map tabs first for stairs to another floor. Drag an end to move it.",
+  select: "Drag a box to select cells. Drag the selection to move it (with its characters, items and portals); arrows nudge it (Shift: a whole screen). Delete clears it to wall; Ctrl+C / Ctrl+V copy and paste; Ctrl+A selects the whole map; Esc lets go.",
 };
+const PORTAL_COLOR = "#9d4edd";
 const TALK_COLOR = "#00a6a6";
 const SWITCH_COLOR = "#f2b705";
 
@@ -31,6 +35,11 @@ let mode = "edit";
 let tool = "tile:#";
 let selGuard = -1;
 let selSwitch = -1;              // selected switch cell of the map being edited
+let selPickup = -1;              // selected pickup of the map being edited
+let selPortal = -1;              // selected portal of the level
+let portalPending = null;        // {map, x, y}: first end clicked, waiting for the second
+let selection = null;            // Select tool: {x0, y0, x1, y1} on the map being edited
+let clip = null;                 // copied cells: {w, h, map, art, zones}
 let undoStack = [];
 let redoStack = [];
 let preview = null;              // {key, view} for the current level
@@ -302,6 +311,8 @@ function renderEdit() {
   drawTalkLabels(lv);
 
   drawScripted(lv);
+  drawPickupsPortals(lv);
+  drawSelection();
   drawLinkMarkers();
   if ($("show-behaviour").checked && lv.art) drawBehaviourLetters(lv);
   updateSizeInfo(lv);
@@ -324,6 +335,294 @@ function drawTalkLabels(lv) {
     ctx.fillText(verb, x * TILE + TILE / 2, y * TILE - h / 2 + 0.5);
   });
   ctx.restore();
+}
+
+/* Pickups as the Game Boy draws them; portal ends as numbered rings,
+ * saying where they lead when that's another map. */
+function drawPickupsPortals(lv) {
+  (lv.pickups || []).forEach((p, i) => {
+    drawSpr(A.T.SPR_ITEM + Math.max(0, A.items.findIndex((it) => it.name.toLowerCase() === p.item)), p.x, p.y);
+    if (i === selPickup) {
+      ctx.strokeStyle = "#e4572e";
+      ctx.lineWidth = 3;
+      ctx.strokeRect(p.x * TILE + 1.5, p.y * TILE + 1.5, TILE - 3, TILE - 3);
+    }
+    if ((p.count || 1) > 1) {
+      ctx.save();
+      ctx.font = `bold ${Math.max(8, TILE * 0.4)}px ui-monospace, monospace`;
+      ctx.fillStyle = "#081820";
+      ctx.textAlign = "right";
+      ctx.fillText("×" + p.count, p.x * TILE + TILE, p.y * TILE + TILE - 1);
+      ctx.restore();
+    }
+  });
+  ctx.save();
+  ctx.font = `bold ${Math.max(8, TILE * 0.42)}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  const ring = (x, y, label, dashed, selected) => {
+    ctx.strokeStyle = PORTAL_COLOR;
+    ctx.lineWidth = selected ? 3.5 : 2.5;
+    ctx.setLineDash(dashed ? [3, 3] : []);
+    ctx.beginPath();
+    ctx.arc(x * TILE + TILE / 2, y * TILE + TILE / 2, TILE * 0.42, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    if (!label) return;
+    const w = ctx.measureText(label).width + 4, h = Math.max(9, TILE * 0.45);
+    ctx.fillStyle = PORTAL_COLOR;
+    ctx.fillRect(x * TILE + TILE / 2 - w / 2, y * TILE + TILE, w, h);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(label, x * TILE + TILE / 2, y * TILE + TILE + h / 2 + 0.5);
+  };
+  (level().portals || []).forEach((pt, i) => {
+    for (const [end, other] of [[pt.a, pt.b], [pt.b, pt.a]]) {
+      if (!end || end.map !== curMap) continue;
+      const where = other.map === curMap ? `${i + 1}` : `${i + 1}→M${other.map + 1}`;
+      ring(end.x, end.y, where, false, i === selPortal);
+    }
+    if (pt.a && pt.b && pt.a.map === curMap && pt.b.map === curMap && i === selPortal) {
+      ctx.strokeStyle = PORTAL_COLOR;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(pt.a.x * TILE + TILE / 2, pt.a.y * TILE + TILE / 2);
+      ctx.lineTo(pt.b.x * TILE + TILE / 2, pt.b.y * TILE + TILE / 2);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+  });
+  if (portalPending && portalPending.map === curMap) ring(portalPending.x, portalPending.y, "?", true, true);
+  ctx.restore();
+}
+
+// ---- the Select tool: move, clear, copy and paste a block of cells
+
+const inRect = (r, x, y) => r && x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1;
+const rectOf = (ax, ay, bx, by) =>
+  ({ x0: Math.min(ax, bx), y0: Math.min(ay, by), x1: Math.max(ax, bx), y1: Math.max(ay, by) });
+
+function drawSelection() {
+  if (!selection || tool !== "select") return;
+  const r = selection;
+  ctx.save();
+  ctx.fillStyle = "rgba(46, 134, 171, 0.18)";
+  ctx.fillRect(r.x0 * TILE, r.y0 * TILE, (r.x1 - r.x0 + 1) * TILE, (r.y1 - r.y0 + 1) * TILE);
+  ctx.strokeStyle = "#2e86ab";
+  ctx.lineWidth = 2;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(r.x0 * TILE + 1, r.y0 * TILE + 1, (r.x1 - r.x0 + 1) * TILE - 2, (r.y1 - r.y0 + 1) * TILE - 2);
+  ctx.restore();
+}
+
+function selectionHint() {
+  const r = selection;
+  if (r) hint(`Selected ${r.x1 - r.x0 + 1}×${r.y1 - r.y0 + 1} cells at (${r.x0},${r.y0}). ` + TOOL_HINTS.select);
+}
+
+/* The map's layers as grids of single cells: map chars, art (2 hex digits
+ * or ".."), zones (a digit). */
+function cellGrids(m) {
+  const w = mapW(m);
+  return {
+    map: m.map.map((r) => [...r]),
+    art: m.art ? m.art.map((r) => r.match(/../g)) : null,
+    zones: m.zone_map ? m.zone_map.map((r) => [...r]) : null,
+    w, h: mapH(m),
+  };
+}
+
+function setGrids(m, g) {
+  m.map = g.map.map((r) => r.join(""));
+  if (g.art) {
+    m.art = g.art.map((r) => r.join(""));
+    if (m.art.every((r) => /^(\.\.)*$/.test(r))) delete m.art;
+  }
+  if (g.zones) {
+    m.zone_map = g.zones.map((r) => r.join(""));
+    if (m.zone_map.every((r) => /^0*$/.test(r))) delete m.zone_map;
+  }
+}
+
+/* Move what's in rectangle r of map k by (dx, dy), starting from `base`
+ * (a copy of the map and the level's portals taken when the move began,
+ * so dragging back and forth is exact). Cells left behind become wall.
+ * Things standing in r move too; anything pushed off the map is dropped.
+ * Returns how many things were dropped. */
+function moveBlock(base, k, r, dx, dy) {
+  const lv = level(), m = clone(base.map), g = cellGrids(base.map), out = cellGrids(base.map);
+  const ok = (x, y) => x >= 0 && y >= 0 && x < g.w && y < g.h;
+  let dropped = 0;
+  for (let y = r.y0; y <= r.y1; y++)
+    for (let x = r.x0; x <= r.x1; x++) {         // empty the old place
+      out.map[y][x] = "#";
+      if (out.art) out.art[y][x] = "..";
+      if (out.zones) out.zones[y][x] = "0";
+    }
+  for (let y = r.y0; y <= r.y1; y++)
+    for (let x = r.x0; x <= r.x1; x++) {         // and fill the new one
+      const nx = x + dx, ny = y + dy;
+      if (!ok(nx, ny)) continue;
+      out.map[ny][nx] = g.map[y][x];
+      if (out.art) out.art[ny][nx] = g.art[y][x];
+      if (out.zones) out.zones[ny][nx] = g.zones[y][x];
+    }
+  setGrids(m, out);
+  const shift = (p) => { p.x += dx; p.y += dy; return ok(p.x, p.y); };
+  m.guards = m.guards.filter((ch) => {     // route points in r move with it
+    const kept = [];
+    for (const [x, y] of ch.route) {
+      const p = { x, y };
+      if (!inRect(r, x, y) || shift(p)) kept.push([p.x, p.y]);
+      else dropped++;
+    }
+    ch.route = kept;
+    return kept.length > 0;
+  });
+  for (const key of ["pickups", "switches"]) {
+    if (!m[key]) continue;
+    m[key] = m[key].filter((d) => !inRect(r, d.x, d.y) || shift(d) || (dropped++, false));
+    if (!m[key].length) delete m[key];
+  }
+  lv.maps[k] = m;
+  if (base.portals) {
+    const pts = clone(base.portals);
+    lv.portals = pts.filter((pt) => [pt.a, pt.b].every((e) =>
+      e.map !== k || !inRect(r, e.x, e.y) || shift(e) || (dropped++, false)));
+    if (!lv.portals.length) delete lv.portals;
+  }
+  return dropped;
+}
+
+/* Clear rectangle r of the map being edited to wall, with what stands on it. */
+function clearBlock(r) {
+  const lv = level(), m = cmap(), g = cellGrids(m);
+  for (let y = r.y0; y <= r.y1; y++)
+    for (let x = r.x0; x <= r.x1; x++) {
+      g.map[y][x] = "#";
+      if (g.art) g.art[y][x] = "..";
+      if (g.zones) g.zones[y][x] = "0";
+    }
+  setGrids(m, g);
+  m.guards = m.guards.filter((ch) => !inRect(r, ch.route[0][0], ch.route[0][1]));
+  m.guards.forEach((ch) => { ch.route = ch.route.filter(([x, y], i) => i === 0 || !inRect(r, x, y)); });
+  for (const key of ["pickups", "switches"]) {
+    if (!m[key]) continue;
+    m[key] = m[key].filter((d) => !inRect(r, d.x, d.y));
+    if (!m[key].length) delete m[key];
+  }
+  if (lv.portals) {
+    lv.portals = lv.portals.filter((pt) => ![pt.a, pt.b].some((e) => e.map === curMap && inRect(r, e.x, e.y)));
+    if (!lv.portals.length) delete lv.portals;
+  }
+  selGuard = selPickup = selSwitch = selPortal = -1;
+}
+
+function copyBlock(r) {
+  const g = cellGrids(cmap());
+  const cut = (grid) => grid && grid.slice(r.y0, r.y1 + 1).map((row) => row.slice(r.x0, r.x1 + 1));
+  clip = { w: r.x1 - r.x0 + 1, h: r.y1 - r.y0 + 1, map: cut(g.map), art: cut(g.art), zones: cut(g.zones) };
+  hint(`Copied ${clip.w}×${clip.h} cells (terrain, art and zones). Ctrl+V pastes them at the selection.`);
+}
+
+/* Paste the copied cells with their top-left at (x, y); returns the
+ * pasted rectangle (clipped to the map). */
+function pasteBlock(x, y) {
+  const m = cmap(), g = cellGrids(m);
+  if (clip.art && !g.art) g.art = g.map.map((r) => r.map(() => ".."));
+  if (clip.zones && !g.zones) g.zones = g.map.map((r) => r.map(() => "0"));
+  for (let j = 0; j < clip.h; j++)
+    for (let i = 0; i < clip.w; i++) {
+      const nx = x + i, ny = y + j;
+      if (nx >= g.w || ny >= g.h) continue;
+      g.map[ny][nx] = clip.map[j][i] === "P" ? "." : clip.map[j][i];   // one start only
+      if (g.art) g.art[ny][nx] = clip.art ? clip.art[j][i] : "..";
+      if (g.zones) g.zones[ny][nx] = clip.zones ? clip.zones[j][i] : "0";
+    }
+  setGrids(m, g);
+  return { x0: x, y0: y, x1: Math.min(g.w - 1, x + clip.w - 1), y1: Math.min(g.h - 1, y + clip.h - 1) };
+}
+
+/* Arrow keys on a selection: move it by (dx, dy) as one undo step. */
+function nudgeSelection(dx, dy) {
+  const r = selection, w = mapW(cmap()), h = mapH(cmap());
+  pushUndo();
+  const dropped = moveBlock({ map: clone(cmap()), portals: clone(level().portals || null) }, curMap, r, dx, dy);
+  selection = rectOf(Math.max(0, r.x0 + dx), Math.max(0, r.y0 + dy),
+                     Math.min(w - 1, r.x1 + dx), Math.min(h - 1, r.y1 + dy));
+  changed();
+  if (dropped) hint(`${dropped} thing${dropped > 1 ? "s" : ""} pushed off the map were dropped (Ctrl+Z brings them back).`);
+  else selectionHint();
+}
+
+/* The portal end on (x, y) of map k: {i, side} or null. */
+function portalEndAt(k, x, y) {
+  const pts = level().portals || [];
+  for (let i = 0; i < pts.length; i++)
+    for (const side of ["a", "b"])
+      if (pts[i][side] && pts[i][side].map === k && pts[i][side].x === x && pts[i][side].y === y)
+        return { i, side };
+  return null;
+}
+
+function renderPickups() {
+  const m = cmap(), list = m.pickups || [];
+  if (selPickup >= list.length) selPickup = -1;
+  $("pk-count").textContent = `${list.length}/${A.max_pickups}, this map`;
+  const box = $("pk-list");
+  box.innerHTML = "";
+  list.forEach((p, i) => {
+    const b = document.createElement("button");
+    b.className = "guard-chip" + (i === selPickup ? " active" : "");
+    b.textContent = `${p.item.toUpperCase()} ×${p.count || 1} (${p.x},${p.y})`;
+    b.addEventListener("click", () => { selPickup = i; renderAll(); });
+    box.appendChild(b);
+  });
+  if (!list.length) box.innerHTML = '<span class="muted">None yet: use the Pickup tool (9).</span>';
+  const p = list[selPickup];
+  $("pk-props").hidden = !p;
+  if (p) {
+    $("pk-item").value = p.item;
+    if (document.activeElement !== $("pk-count-in")) $("pk-count-in").value = p.count || 1;
+  }
+}
+
+function renderPortals() {
+  const pts = level().portals || [];
+  if (selPortal >= pts.length) selPortal = -1;
+  $("pt-count").textContent = `${pts.length}, the whole level`;
+  const box = $("pt-list");
+  box.innerHTML = "";
+  const where = (e) => `Map ${e.map + 1} (${e.x},${e.y})`;
+  pts.forEach((pt, i) => {
+    const row = document.createElement("div");
+    row.className = "zone-row portal-row" + (i === selPortal ? " active" : "");
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = PORTAL_COLOR;
+    sw.textContent = String(i + 1);
+    const text = document.createElement("span");
+    text.textContent = `${where(pt.a)} ↔ ${where(pt.b)}`;
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "✕";
+    del.title = "Delete this portal";
+    del.addEventListener("click", (e) => {
+      e.stopPropagation();
+      pushUndo();
+      level().portals.splice(i, 1);
+      if (!level().portals.length) delete level().portals;
+      selPortal = -1;
+      changed();
+    });
+    row.append(sw, text, del);
+    row.addEventListener("click", () => {
+      selPortal = i;
+      if (pt.a.map !== curMap && pt.b.map !== curMap) { curMap = pt.a.map; preview = null; }
+      renderAll();
+    });
+    box.appendChild(row);
+  });
+  if (!pts.length) box.innerHTML = '<span class="muted">None yet.</span>';
 }
 
 /* Switch cells show what they turn into, faintly, inside a dashed
@@ -1009,6 +1308,86 @@ function applyTool(x, y, e, first) {
     return moveDragged(x, y);
   }
 
+  if (tool === "select") {
+    if (first) {
+      if (selection && inRect(selection, x, y)) {    // pick the block up
+        stroke.drag = { block: true, ox: x, oy: y, rect: { ...selection },
+                        base: { map: clone(lv), portals: clone(level().portals || null) } };
+        return false;
+      }
+      selection = rectOf(x, y, x, y);
+      stroke.drag = { selecting: true, ax: x, ay: y };
+      renderEdit();
+      return false;
+    }
+    const d = stroke.drag;
+    if (!d) return false;
+    if (d.selecting) {
+      selection = rectOf(d.ax, d.ay, x, y);
+      selectionHint();
+      renderEdit();
+      return false;
+    }
+    const dx = x - d.ox, dy = y - d.oy, r = d.rect;
+    if (dx === d.dx && dy === d.dy) return false;
+    d.dx = dx; d.dy = dy;
+    const dropped = moveBlock(d.base, curMap, r, dx, dy);
+    const w = mapW(cmap()), h = mapH(cmap());
+    selection = rectOf(Math.max(0, r.x0 + dx), Math.max(0, r.y0 + dy),
+                       Math.min(w - 1, r.x1 + dx), Math.min(h - 1, r.y1 + dy));
+    if (dropped) d.dropped = dropped;
+    return true;
+  }
+
+  if (tool === "pickup") {
+    if (!first) return moveDragged(x, y);
+    const list = lv.pickups || [];
+    const i = list.findIndex((d) => d.x === x && d.y === y);
+    if (i >= 0) {
+      selPickup = i;
+      stroke.drag = { thing: "pickups", index: i };
+      renderPickups();
+      renderEdit();
+      return false;
+    }
+    const here = A.tiles.find((d) => d.char === lv.map[y][x]);
+    if (here && here.blocks.player) { hint(`Nobody can stand on a ${here.name} to pick it up.`); return false; }
+    if (list.length >= A.max_pickups) { hint(`At most ${A.max_pickups} pickups in a map.`); return false; }
+    list.push({ x, y, item: A.items[0].name.toLowerCase(), count: 1 });
+    lv.pickups = list;
+    selPickup = list.length - 1;
+    stroke.drag = { thing: "pickups", index: selPickup };
+    return true;
+  }
+
+  if (tool === "portal") {
+    if (!first) return moveDragged(x, y);
+    const hit = portalEndAt(curMap, x, y);
+    if (hit) {
+      selPortal = hit.i;
+      portalPending = null;
+      stroke.drag = { portal: hit.i, side: hit.side };
+      renderPortals();
+      renderEdit();
+      return false;
+    }
+    const here = A.tiles.find((d) => d.char === lv.map[y][x]);
+    if (here && here.blocks.player) { hint(`A portal needs a cell you can stand on, not a ${here.name}.`); return false; }
+    if (!portalPending) {
+      portalPending = { map: curMap, x, y };
+      hint("Now click where it leads: on this map, or click another map's tab first.");
+      renderEdit();
+      return false;
+    }
+    if (portalPending.map === curMap && portalPending.x === x && portalPending.y === y) return false;
+    const L = level();
+    L.portals = [...(L.portals || []), { a: portalPending, b: { map: curMap, x, y } }];
+    selPortal = L.portals.length - 1;
+    portalPending = null;
+    hint(`Portal ${selPortal + 1} made. Stepping onto either end puts you on the other.`);
+    return true;
+  }
+
   if (tool === "switch") {
     const key = "switches";
     if (!first) return moveDragged(x, y);
@@ -1049,6 +1428,12 @@ function applyTool(x, y, e, first) {
 
 function moveDragged(x, y) {
   if (!stroke.drag) return false;
+  if (stroke.drag.portal !== undefined) {   // an end of a portal, on this map
+    const end = level().portals[stroke.drag.portal][stroke.drag.side];
+    if (end.x === x && end.y === y) return false;
+    end.x = x; end.y = y;
+    return true;
+  }
   if (stroke.drag.thing) {                 // a switch cell
     const d = cmap()[stroke.drag.thing][stroke.drag.index];
     if (d.x === x && d.y === y) return false;
@@ -1082,6 +1467,8 @@ canvas.addEventListener("mousemove", (e) => {
 
 window.addEventListener("mouseup", () => {
   if (!stroke) return;
+  if (stroke.drag && stroke.drag.dropped)
+    setTimeout(() => hint(`Things pushed off the map were dropped (Ctrl+Z brings them back).`), 0);
   if (stroke.changed) {
     undoStack.push(stroke.before);
     redoStack = [];
@@ -1107,6 +1494,7 @@ function hint(msg) { $("tool-hint").textContent = msg; }
 
 function setTool(t) {
   const wasView = A ? zoneView() : "off";
+  if (t !== "select" && selection) { selection = null; if (A && mode === "edit") renderEdit(); }
   tool = t;
   document.querySelectorAll("#toolbar button, #palette button, #zone-bar button[data-tool], .art-panel button[data-tool]").forEach((b) =>
     b.classList.toggle("active", b.dataset.tool === t));
@@ -1136,6 +1524,8 @@ function renderAll() {
   renderLinks();
   renderProps();
   renderZones();
+  renderPickups();
+  renderPortals();
   renderDisguises();
   renderGuards();
   renderScripting();
@@ -1430,6 +1820,9 @@ function selectLevel(i) {
   cur = i;
   curMap = 0;
   selZone = 0;
+  selPickup = selPortal = -1;
+  portalPending = null;
+  selection = null;
   selGuard = -1;
   selSwitch = -1;
   preview = null;
@@ -1472,7 +1865,7 @@ function renderMapTabs() {
     b.className = "tab" + (k === curMap ? " active" : "");
     b.textContent = `Map ${k + 1}`;
     b.title = `${mapW(m) / A.view_w}×${mapH(m) / A.view_h} screens` + (k === 0 ? "; the level starts here" : "");
-    b.addEventListener("click", () => { curMap = k; selGuard = selSwitch = -1; preview = null; changed(false); });
+    b.addEventListener("click", () => { curMap = k; selGuard = selSwitch = selPickup = -1; selection = null; preview = null; changed(false); });
     box.appendChild(b);
   });
   const add = document.createElement("button");
@@ -1533,6 +1926,11 @@ function deleteMap() {
   lv.maps.splice(k, 1);
   lv.links = lv.links.filter((ln) => ln.from !== k && ln.to !== k)
     .map((ln) => ({ ...ln, from: ln.from > k ? ln.from - 1 : ln.from, to: ln.to > k ? ln.to - 1 : ln.to }));
+  if (lv.portals) {                        // portals into the map go too
+    lv.portals = lv.portals.filter((pt) => pt.a.map !== k && pt.b.map !== k);
+    lv.portals.forEach((pt) => { for (const e of [pt.a, pt.b]) if (e.map > k) e.map--; });
+    if (!lv.portals.length) delete lv.portals;
+  }
   curMap = k - 1;
   selGuard = -1;
   changed();
@@ -2522,7 +2920,43 @@ window.addEventListener("keydown", async (e) => {
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redoEdit(); return; }
-    const tools = { 4: "start", 5: "guard", 6: "route", 7: "switch", 8: "zone", 0: "art-erase" };
+    if (tool === "select" || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "a")) {
+      const k = e.key, ctrl = e.ctrlKey || e.metaKey;
+      const step = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0] }[k];
+      if (ctrl && k.toLowerCase() === "a") {
+        setTool("select");
+        selection = { x0: 0, y0: 0, x1: mapW(cmap()) - 1, y1: mapH(cmap()) - 1 };
+        selectionHint();
+        renderEdit();
+        e.preventDefault();
+        return;
+      }
+      if (selection && step) {
+        const [sx, sy] = step;
+        nudgeSelection(sx * (e.shiftKey ? A.view_w : 1), sy * (e.shiftKey ? A.view_h : 1));
+        e.preventDefault();
+        return;
+      }
+      if (selection && (k === "Delete" || k === "Backspace")) {
+        pushUndo();
+        clearBlock(selection);
+        changed();
+        e.preventDefault();
+        return;
+      }
+      if (selection && ctrl && k.toLowerCase() === "c") { copyBlock(selection); e.preventDefault(); return; }
+      if (clip && ctrl && k.toLowerCase() === "v") {
+        pushUndo();
+        const at = selection || { x0: 0, y0: 0 };
+        selection = pasteBlock(at.x0, at.y0);
+        changed();
+        e.preventDefault();
+        return;
+      }
+      if (k === "Escape" && selection) { selection = null; renderEdit(); hint(TOOL_HINTS.select); return; }
+    }
+    const tools = { 4: "start", 5: "guard", 6: "route", 7: "switch", 8: "zone", 9: "pickup",
+                    0: "art-erase", o: "portal", O: "portal", q: "select", Q: "select" };
     if (tools[e.key]) { setTool(tools[e.key]); return; }
     const tile = !e.ctrlKey && !e.metaKey &&
       A.tiles.find((x) => x.char !== "P" && tileKey(x.char) === e.key.toUpperCase().replace(/^([123])$/, "$1"));
@@ -2622,6 +3056,21 @@ function wire() {
   // zones: the list is per level, painting per map
   $("zone-add").addEventListener("click", addZone);
   $("disguise-add").addEventListener("click", addDisguise);
+  A.items.forEach((it) => $("pk-item").add(new Option(it.name, it.name.toLowerCase())));
+  const pk = () => (cmap().pickups || [])[selPickup];
+  $("pk-item").addEventListener("change", (e) => { pushUndo(); pk().item = e.target.value; changed(); });
+  $("pk-count-in").addEventListener("change", (e) => {
+    pushUndo();
+    pk().count = Math.max(1, Math.min(99, parseInt(e.target.value || "1", 10)));
+    changed();
+  });
+  $("pk-delete").addEventListener("click", () => {
+    pushUndo();
+    cmap().pickups.splice(selPickup, 1);
+    if (!cmap().pickups.length) delete cmap().pickups;
+    selPickup = -1;
+    changed();
+  });
   $("zone-view").addEventListener("change", () => renderEdit());
   $("zone-fill").addEventListener("click", () => {
     const m = cmap(), all = [];

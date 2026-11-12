@@ -37,8 +37,11 @@
 #define SPR_CURSOR 1
 #define SPR_CURSOR_BAD 2
 #define SPR_NOISE 3
+#define SPR_ITEM_STONE 4
+#define SPR_ITEM_BOTTLE 5
+#define SPR_ITEM  SPR_ITEM_STONE   /* + ITEM_*: a pickup on the floor */
 /* Character looks (levels.h), the player's too, are loaded after these. */
-#define SPRITE_TILE_COUNT 4
+#define SPRITE_TILE_COUNT 6
 
 extern const uint8_t bkg_tile_data[];
 extern const uint8_t sprite_tile_data[];
