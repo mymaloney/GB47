@@ -410,8 +410,9 @@ def view(level, world, aim_item=None):
 
 
 def player_sprite(disguise):
-    """Sprite tile of the player in a disguise: its look's down frame, as
-    main.c draws it."""
+    """Sprite tile of the player in a disguise, facing down. Which way the
+    player faces is only looks, kept outside the rules (main.c's
+    player_facing): the editor's playtest turns it."""
     names = gen_levels.looks()["looks"]
     ds = gen_levels.disguises()
     look = ds[disguise]["look"] if disguise < len(ds) else ds[0]["look"]

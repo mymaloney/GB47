@@ -397,7 +397,9 @@ rle = gen_levels.zone_rle(hall)
 unpacked = [b for n, b in zip(rle[::2], rle[1::2]) for _ in range(n)]
 assert unpacked == [int(c, 16) for r in gen_levels.zone_rows(hall) for c in r] and max(rle[::2]) <= 255
 assert gen_levels.zone_rule_bytes(dress) == [A_["HOSTILE"], 0, A_["TRESPASS"], 0]
-assert all(lv["zones"] == [{"name": "everywhere", "rules": {"suit": "H"}}]
+# the other levels are one zone each (their rules are the designer's choice)
+assert all([z["name"] for z in lv["zones"]] == ["everywhere"] and
+           set(lv["zones"][0]["rules"].values()) <= set("LTH")
            for n, lv in enumerate(levels) if n != 5)
 c6 = gen_levels.generated_files(levels)
 assert "const uint8_t level_zones5[] = { 8, 1, 12, 0," in c6["levels_maps.c"]
@@ -485,7 +487,8 @@ assert "1 /* guard */" in gen_all["levels.c"] and "2 /* officer */" in gen_all["
 # who uses an outfit, and renaming one everywhere
 assert gen_levels.outfit_users(levels, "officer") == ["DRESS CODE", "AIR DUCTS", "ANNEX"], \
     gen_levels.outfit_users(levels, "officer")
-assert len(gen_levels.outfit_users(levels, "suit")) == 9          # every level's zones
+assert gen_levels.outfit_users(levels, "suit") == [               # levels with a rule for it
+    lv["name"] for lv in levels if any("suit" in z["rules"] for z in lv["zones"])]
 assert gen_levels.outfit_users(levels, "chef") == []
 ren = json.loads(json.dumps(levels))
 gen_levels.rename_outfit(ren, "officer", "captain")

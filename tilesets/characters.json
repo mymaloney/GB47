@@ -1,7 +1,7 @@
 {
   "image": "characters.png",
   "license": "CC0",
-  "notes": "Character looks: one row per look, 6 frames of 8x8 sprites each (up, right, down, left, subdued, body). Disguises: what the player can wear, in order (the first is your own suit), each drawn with a look (the player uses its down frame). Edit both in the level editor.",
+  "notes": "Character looks: one row per look, 6 frames of 8x8 sprites each (up, right, down, left, subdued, body). Disguises: what the player can wear, in order (the first is your own suit), each drawn with a look (the player uses its four facing frames). Edit both in the level editor.",
   "thresholds": [
     0.72,
     0.5,

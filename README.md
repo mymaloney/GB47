@@ -120,8 +120,9 @@ rules into `build/libgame.so`, starts a local server, and opens
   the ROM uses (`src/trans.c`).
 - **Disguises** (shared by every level): what the player can wear. Your
   own suit is always first; the rest are the uniforms characters' bodies
-  give (up to 8 in all). Each is drawn with a look (the player uses its
-  Down frame): pick one, or **Edit…** to paint it. **+ Disguise** makes a
+  give (up to 8 in all). Each is drawn with a look (the player turns to
+  face the way it last moved, using the look's up, right, down and left
+  frames): pick one, or **Edit…** to paint it. **+ Disguise** makes a
   new one with a copy of the suit's look and opens the painter. Renaming
   one renames it everywhere, saved levels included; deleting one is
   refused while any level uses it (the message names them). Changes save
@@ -358,7 +359,7 @@ Takedown length is `TAKEDOWN_TURNS` in `src/game.h`.
 ![Hostile cones, taking a uniform, walking past a blind sentry](docs/disguise.png)
 
 You start in your own clothes. Stand on a body and press B to put on its
-uniform (one turn). Your sprite changes to show what you're wearing. Each
+uniform (one turn). Your sprite changes to show what you're wearing, and turns to face the way you last moved (or whoever you grab or talk to, or where you throw). Each
 body has one uniform, and there's no changing back. Which disguises
 exist, and how you look in each, is up to the level designer: they are
 listed in `tilesets/characters.json` and made in the editor.

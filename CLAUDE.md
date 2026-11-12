@@ -122,7 +122,9 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   `DISGUISE_MAX` 8). `gen_levels.UNIFORMS` is read from it (and reloaded
   in place by `forget_tilesets()`); `levels.h` gets `DISGUISE_TYPES` and
   `disguise_look[]`. Only `DISGUISE_NONE` (0) is fixed in `game.h`. The
-  player is drawn with its disguise's look, Down frame. A character's
+  player is drawn with its disguise's look, facing the way it last moved
+  (`player_facing` in `main.c`, `P.facing` in the editor's playtest: only
+  looks, so not in `GameState`, and undo leaves it). A character's
   `"uniform"` is a disguise name or `"none"`; old levels called the suit
   `"none"` in zone rules and enforcer tags (`upgrade_suit()`). Characters
   always store their `"look"`. The editor's Disguises panel goes through

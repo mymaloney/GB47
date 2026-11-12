@@ -144,7 +144,8 @@ function lookName(g) {
   return names.includes("guard") ? "guard" : names[0];
 }
 const lookIndex = (g) => A.looks.names.indexOf(lookName(g));
-/* The player in disguise d: its look's down frame (main.c does the same). */
+/* The player in disguise d, facing down (main.c starts each level so; the
+ * playtest turns it with P.facing). */
 function playerSprite(d) {
   const ds = A.disguises[d] || A.disguises[0];
   return A.looks.first_tile + Math.max(0, A.looks.names.indexOf(ds.look)) * A.looks.frame_count + A.G.DIR_DOWN;
@@ -472,11 +473,11 @@ function renderDisguises() {
     const look = document.createElement("select");
     A.looks.names.forEach((n) => look.add(new Option(n, n)));
     look.value = d.look;
-    look.title = "Which look draws the player in it (its down frame)";
+    look.title = "Which look draws the player in it";
     look.addEventListener("change", () => changeDisguises({ action: "look", index: i, look: look.value }));
     const edit = document.createElement("button");
     edit.textContent = "Edit…";
-    edit.title = "Paint this look (the player is drawn with its Down frame)";
+    edit.title = "Paint this look (the player uses its up, right, down and left frames)";
     edit.addEventListener("click", () => tpOpenLook(A.looks.names.indexOf(d.look)));
     const del = document.createElement("button");
     del.className = "del";
@@ -2029,7 +2030,8 @@ async function enterPlay() {
   mode = "play";
   P = { lv, idx: cur, state: res.state, view: res.view, undo: [], ui: newPlayUI(),
         busy: false, replay: null, keys: new Set(), struggle: null,
-        cam: { x: 0, y: 0 }, scroll: { x: 0, y: 0 }, selectArmed: false };
+        cam: { x: 0, y: 0 }, scroll: { x: 0, y: 0 }, selectArmed: false,
+        facing: A.G.DIR_DOWN };     // how the player is drawn, as main.c
   centerCamera();
   $("tab-play").classList.add("active");
   $("tab-edit").classList.remove("active");
@@ -2081,6 +2083,7 @@ function renderPlay() {
     // lower sprite index = on top (player is sprite 0), so draw in reverse
     [...v.sprites].reverse().forEach((s) => {
       let t = s.t;
+      if (s === v.sprites[0]) t += P.facing - A.G.DIR_DOWN;   // the player faces where it last went
       if (P.struggle && s.guard === v.takedown_guard)
         t = P.struggle.on ? s.base + 4 : s.base + v.guards[s.guard].facing;
       place(t, s.x, s.y);
@@ -2128,8 +2131,27 @@ function drawDialogue() {
   row(textRow([[1, P.ui.sayAt + 1 < P.said.length ? "A:MORE" : "A:OK"]]), top + 4);
 }
 
+/* Which way the player turns for an action (main.c's do_action): where it
+ * moves, or toward the tile it throws at or the character it grabs or
+ * talks to. */
+function facingFor(action) {
+  const G = A.G, v = P.view, [px, py] = v.player;
+  const toward = (x, y) => (Math.abs(x - px) >= Math.abs(y - py)
+    ? (x > px ? G.DIR_RIGHT : G.DIR_LEFT) : (y > py ? G.DIR_DOWN : G.DIR_UP));
+  if (action.type === "throw") return toward(action.x, action.y);
+  const c = action.code;
+  if (c < 4) return c;
+  if (c >= G.ACT_DRAG && c < G.ACT_DRAG + 4) return c - G.ACT_DRAG;
+  if (c === G.ACT_TALK || c === G.ACT_TAKEDOWN) {
+    const g = v.guards.find((g) => g.mode <= G.GUARD_RETURN && Math.abs(g.x - px) + Math.abs(g.y - py) === 1);
+    if (g) return toward(g.x, g.y);
+  }
+  return P.facing;
+}
+
 async function act(action, opts = {}) {
   const prev = P.state;
+  const face = facingFor(action);
   const res = await api("/api/act", { level: P.lv, state: P.state, action,
                                        aim_item: opts.aim ?? null });
   if (res.error) { $("play-status").textContent = res.error; return false; }
@@ -2141,6 +2163,7 @@ async function act(action, opts = {}) {
   P.state = res.state;
   P.view = res.view;
   P.said = res.said || [];
+  P.facing = face;
   await followCamera();
   return true;
 }
@@ -2157,6 +2180,7 @@ async function restartPlay() {
   P.undo = [];
   P.ui = newPlayUI();
   P.selectArmed = false;
+  P.facing = A.G.DIR_DOWN;
   centerCamera();
   renderPlay();
 }

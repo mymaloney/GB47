@@ -94,7 +94,10 @@ static uint8_t     ui_mode;
 static uint8_t     say_at;       /* which of this turn's messages is showing */
 static uint8_t     inv_item;     /* highlighted / chosen item type */
 static uint8_t     aim_x, aim_y; /* aiming cursor */
-static const char *hud_msg;      /* one-off message for the HUD's 2nd row */
+static const char *hud_msg;
+static uint8_t     player_facing;   /* DIR_*: only how the player is drawn, so
+                                       not in GameState (the rules, undo and
+                                       the solver don't care) */      /* one-off message for the HUD's 2nd row */
 
 /* ------------------------------------------------------------------ */
 /* Text                                                                */
@@ -349,9 +352,9 @@ static void draw_sprites(void)
 {
     uint8_t i;
 
-    /* the player has no facing: its look's "down" frame */
+    /* the disguise's look, facing the way the player last moved */
     set_sprite_tile(SPRITE_PLAYER, SPRITE_TILE_COUNT +
-                    disguise_look[state.disguise] * LOOK_FRAMES + DIR_DOWN);
+                    disguise_look[state.disguise] * LOOK_FRAMES + player_facing);
     place_sprite(SPRITE_PLAYER, state.px, state.py);
 
     for (i = 0; i < MAX_GUARDS; i++) {
@@ -562,6 +565,7 @@ static void load_level(uint8_t idx)
     ui_mode   = UI_PLAY;
     level_idx = idx;
     inv_item  = 0;
+    player_facing = DIR_DOWN;
     looking   = 0;
     select_armed = 0;
     world_load(levels, idx, &world);
@@ -706,11 +710,32 @@ static void advance_level(void)
 /* Input per mode                                                      */
 /* ------------------------------------------------------------------ */
 
+/* The direction from the player to tile (x, y): along the longer axis,
+ * horizontal on a tie. */
+static uint8_t dir_to(uint8_t x, uint8_t y)
+{
+    uint8_t dx = x > state.px ? x - state.px : state.px - x;
+    uint8_t dy = y > state.py ? y - state.py : state.py - y;
+    if (dx >= dy) return x > state.px ? DIR_RIGHT : DIR_LEFT;
+    return y > state.py ? DIR_DOWN : DIR_UP;
+}
+
 /* Run one turn; push undo and redraw if it happened. */
 static uint8_t do_action(uint8_t action)
 {
+    uint8_t face = player_facing, t = 0xFF;
+
+    /* which way the player will face: where they move, or at whoever they
+     * talk to or grab (worked out before the turn moves everyone) */
+    if (action < 4) face = action;
+    else if (action >= ACT_DRAG && action < ACT_DRAG + 4) face = action - ACT_DRAG;
+    else if (action == ACT_TALK) t = game_talk_target(&state);
+    else if (action == ACT_TAKEDOWN) t = game_takedown_target(&state);
+    if (t != 0xFF) face = dir_to(state.guards[t].x, state.guards[t].y);
+
     undo_mark(&world);
     if (!world_step(&world, action)) return 0;
+    player_facing = face;
     undo_commit();
     sync();          /* the step may have crossed into another map */
     redraw();
@@ -841,6 +866,7 @@ static void input_aim(uint8_t pressed)
         undo_mark(&world);
         if (world_throw(&world, inv_item, aim_x, aim_y)) {
             undo_commit();
+            player_facing = dir_to(aim_x, aim_y);   /* face where it went */
             ui_mode = UI_PLAY;
             redraw();
         } else {

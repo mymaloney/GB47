@@ -1149,7 +1149,7 @@ def generate_looks():
         out.append(f"    /* {name} */")
         for px in frames:
             out.append("    " + ", ".join(f"0x{b:02X}" for b in ts.to_2bpp(px)) + ",")
-    out += ["};", "", "/* Each disguise's look (the player is drawn with its down frame). */",
+    out += ["};", "", "/* Each disguise's look (the player faces the way it last moved; down at the start). */",
             "const uint8_t disguise_look[DISGUISE_TYPES] = { " +
             ", ".join(f"LOOK_{d['look'].upper()}" for d in disguises()) + " };   /* " +
             ", ".join(UNIFORMS) + " */", ""]

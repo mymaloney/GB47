@@ -364,5 +364,5 @@ const uint8_t look_tile_data[] = {
     0x01, 0x06, 0x00, 0x0C, 0x21, 0x2F, 0xF0, 0xEE, 0xF0, 0xEE, 0x21, 0x2F, 0x00, 0x0C, 0x01, 0x06,
 };
 
-/* Each disguise's look (the player is drawn with its down frame). */
+/* Each disguise's look (the player faces the way it last moved; down at the start). */
 const uint8_t disguise_look[DISGUISE_TYPES] = { LOOK_PLAYER, LOOK_PLAYER_GUARD, LOOK_PLAYER_OFFICER };   /* suit, guard, officer */
