@@ -7,7 +7,7 @@
 #include "trans.h"
 
 /* One entry per map; a level's maps are consecutive (part 0 first). */
-#define LEVEL_COUNT 11
+#define LEVEL_COUNT 14
 extern const LevelDef levels[LEVEL_COUNT];
 /* 16 bytes per tile; in ROM bank BANK_ART (far.h): read with far_read */
 extern const uint8_t art_tile_data[];

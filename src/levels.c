@@ -18,23 +18,29 @@ extern const char level_map7[];
 extern const char level_map8[];
 extern const char level_map9[];
 extern const char level_map10[];
-extern const uint8_t level_zones1[];
-extern const uint8_t level_zones6[];
+extern const char level_map11[];
+extern const char level_map12[];
+extern const char level_map13[];
+extern const uint8_t level_zones5[];
+extern const uint8_t level_zones10[];
+extern const uint8_t level_zones11[];
+extern const uint8_t level_zones12[];
+extern const uint8_t level_zones13[];
 
 /* Each level's zone rules: two bytes per zone, ACCESS_* bits per outfit. */
 static const uint8_t zone_rules0[] = { 1, 0 };   /* everywhere */
-static const uint8_t zone_rules1[] = { 65, 0, 0, 0, 5, 1, 1, 0 };   /* Crew, Guest, Private Deck, checkpoint */
+static const uint8_t zone_rules1[] = { 1, 0 };   /* everywhere */
 static const uint8_t zone_rules2[] = { 1, 0 };   /* everywhere */
 static const uint8_t zone_rules3[] = { 1, 0 };   /* everywhere */
 static const uint8_t zone_rules4[] = { 1, 0 };   /* everywhere */
-static const uint8_t zone_rules5[] = { 1, 0 };   /* everywhere */
-static const uint8_t zone_rules6[] = { 2, 0, 1, 0 };   /* zone 1, zone 2 */
+static const uint8_t zone_rules5[] = { 2, 0, 1, 0 };   /* zone 1, zone 2 */
+static const uint8_t zone_rules6[] = { 2, 0 };   /* everywhere */
 static const uint8_t zone_rules7[] = { 2, 0 };   /* everywhere */
 static const uint8_t zone_rules8[] = { 2, 0 };   /* everywhere */
-static const uint8_t zone_rules9[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules9[] = { 65, 0, 0, 0, 5, 1, 1, 0 };   /* Crew, Guest, Private Deck, checkpoint */
 
 /* Characters' scripts (OP_* in game.h). */
-static const uint8_t script3_2[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
+static const uint8_t script2_2[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
 
 const LevelDef levels[LEVEL_COUNT] = {
     /* 1: FIRST STEPS - Learn that guards only move when you do. Follow one through. */
@@ -62,39 +68,11 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 2: NEW LEVEL */
-    {
-        "NEW LEVEL",
-        40, 48,
-        level_map1,
-        4,
-        {
-            { DIR_DOWN, 1, { {14, 7} }, DISGUISE_NONE, 0, CHAR_NO_SIGHT, LOOK_TERRY, 0, 0 },
-            { DIR_DOWN, 1, { {14, 2} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
-            { DIR_LEFT, 1, { {18, 3} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
-            { DIR_UP, 1, { {2, 3} }, 4 /* mechanic */, 0, 0, LOOK_MECHANIC, 0, 0 },
-        },
-        { 0, 0 },
-        0,   /* map 1 of 1 */
-        { 0, 0, 0, 0 },   /* up right down left */
-        { 0, 0, 0, 0 },
-        TRANS_FADE,
-        0,
-        {
-            { 0, 0, 0, 0, 0, 0 },
-        },
-        level_zones1,   /* zones */
-        zone_rules1,
-        0,
-        { { 0, 0, 0, 0 } },   /* pickups */
-        0,
-        { { 0, 0, 0, 0, 0 } },   /* portals */
-    },
-    /* 3: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
+    /* 2: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
     {
         "CROSSFIRE",
         20, 16,
-        level_map2,
+        level_map1,
         2,
         {
             { DIR_DOWN, 3, { {7, 4}, {7, 13}, {7, 1} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
@@ -110,22 +88,22 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules2,
+        zone_rules1,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 4: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
+    /* 3: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
     {
         "THE SENTRY",
         20, 16,
-        level_map3,
+        level_map2,
         3,
         {
             { DIR_LEFT, 1, { {14, 10} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
             { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
-            { DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, LOOK_DOG, "PET", script3_2 },
+            { DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, LOOK_DOG, "PET", script2_2 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
@@ -137,17 +115,17 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 16, 13, 1, CELL_FLOOR, CELL_EXIT, 12 },   /* dog */
         },
         0,   /* zones */
-        zone_rules3,
+        zone_rules2,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 5: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
+    /* 4: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
     {
         "LURE",
         20, 16,
-        level_map4,
+        level_map3,
         1,
         {
             { DIR_LEFT, 1, { {12, 6} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
@@ -162,17 +140,17 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules4,
+        zone_rules3,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 6: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
+    /* 5: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
     {
         "CLEANUP",
         20, 16,
-        level_map5,
+        level_map4,
         2,
         {
             { DIR_UP, 1, { {9, 3} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
@@ -188,17 +166,17 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules5,
+        zone_rules4,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 7: DRESS CODE - The hall is hostile to your suit (huge cones) but legal in a guard's uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
+    /* 6: DRESS CODE - The hall is hostile to your suit (huge cones) but legal in a guard's uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
     {
         "DRESS CODE",
         20, 16,
-        level_map6,
+        level_map5,
         3,
         {
             { DIR_RIGHT, 2, { {2, 6}, {7, 6} }, 1 /* guard */, 0x04, 0, LOOK_GUARD, 0, 0 },
@@ -214,18 +192,18 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_zones6,   /* zones */
-        zone_rules6,
+        level_zones5,   /* zones */
+        zone_rules5,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 8: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
+    /* 7: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
     {
         "COMPOUND",
         40, 32,
-        level_map7,
+        level_map6,
         3,
         {
             { DIR_RIGHT, 2, { {2, 20}, {37, 20} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
@@ -242,17 +220,17 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules7,
+        zone_rules6,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 9: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
+    /* 8: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
     {
         "AIR DUCTS",
         20, 16,
-        level_map8,
+        level_map7,
         2,
         {
             { DIR_LEFT, 2, { {17, 5}, {2, 5} }, 1 /* guard */, 0x04, 0, LOOK_GUARD, 0, 0 },
@@ -268,24 +246,24 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules8,
+        zone_rules7,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 10: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
+    /* 9: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
     {
         "ANNEX",
         20, 16,
-        level_map9,
+        level_map8,
         1,
         {
             { DIR_RIGHT, 2, { {9, 7}, {18, 7} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 2 */
-        { 0, 11, 0, 0 },   /* up right down left */
+        { 0, 10, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
         0,
@@ -293,17 +271,17 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules9,
+        zone_rules8,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
     },
-    /* 10: ANNEX, map 2 */
+    /* 9: ANNEX, map 2 */
     {
         "ANNEX",
         40, 16,
-        level_map10,
+        level_map9,
         2,
         {
             { DIR_LEFT, 1, { {30, 7} }, 2 /* officer */, 0x04, 0, LOOK_OFFICER, 0, 0 },
@@ -311,7 +289,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         { 0, 0 },
         1,   /* map 2 of 2 */
-        { 0, 0, 0, 10 },   /* up right down left */
+        { 0, 0, 0, 9 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
         0,
@@ -319,11 +297,111 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules9,
+        zone_rules8,
         0,
         { { 0, 0, 0, 0 } },   /* pickups */
         0,
         { { 0, 0, 0, 0, 0 } },   /* portals */
+    },
+    /* 10: THE SHIP, map 1 */
+    {
+        "THE SHIP",
+        40, 48,
+        level_map10,
+        4,
+        {
+            { DIR_DOWN, 1, { {14, 23} }, 3 /* terry */, 0, CHAR_NO_SIGHT, LOOK_TERRY, 0, 0 },
+            { DIR_DOWN, 1, { {14, 18} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
+            { DIR_LEFT, 1, { {18, 19} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
+            { DIR_UP, 1, { {2, 11} }, 4 /* mechanic */, 0, 0, LOOK_MECHANIC, 0, 0 },
+        },
+        { 0, 0 },
+        0,   /* map 1 of 4 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
+        TRANS_FADE,
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
+        level_zones10,   /* zones */
+        zone_rules9,
+        1,
+        { { 3, 43, ITEM_STONE, 1 } },   /* pickups */
+        5,
+        { { 23, 26, 12, 3, 26 }, { 37, 26, 12, 17, 26 }, { 19, 19, 12, 0, 18 }, { 19, 20, 12, 0, 19 }, { 32, 12, 12, 11, 12 } },   /* portals */
+    },
+    /* 10: THE SHIP, map 2 */
+    {
+        "THE SHIP",
+        20, 48,
+        level_map11,
+        0,
+        {
+        },
+        { 0, 0 },
+        1,   /* map 2 of 4 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
+        TRANS_FADE,
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
+        level_zones11,   /* zones */
+        zone_rules9,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        8,
+        { { 3, 26, 11, 23, 26 }, { 17, 26, 11, 37, 26 }, { 0, 18, 11, 19, 19 }, { 0, 19, 11, 19, 20 }, { 3, 25, 13, 3, 25 }, { 17, 25, 13, 17, 25 }, { 11, 12, 11, 32, 12 }, { 11, 11, 13, 11, 11 } },   /* portals */
+    },
+    /* 10: THE SHIP, map 3 */
+    {
+        "THE SHIP",
+        20, 48,
+        level_map12,
+        0,
+        {
+        },
+        { 0, 0 },
+        2,   /* map 3 of 4 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
+        TRANS_FADE,
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
+        level_zones12,   /* zones */
+        zone_rules9,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        5,
+        { { 3, 25, 12, 3, 25 }, { 17, 25, 12, 17, 25 }, { 11, 11, 12, 11, 11 }, { 3, 26, 14, 3, 26 }, { 17, 26, 14, 17, 26 } },   /* portals */
+    },
+    /* 10: THE SHIP, map 4 */
+    {
+        "THE SHIP",
+        20, 48,
+        level_map13,
+        0,
+        {
+        },
+        { 0, 0 },
+        3,   /* map 4 of 4 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
+        TRANS_FADE,
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
+        level_zones13,   /* zones */
+        zone_rules9,
+        0,
+        { { 0, 0, 0, 0 } },   /* pickups */
+        2,
+        { { 3, 26, 13, 3, 26 }, { 17, 26, 13, 17, 26 } },   /* portals */
     },
 };
 
@@ -336,62 +414,77 @@ const char *const level_text[] = {
 /* Painted art. The run-length data is in levels_art.c (ROM bank BANK_ART). */
 extern const uint8_t art0_rle[];
 extern const uint16_t art0_rows[];
-static const uint8_t art0_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 13, 17, 20 };
+static const uint8_t art0_tiles[] = { 0, 1, 2, 7, 9, 12, 14, 15, 21, 27 };
 static const uint8_t art0_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
 static const MapArt art0 = { 10, art0_tiles, art0_kinds, art0_rle, art0_rows };
 extern const uint8_t art1_rle[];
 extern const uint16_t art1_rows[];
-static const uint8_t art1_tiles[] = { 0, 1, 2, 3, 10, 11, 12, 13, 17, 19, 20, 21, 22 };
-static const uint8_t art1_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 5, 5 };
-static const MapArt art1 = { 13, art1_tiles, art1_kinds, art1_rle, art1_rows };
+static const uint8_t art1_tiles[] = { 0, 1, 2, 7, 9, 12, 14, 21, 27, 30, 35 };
+static const uint8_t art1_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 3, 1, 5, 1 };
+static const MapArt art1 = { 11, art1_tiles, art1_kinds, art1_rle, art1_rows };
 extern const uint8_t art2_rle[];
 extern const uint16_t art2_rows[];
-static const uint8_t art2_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 17, 20, 21, 23 };
-static const uint8_t art2_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 3, 1, 5, 1 };
-static const MapArt art2 = { 11, art2_tiles, art2_kinds, art2_rle, art2_rows };
+static const uint8_t art2_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 12, 14, 15, 16, 17, 20, 27 };
+static const uint8_t art2_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 3, 1 };
+static const MapArt art2 = { 14, art2_tiles, art2_kinds, art2_rle, art2_rows };
 extern const uint8_t art3_rle[];
 extern const uint16_t art3_rows[];
-static const uint8_t art3_tiles[] = { 0, 1, 3, 4, 5, 8, 10, 11, 12, 13, 14, 15, 16, 20 };
-static const uint8_t art3_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 3, 1 };
-static const MapArt art3 = { 14, art3_tiles, art3_kinds, art3_rle, art3_rows };
+static const uint8_t art3_tiles[] = { 0, 1, 2, 5, 7, 9, 12, 14, 20, 27 };
+static const uint8_t art3_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
+static const MapArt art3 = { 10, art3_tiles, art3_kinds, art3_rle, art3_rows };
 extern const uint8_t art4_rle[];
 extern const uint16_t art4_rows[];
-static const uint8_t art4_tiles[] = { 0, 1, 3, 6, 8, 10, 11, 12, 16, 20 };
-static const uint8_t art4_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
-static const MapArt art4 = { 10, art4_tiles, art4_kinds, art4_rle, art4_rows };
+static const uint8_t art4_tiles[] = { 0, 1, 2, 7, 9, 12, 14, 16, 17, 20, 27 };
+static const uint8_t art4_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
+static const MapArt art4 = { 11, art4_tiles, art4_kinds, art4_rle, art4_rows };
 extern const uint8_t art5_rle[];
 extern const uint16_t art5_rows[];
-static const uint8_t art5_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 14, 15, 16, 20 };
-static const uint8_t art5_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
-static const MapArt art5 = { 11, art5_tiles, art5_kinds, art5_rle, art5_rows };
+static const uint8_t art5_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 12, 14, 16, 17, 21, 27 };
+static const uint8_t art5_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
+static const MapArt art5 = { 13, art5_tiles, art5_kinds, art5_rle, art5_rows };
 extern const uint8_t art6_rle[];
 extern const uint16_t art6_rows[];
-static const uint8_t art6_tiles[] = { 0, 1, 3, 4, 5, 8, 10, 11, 12, 14, 15, 17, 20 };
-static const uint8_t art6_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
+static const uint8_t art6_tiles[] = { 0, 1, 2, 7, 9, 12, 14, 15, 16, 17, 20, 27, 30 };
+static const uint8_t art6_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 5 };
 static const MapArt art6 = { 13, art6_tiles, art6_kinds, art6_rle, art6_rows };
 extern const uint8_t art7_rle[];
 extern const uint16_t art7_rows[];
-static const uint8_t art7_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 13, 14, 15, 16, 20, 21 };
-static const uint8_t art7_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 5 };
+static const uint8_t art7_tiles[] = { 0, 1, 2, 7, 8, 9, 12, 14, 20, 23, 27, 31, 35 };
+static const uint8_t art7_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1 };
 static const MapArt art7 = { 13, art7_tiles, art7_kinds, art7_rle, art7_rows };
 extern const uint8_t art8_rle[];
 extern const uint16_t art8_rows[];
-static const uint8_t art8_tiles[] = { 0, 1, 3, 8, 9, 10, 11, 12, 16, 18, 20, 22, 23 };
-static const uint8_t art8_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1 };
-static const MapArt art8 = { 13, art8_tiles, art8_kinds, art8_rle, art8_rows };
+static const uint8_t art8_tiles[] = { 0, 1, 2, 5, 6, 7, 9, 12, 14, 15, 27 };
+static const uint8_t art8_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+static const MapArt art8 = { 11, art8_tiles, art8_kinds, art8_rle, art8_rows };
 extern const uint8_t art9_rle[];
 extern const uint16_t art9_rows[];
-static const uint8_t art9_tiles[] = { 0, 1, 3, 6, 7, 8, 10, 11, 12, 13, 20 };
-static const uint8_t art9_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-static const MapArt art9 = { 11, art9_tiles, art9_kinds, art9_rle, art9_rows };
+static const uint8_t art9_tiles[] = { 0, 1, 2, 7, 9, 12, 14, 17, 20, 23, 27, 30, 35 };
+static const uint8_t art9_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 5, 1 };
+static const MapArt art9 = { 13, art9_tiles, art9_kinds, art9_rle, art9_rows };
 extern const uint8_t art10_rle[];
 extern const uint16_t art10_rows[];
-static const uint8_t art10_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 15, 16, 18, 20, 21, 23 };
-static const uint8_t art10_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 5, 1 };
-static const MapArt art10 = { 13, art10_tiles, art10_kinds, art10_rle, art10_rows };
+static const uint8_t art10_tiles[] = { 0, 1, 2, 7, 9, 12, 13, 14, 15, 16, 17, 18, 20, 21, 22, 24, 25, 26, 27, 29, 30, 31, 32, 33, 34, 35 };
+static const uint8_t art10_kinds[] = { 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 3, 5, 3, 1, 1, 1, 1, 1, 5, 5, 1, 1, 1, 1 };
+static const MapArt art10 = { 26, art10_tiles, art10_kinds, art10_rle, art10_rows };
+extern const uint8_t art11_rle[];
+extern const uint16_t art11_rows[];
+static const uint8_t art11_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 12, 14, 15, 16, 17, 19, 20, 21, 25, 26 };
+static const uint8_t art11_kinds[] = { 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 1, 5, 5, 1, 1 };
+static const MapArt art11 = { 17, art11_tiles, art11_kinds, art11_rle, art11_rows };
+extern const uint8_t art12_rle[];
+extern const uint16_t art12_rows[];
+static const uint8_t art12_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 12, 14, 15, 16, 17, 20, 21, 25, 28 };
+static const uint8_t art12_kinds[] = { 1, 1, 1, 1, 1, 1, 5, 1, 1, 1, 1, 1, 5, 5, 1, 1 };
+static const MapArt art12 = { 16, art12_tiles, art12_kinds, art12_rle, art12_rows };
+extern const uint8_t art13_rle[];
+extern const uint16_t art13_rows[];
+static const uint8_t art13_tiles[] = { 0, 1, 2, 7, 9, 12, 14, 16, 17, 20 };
+static const uint8_t art13_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 5 };
+static const MapArt art13 = { 10, art13_tiles, art13_kinds, art13_rle, art13_rows };
 
 /* Art for each entry of levels[] (0 = built-in graphics only). */
-const MapArt *const level_art[LEVEL_COUNT] = { &art0, &art1, &art2, &art3, &art4, &art5, &art6, &art7, &art8, &art9, &art10 };
+const MapArt *const level_art[LEVEL_COUNT] = { &art0, &art1, &art2, &art3, &art4, &art5, &art6, &art7, &art8, &art9, &art10, &art11, &art12, &art13 };
 
 /* Character looks, from tilesets/characters.png: up right down left
  * subdued body. */
