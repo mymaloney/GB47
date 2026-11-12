@@ -20,11 +20,11 @@ extern const char level_map9[];
 extern const uint8_t level_zones5[];
 
 /* Each level's zone rules: two bytes per zone, ACCESS_* bits per outfit. */
-static const uint8_t zone_rules0[] = { 2, 0 };   /* everywhere */
-static const uint8_t zone_rules1[] = { 2, 0 };   /* everywhere */
-static const uint8_t zone_rules2[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules0[] = { 1, 0 };   /* everywhere */
+static const uint8_t zone_rules1[] = { 1, 0 };   /* everywhere */
+static const uint8_t zone_rules2[] = { 1, 0 };   /* everywhere */
 static const uint8_t zone_rules3[] = { 2, 0 };   /* everywhere */
-static const uint8_t zone_rules4[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules4[] = { 1, 0 };   /* everywhere */
 static const uint8_t zone_rules5[] = { 2, 0, 1, 0 };   /* zone 1, zone 2 */
 static const uint8_t zone_rules6[] = { 2, 0 };   /* everywhere */
 static const uint8_t zone_rules7[] = { 2, 0 };   /* everywhere */

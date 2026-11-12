@@ -5,7 +5,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "fade",
     "zones": [
-      {"name": "everywhere", "rules": {"suit": "H"}}
+      {"name": "everywhere", "rules": {}}
     ],
     "maps": [
       {
@@ -58,7 +58,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "wipe",
     "zones": [
-      {"name": "everywhere", "rules": {"suit": "H"}}
+      {"name": "everywhere", "rules": {}}
     ],
     "maps": [
       {
@@ -112,7 +112,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "iris",
     "zones": [
-      {"name": "everywhere", "rules": {"suit": "H"}}
+      {"name": "everywhere", "rules": {}}
     ],
     "maps": [
       {
@@ -223,7 +223,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "curtain",
     "zones": [
-      {"name": "everywhere", "rules": {"suit": "H"}}
+      {"name": "everywhere", "rules": {}}
     ],
     "maps": [
       {
