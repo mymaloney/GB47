@@ -396,8 +396,11 @@ static void test_disguise_cones(void)
 {
     static uint8_t vis[VIEW_H][VIEW_W];
     GameState s;
+    LevelDef plain;
 
-    game_load(&levels[0], &s);
+    plain = levels[0];
+    plain.access = 0;                 /* a map with no access layer */
+    game_load(&plain, &s);
     CHECK(game_access(&s, s.px, s.py) == ACCESS_TRESPASS && game_regard(&s, 0) == ACCESS_TRESPASS,
           "no access layer: your own clothes trespass");
     s.disguise = DISGUISE_GUARD;

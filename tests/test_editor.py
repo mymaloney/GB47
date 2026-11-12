@@ -384,7 +384,7 @@ assert assets["first_tile"] == g.T["SPRITE_TILE_COUNT"] and len(assets["frames"]
 # suit; maps without a layer trespass in the suit and are legal in uniforms
 A_ = {k: g.G["ACCESS_" + k] for k in ("LEGAL", "TRESPASS", "HOSTILE")}
 assert gen_levels.ACCESS == "LTH" and [A_["LEGAL"], A_["TRESPASS"], A_["HOSTILE"]] == [0, 1, 2]
-plain, hall = levels[0]["maps"][0], levels[5]["maps"][0]
+plain, hall = {"map": levels[0]["maps"][0]["map"], "guards": []}, levels[5]["maps"][0]
 assert gen_levels.access_is_default(plain) and set(gen_levels.access_bytes(plain)) == {1}
 assert not gen_levels.access_is_default(hall)
 assert gen_levels.access_rows(hall, "none")[4] == "T" * 8 + "H" * 12
@@ -394,7 +394,10 @@ unpacked = [b for n, b in zip(rle[::2], rle[1::2]) for _ in range(n)]
 assert unpacked == gen_levels.access_bytes(hall) and max(rle[::2]) <= 255
 c6 = gen_levels.generated_files(levels)
 assert "const uint8_t level_access5[] = { 8, 1, 12, 2," in c6["levels_maps.c"]
-assert "level_access5,   /* access */" in c6["levels.c"] and "level_access0" not in c6["levels.c"]
+assert "level_access5,   /* access */" in c6["levels.c"]
+bare = json.loads(json.dumps(levels[0]))
+bare["maps"][0].pop("access", None)
+assert "level_access0" not in gen_levels.generated_files([bare])["levels.c"], "no layer, no data"
 l6 = g.Level(levels[5])
 w6 = g.new_game(l6)
 st = w6.part[0]
