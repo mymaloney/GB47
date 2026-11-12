@@ -198,7 +198,7 @@ static void test_throw_lures_one_guard(void)
     GameState s;
     int i;
     world_load(&test_level, 0, &w);
-    w.part[0].px = 3; w.part[0].py = 1;
+    w.part[0].px = 11; w.part[0].py = 2;     /* behind guard 0, out of guard 1's cone */
     undo_clear();
     before = w;
     undo_push(&w);
@@ -216,7 +216,7 @@ static void test_throw_lures_one_guard(void)
     /* walk path (10,3)->(10,2)->(10,1)->(9,1) */
     for (i = 0; i < 3; i++) game_step(&s, ACT_WAIT);
     CHECK(s.guards[0].x == 9 && s.guards[0].y == 1, "reached the noise");
-    CHECK(s.status == STATUS_PLAYING, "player 6 tiles away is unseen");
+    CHECK(s.status == STATUS_PLAYING, "the player behind it is unseen");
     for (i = 0; i < 3; i++) game_step(&s, ACT_WAIT);
     CHECK(s.guards[0].x == 10 && s.guards[0].y == 3, "walked back to post");
     CHECK(s.guards[0].mode == GUARD_PATROL, "back on routine");
@@ -351,14 +351,25 @@ static void test_body_alarm(void)
     CHECK(game_step(&s, ACT_DRAG + DIR_RIGHT) == 1, "push");
     CHECK(s.guards[0].x == 13 && s.status == STATUS_PLAYING, "(13,4) unseen");
     CHECK(game_step(&s, ACT_DRAG + DIR_RIGHT) == 1, "push into view");
-    CHECK(s.status == STATUS_ALARM, "guard sees body: alarm");
+    CHECK(s.status == STATUS_CAUGHT, "pushing a body is a crime: caught in the big cone");
 
-    /* a takedown in plain view of another guard also raises the alarm */
+    /* a body in view, with nobody doing anything: the alarm */
+    game_load(&td_level, &s);
+    s.guards[0].mode = GUARD_BODY;
+    s.guards[0].x = 15; s.guards[0].y = 3;   /* 2 in front of guard 1 */
+    s.px = 2; s.py = 1;
+    CHECK(game_step(&s, ACT_WAIT) == 1 && s.status == STATUS_ALARM, "guard sees body: alarm");
+    s.status = STATUS_PLAYING;
+    s.guards[0].x = 12; s.guards[0].y = 5;   /* 4 down, 3 aside: outside the normal cone */
+    CHECK(game_step(&s, ACT_WAIT) == 1 && s.status == STATUS_PLAYING,
+          "bodies are seen with the normal cone");
+
+    /* a takedown in view of another guard is a crime: you're caught */
     game_load(&td_level, &s);
     s.guards[0].x = 14; s.guards[0].y = 5; s.guards[0].facing = DIR_RIGHT;
     s.px = 13; s.py = 5;
     CHECK(game_step(&s, ACT_TAKEDOWN) == 1, "takedown");
-    CHECK(s.status == STATUS_ALARM, "guard 1 saw the struggle");
+    CHECK(s.status == STATUS_CAUGHT, "guard 1 saw the struggle");
 }
 
 /* Disguise tests. The whole map is one zone, hostile to your own
@@ -431,7 +442,8 @@ static void test_disguise_cones(void)
           "a GUARD uniform is legal here");
     game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
     CHECK(vis[3][5] == VIS_WATCHED, "blind guard's cone shown as watched");
-    CHECK(vis[3][7] == VIS_NONE, "watch cone is the normal size");
+    CHECK(vis[3][9] == VIS_WATCHED && vis[3][10] == VIS_NONE && vis[0 + 1][8] == VIS_WATCHED,
+          "it watches for crimes with the big cone");
     s.px = 4; s.py = 3;
     CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING,
           "standing right in front of a blind guard is fine");
@@ -452,8 +464,14 @@ static void test_disguise_suspicious(void)
     s.disguise = DISGUISE_GUARD;
     s.items[ITEM_STONE] = 2;
     s.px = 7; s.py = 3;
-    CHECK(game_throw(&s, ITEM_STONE, 7, 1) && s.status == STATUS_PLAYING,
-          "outside the normal cone it's fine");
+    CHECK(game_throw(&s, ITEM_STONE, 7, 1) && s.status == STATUS_CAUGHT,
+          "outside the normal cone, a crime is still caught: the big cone");
+    game_load(&dz_level, &s);
+    s.disguise = DISGUISE_GUARD;
+    s.items[ITEM_STONE] = 2;
+    s.px = 12; s.py = 3;                     /* beyond both big cones, after guard 1's step */
+    CHECK(game_throw(&s, ITEM_STONE, 12, 1) && s.status == STATUS_PLAYING,
+          "outside the big cone it's fine");
 
     /* bodies are still spotted */
     game_load(&dz_level, &s);
@@ -554,7 +572,7 @@ static void test_big_map(void)
         for (x = 0; x < VIEW_W; x++)
             if (part[y][x] != full[y + 4][x + 20]) ok = 0;
     CHECK(ok, "partial vision block matches full map");
-    CHECK(full[4][28] == VIS_SEEN && full[4][29] == VIS_NONE, "cone in screen 2");
+    CHECK(full[4][28] == VIS_SEEN && full[4][29] != VIS_SEEN, "cone in screen 2");
 
     /* noise across the wall: the guard hears it (hearing ignores walls)
      * and walks the long way round through the gap, then back */
@@ -860,8 +878,8 @@ static void test_access(void)
     zone_load(&s, 4, 8);
     CHECK(game_regard(&s, 0) == ACCESS_LEGAL, "guard 0 lets you be");
     game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
-    CHECK(vis[8][3] == VIS_WATCHED && vis[8][6] == VIS_WATCHED && vis[8][7] == VIS_NONE,
-          "its cone is shown as watching, normal size");
+    CHECK(vis[8][3] == VIS_WATCHED && vis[8][9] == VIS_WATCHED && vis[8][10] == VIS_NONE,
+          "its cone is shown as watching, as big as the crime cone");
     CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING, "standing in a legal area");
     CHECK(game_throw(&s, ITEM_STONE, 4, 5) && s.status == STATUS_CAUGHT,
           "but suspicious acts are still noticed");
@@ -885,8 +903,8 @@ static void test_access(void)
     game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
     CHECK(vis[8][13] == VIS_SEEN && vis[8][14] == VIS_SEEN && vis[8][16] == VIS_SEEN &&
           vis[8][17] == VIS_NONE, "normal cone to x=13, big cone over the hostile part");
-    CHECK(vis[6][13] == VIS_NONE && vis[6][14] == VIS_SEEN,
-          "the big cone's width only counts on hostile cells");
+    CHECK(vis[6][13] == VIS_WATCHED && vis[6][14] == VIS_SEEN,
+          "the big cone sees you only on hostile cells, and watches for crimes elsewhere");
     CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_CAUGHT, "seen from 6 away in a hostile area");
     zone_load(&s, 13, 8);
     s.guards[0].x = 8;                       /* 5 away, on a trespassing cell */
@@ -1304,30 +1322,41 @@ static void test_solvable(void)
 /* Each level must actually need the mechanics it teaches: with that
  * mechanic switched off, the solver must fail. The level editor can show
  * the same check for any level. */
+/* Levels are named, not numbered: the designer adds and reorders them. */
 static const struct {
-    int  level;        /* 1-based */
+    const char *level; /* its name */
     int  without;      /* SOLVE_USE_* bits to switch off */
     const char *what;
 } required[] = {
-    { 4, SOLVE_USE_ITEMS,    "items" },
-    { 3, SOLVE_USE_TALK,     "petting the dog" },
-    { 5, SOLVE_USE_TAKEDOWN, "a takedown" },
-    { 5, SOLVE_USE_DRAG,     "dragging the body" },
-    { 6, SOLVE_USE_UNIFORM,  "a disguise" },
-    /* level 7: the stone lures the shaft sentry; or take the corridor
-     * guard's uniform, which the sentry is blind to */
-    { 7, SOLVE_USE_ITEMS | SOLVE_USE_UNIFORM, "the stone or a disguise" },
+    { "LURE",        SOLVE_USE_ITEMS,    "items" },
+    { "THE SENTRY",  SOLVE_USE_TALK,     "petting the dog" },
+    { "CLEANUP",     SOLVE_USE_TAKEDOWN, "a takedown" },
+    { "CLEANUP",     SOLVE_USE_DRAG,     "dragging the body" },
+    { "DRESS CODE",  SOLVE_USE_UNIFORM,  "a disguise" },
+    /* the stone lures the shaft sentry; or take the corridor guard's
+     * uniform, which the sentry is blind to */
+    { "COMPOUND",    SOLVE_USE_ITEMS | SOLVE_USE_UNIFORM, "the stone or a disguise" },
 };
 
 /* Levels built around a tile must need it: with every such tile turned
  * into wall, the solver must fail. */
 static const struct {
-    int  level;        /* 1-based */
+    const char *level; /* its name */
     char tile;
     const char *what;
 } required_tiles[] = {
-    { 8, 'V', "the vent" },
+    { "AIR DUCTS", 'V', "the vent" },
 };
+
+/* The first map of the level with this name, or -1 (and a failure). */
+static int level_named(const char *name)
+{
+    int i;
+    for (i = 0; i < LEVEL_COUNT; i++)
+        if (levels[i].part == 0 && strcmp(levels[i].name, name) == 0) return i;
+    CHECK(0, "there's no level called %s (renamed? update the tables in test_game.c)", name);
+    return -1;
+}
 
 static void test_tiles_needed(void)
 {
@@ -1336,14 +1365,17 @@ static void test_tiles_needed(void)
     size_t i;
     char sol[1024];
     for (r = 0; r < sizeof required_tiles / sizeof required_tiles[0]; r++) {
-        LevelDef copy = levels[level_start(required_tiles[r].level)];
+        int first = level_named(required_tiles[r].level);
+        LevelDef copy;
+        if (first < 0) continue;
+        copy = levels[first];
         for (i = 0; copy.map[i]; i++)
             map[i] = copy.map[i] == required_tiles[r].tile ? '#' : copy.map[i];
         map[i] = 0;
         copy.map = map;
         CHECK(solve(&copy, 0, SOLVE_USE_ALL, sol, sizeof sol) == 0,
-              "level %d (%s) can be beaten without %s: %s",
-              required_tiles[r].level, copy.name, required_tiles[r].what, sol);
+              "level %s can be beaten without %s: %s",
+              copy.name, required_tiles[r].what, sol);
     }
 }
 
@@ -1352,11 +1384,11 @@ static void test_mechanics_needed(void)
     unsigned r;
     char sol[1024];
     for (r = 0; r < sizeof required / sizeof required[0]; r++) {
-        int first = level_start(required[r].level);
-        const LevelDef *lv = &levels[first];
+        int first = level_named(required[r].level);
+        if (first < 0) continue;
         CHECK(solve(levels, first, SOLVE_USE_ALL & ~required[r].without, sol, sizeof sol) == 0,
-              "level %d (%s) can be beaten without %s: %s",
-              required[r].level, lv->name, required[r].what, sol);
+              "level %s can be beaten without %s: %s",
+              required[r].level, required[r].what, sol);
     }
 }
 

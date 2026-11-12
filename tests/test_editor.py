@@ -37,6 +37,20 @@ def with_map(lv, rows, k=0):
 
 first_rows = levels[0]["maps"][0]["map"]
 
+
+def named(name):
+    """A level by name: the designer adds and reorders levels."""
+    return next(lv for lv in levels if lv["name"] == name)
+
+
+def level_index(name):
+    return [lv["name"] for lv in levels].index(name)
+
+
+def first_map(name):
+    """Index in the level table (all maps, in order) of a level's first map."""
+    return sum(len(lv["maps"]) for lv in levels[:level_index(name)])
+
 # playtest through the real rules
 lv = g.Level(levels[0])
 w = g.new_game(lv)
@@ -218,7 +232,7 @@ for (x, y), want in expect.items():
     assert ap[y][x] == want, f"auto-paint ({x},{y}): {ap[y][x]} != {want}"
 
 # auto-tile learns from painted examples, and repaints only around edits
-cfg = tset["autopaint"]
+cfg = dict(tset["autopaint"], taught={})       # without the designer's own lessons
 room = ["#" * 20] + ["#" + "." * 18 + "#"] * 14 + ["#" * 20]
 taught = autopaint.autopaint(room, cfg)
 taught[0][0] = 7                                   # "use tile 7 for this corner"
@@ -256,7 +270,7 @@ assert server.allowed({"Host": f"localhost:{server.PORT}", "Origin": f"http://{o
 assert not server.allowed({"Host": f"evil.example:{server.PORT}"}), "DNS rebinding"
 assert not server.allowed({"Host": ok_host, "Origin": "http://evil.example"}), "cross-site"
 assert not server.allowed({})
-needs = server.analyze(g.Level(levels[4]))["needs"]
+needs = server.analyze(g.Level(named("CLEANUP")))["needs"]
 assert needs.get("takedown") == "yes" and needs.get("drag") == "yes", needs
 
 # level transitions: names match TRANS_*, the choice reaches the ROM data,
@@ -278,7 +292,7 @@ assert pat["in"][3][2] == 0 and pat["out"][3][2] == pat["steps"] - 1
 assert g.transition("fade", 0, 0)["steps"] == 0
 
 # characters you talk to, scripts and switch cells: level 3's dog
-dog = levels[2]
+dog = named("THE SENTRY")
 npc, sw = dog["maps"][0]["guards"][2], dog["maps"][0]["switches"][0]
 assert npc["look"] == "dog" and npc["sees"] is False and npc["route"] == [[11, 5]]
 assert gen_levels.level_flags(dog) == ["dog"]
@@ -290,7 +304,7 @@ assert texts == ["THE DOG WAGS ITS\nTAIL.", "YOU PET THE DOG."]
 assert gen_levels.cell_rows(dog["maps"][0])[sw["y"]][sw["x"]] == "0", "switch cells are digits to the rules"
 c3 = gen_levels.generate_c(levels)
 assert ('{ DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, LOOK_DOG, '
-        '"PET", script2_2 },') in c3, "the dog in levels.c"
+        f'"PET", script{first_map("THE SENTRY")}_2 }},') in c3, "the dog in levels.c"
 assert "LOOK_DOG 2" in gen_levels.generate_h(levels) and "look_tile_data" in c3
 assert "CELL_FLOOR, CELL_EXIT," in c3 and '"YOU PET THE DOG.",' in c3
 assert gen_levels.dumps(levels) == (ROOT / "levels" / "levels.json").read_text(), "levels.json round-trips"
@@ -386,7 +400,7 @@ assert assets["first_tile"] == g.T["SPRITE_TILE_COUNT"] and len(assets["frames"]
 A_ = {k: g.G["ACCESS_" + k] for k in ("LEGAL", "TRESPASS", "HOSTILE")}
 assert gen_levels.ACCESS == "LTH" and [A_["LEGAL"], A_["TRESPASS"], A_["HOSTILE"]] == [0, 1, 2]
 assert gen_levels.MAX_ZONES == g.G["MAX_ZONES"] and gen_levels.DISGUISE_MAX == g.G["DISGUISE_MAX"]
-dress = levels[5]
+dress = named("DRESS CODE")
 assert [z["name"] for z in dress["zones"]] == ["zone 1", "zone 2"]
 assert gen_levels.zone_rule(dress["zones"][0], "suit") == "H"
 assert gen_levels.zone_rule(dress["zones"][1], "suit") == "T"
@@ -397,18 +411,18 @@ rle = gen_levels.zone_rle(hall)
 unpacked = [b for n, b in zip(rle[::2], rle[1::2]) for _ in range(n)]
 assert unpacked == [int(c, 16) for r in gen_levels.zone_rows(hall) for c in r] and max(rle[::2]) <= 255
 assert gen_levels.zone_rule_bytes(dress) == [A_["HOSTILE"], 0, A_["TRESPASS"], 0]
-# the other levels are one zone each (their rules are the designer's choice)
-assert all([z["name"] for z in lv["zones"]] == ["everywhere"] and
-           set(lv["zones"][0]["rules"].values()) <= set("LTH")
-           for n, lv in enumerate(levels) if n != 5)
+# every level has zones, with L/T/H rules (which ones is the designer's choice)
+assert all(lv["zones"] and all(z["name"] and set(z["rules"].values()) <= set("LTH")
+                               for z in lv["zones"]) for lv in levels)
 c6 = gen_levels.generated_files(levels)
-assert "const uint8_t level_zones5[] = { 8, 1, 12, 0," in c6["levels_maps.c"]
-assert "level_zones5,   /* zones */" in c6["levels.c"] and "zone_rules5,\n" in c6["levels.c"]
+k6, n6 = first_map("DRESS CODE"), level_index("DRESS CODE")
+assert f"const uint8_t level_zones{k6}[] = {{ 8, 1, 12, 0," in c6["levels_maps.c"]
+assert f"level_zones{k6},   /* zones */" in c6["levels.c"] and f"zone_rules{n6},\n" in c6["levels.c"]
 assert "level_zones0" not in c6["levels.c"], "one zone everywhere: no zone map"
 bare = json.loads(json.dumps(levels[0]))
 bare.pop("zones")
 assert "zone_rules0" not in gen_levels.generated_files([bare])["levels.c"], "no zones, no table"
-l6 = g.Level(levels[5])
+l6 = g.Level(dress)
 w6 = g.new_game(l6)
 st = w6.part[0]
 assert g.lib.game_access(C.byref(st), 3, 3) == A_["TRESPASS"]
@@ -472,17 +486,18 @@ assert g.lib.game_access(C.byref(su), 9, 12) == A_["LEGAL"]       # zone 1
 
 # disguises: a list in tilesets/characters.json, made in the editor; the
 # suit first. Each is drawn with a look; the player uses its down frame
-assert g.UNIFORMS == ["suit", "guard", "officer"] and gen_levels.UNIFORMS is g.UNIFORMS
-assert [d["look"] for d in gen_levels.disguises()] == ["player", "player_guard", "player_officer"]
+assert g.UNIFORMS[:3] == ["suit", "guard", "officer"] and gen_levels.UNIFORMS is g.UNIFORMS
+assert [d["look"] for d in gen_levels.disguises()][:3] == ["player", "player_guard", "player_officer"]
+shipped = list(g.UNIFORMS)            # the designer may have made more
 assert gen_levels.validate_disguises() == []
 vp = g.view(l6, g.new_game(l6))
 names = gen_levels.looks()["looks"]
 assert vp["sprites"][0]["t"] == g.T["SPRITE_TILE_COUNT"] + names.index("player") * 6 + g.G["DIR_DOWN"]
 assert g.player_sprite(2) == g.T["SPRITE_TILE_COUNT"] + names.index("player_officer") * 6 + 2
 gen_all = gen_levels.generated_files(levels)
-assert "#define DISGUISE_TYPES 3" in gen_all["levels.h"]
-assert "disguise_look[DISGUISE_TYPES] = { LOOK_PLAYER, LOOK_PLAYER_GUARD, LOOK_PLAYER_OFFICER }" \
-    in gen_all["levels.c"]
+assert f"#define DISGUISE_TYPES {len(shipped)}" in gen_all["levels.h"]
+assert "disguise_look[DISGUISE_TYPES] = { " + ", ".join(
+    "LOOK_" + d["look"].upper() for d in gen_levels.disguises()) + " }" in gen_all["levels.c"]
 assert "1 /* guard */" in gen_all["levels.c"] and "2 /* officer */" in gen_all["levels.c"]
 # who uses an outfit, and renaming one everywhere
 assert gen_levels.outfit_users(levels, "officer") == ["DRESS CODE", "AIR DUCTS", "ANNEX"], \
@@ -494,9 +509,9 @@ ren = json.loads(json.dumps(levels))
 gen_levels.rename_outfit(ren, "officer", "captain")
 assert gen_levels.outfit_users(ren, "officer") == [] and \
     gen_levels.outfit_users(ren, "captain") == ["DRESS CODE", "AIR DUCTS", "ANNEX"]
-assert "captain" in ren[5]["maps"][0]["guards"][0]["enforcer"]
+assert "captain" in ren[level_index("DRESS CODE")]["maps"][0]["guards"][0]["enforcer"]
 # levels from before: the suit was called "none" in rules and enforcer tags
-older = json.loads(json.dumps(levels[5]))
+older = json.loads(json.dumps(dress))
 older["zones"][0]["rules"] = {"none": "H"}
 older["maps"][0]["guards"][0]["enforcer"] = ["none", "officer"]
 older = gen_levels.upgrade(older)
@@ -504,7 +519,7 @@ assert older["zones"][0]["rules"] == {"suit": "H"}
 assert older["maps"][0]["guards"][0]["enforcer"] == ["suit", "officer"]
 # a body gives a disguise, never the suit
 assert any("uniform its body gives" in e for e in gen_levels.validate_level(
-    json.loads(json.dumps(levels[5]).replace('"uniform": "officer"', '"uniform": "suit"'))))
+    json.loads(json.dumps(dress).replace('"uniform": "officer"', '"uniform": "suit"'))))
 # the list itself is checked (on a copy of the settings)
 with tempfile.TemporaryDirectory() as tmp:
     for f in ("characters.json", "characters.png"):
@@ -525,7 +540,7 @@ with tempfile.TemporaryDirectory() as tmp:
     finally:
         ts.CHARACTERS = real
         gen_levels.forget_tilesets()
-assert g.UNIFORMS == ["suit", "guard", "officer"]
+assert g.UNIFORMS == shipped
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])

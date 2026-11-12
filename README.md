@@ -370,23 +370,26 @@ enforce the rule of the zone you are standing in:
 
 | Where you stand is | A guard | Its cone on that cell is |
 |---|---|---|
-| **Legal** | Ignores you. It still spots bodies, takedowns, and you doing something **suspicious** | Dotted |
+| **Legal** | Ignores you, unless you commit a **crime** (below) | Dotted |
 | **Trespassing** | Catches you in its normal cone: 4 tiles deep, 3 across | Shaded |
 | **Hostile** | Catches you in a huge cone: 7 deep, widening to 7 across | Shaded |
 
 So one cone can be dotted on the dance floor and shaded backstage, and it
-changes when you change clothes. Suspicious means: a takedown, dragging
-or pushing a body, throwing, or changing clothes. A guard who walks into
-you where you're legal just waits for you to move.
+changes when you change clothes. A guard who walks into you where you're
+legal just waits for you to move.
+
+**Crimes** are caught with the huge cone by every guard that watches,
+wherever you are: a takedown (including one still in progress), dragging
+or pushing a body, throwing, or changing clothes. The dotted part of a
+cone shows where a guard would catch a crime but doesn't mind you being
+there. Bodies lying around are spotted with the normal cone.
 
 An **enforcer** is the exception: a guard tagged as seeing through an
 outfit treats anyone wearing it as trespassing, even where it is legal.
 
 A level without zones treats your own suit as trespassing everywhere and
-uniforms as legal everywhere. Levels 1-5 and 7-9 are one zone each,
-hostile to the suit; level 6 has two, with its hall hostile to the suit
-and the room on the left only trespassing. Bodies are always spotted with
-the normal cone. The rules are `ACCESS_*` in `src/game.h` and the number
+uniforms as legal everywhere. DRESS CODE has two zones, with its hall
+hostile to the suit and the room on the left only trespassing. The rules are `ACCESS_*` in `src/game.h` and the number
 of disguises `DISGUISE_TYPES` in the generated `src/levels.h`; cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and
 `HOSTILE_HALF`.
 

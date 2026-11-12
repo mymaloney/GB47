@@ -302,7 +302,7 @@ uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y)
 void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
                          uint8_t w, uint8_t h, uint8_t *vis)
 {
-    uint8_t  i, st, cone, mark;
+    uint8_t  i, st, mark;
     int8_t   fwd, side, half;
     int16_t  tx, ty;
     uint8_t *v;
@@ -319,9 +319,10 @@ void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
         lx = -fy;
         ly = fx;
 
-        /* Every tile of the big cone: a hostile tile is seen from that far;
-         * any other only if it is in the normal cone too, where it is
-         * either seen (trespassing) or just watched (legal). */
+        /* Every tile of the big cone, which is where crimes (suspicious
+         * acts) are caught. A hostile tile is seen from that far; a
+         * trespassing one only in the normal cone; anywhere else in the big
+         * cone is watched (no crimes there). */
         for (fwd = 1; fwd <= HOSTILE_RANGE; fwd++) {
             half = cone_half(CONE_HOSTILE, fwd);
             for (side = -half; side <= half; side++) {
@@ -330,26 +331,22 @@ void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
                 /* only tiles inside the requested block */
                 if (tx < x0 || ty < y0 || tx >= x0 + w || ty >= y0 + h) continue;
                 st = regard_at(s, i, (uint8_t)tx, (uint8_t)ty);
-                if (st == ACCESS_HOSTILE) {
-                    cone = CONE_HOSTILE;
+                mark = VIS_WATCHED;
+                if (st == ACCESS_HOSTILE ||
+                    (st == ACCESS_TRESPASS && fwd <= VISION_RANGE &&
+                     side <= cone_half(CONE_NORMAL, fwd) && -side <= cone_half(CONE_NORMAL, fwd)))
                     mark = VIS_SEEN;
-                } else {
-                    if (fwd > VISION_RANGE || side > cone_half(CONE_NORMAL, fwd) ||
-                        -side > cone_half(CONE_NORMAL, fwd)) continue;
-                    cone = CONE_NORMAL;
-                    mark = st == ACCESS_TRESPASS ? VIS_SEEN : VIS_WATCHED;
-                }
                 v = &vis[(uint16_t)(ty - y0) * w + (tx - x0)];
                 if (*v >= mark) continue;
-                if (cone_sees(g, (uint8_t)tx, (uint8_t)ty, cone)) *v = mark;
+                if (cone_sees(g, (uint8_t)tx, (uint8_t)ty, CONE_HOSTILE)) *v = mark;
             }
         }
     }
 }
 
 /* Is the player spotted? suspicious = the player is doing something
- * (takedown, dragging, throwing, changing) that guards notice even where
- * the player is allowed to be. */
+ * (takedown, dragging, throwing, changing): a crime, which every watching
+ * guard catches with the big cone, wherever the player is. */
 static uint8_t player_spotted(const GameState *s, uint8_t suspicious)
 {
     uint8_t i, st;
@@ -359,13 +356,13 @@ static uint8_t player_spotted(const GameState *s, uint8_t suspicious)
         st = regard_at(s, i, s->px, s->py);
         if (st == ACCESS_LEGAL && !suspicious) continue;
         if (cone_sees(g, s->px, s->py,
-                      st == ACCESS_HOSTILE ? CONE_HOSTILE : CONE_NORMAL)) return 1;
+                      st == ACCESS_HOSTILE || suspicious ? CONE_HOSTILE : CONE_NORMAL)) return 1;
     }
     return 0;
 }
 
-/* Does any watching guard see a body or a guard being taken down? (With
- * the normal cone, wherever it lies.) */
+/* Does any watching guard see a body (with the normal cone) or a guard
+ * being taken down (a crime: the big cone)? */
 static uint8_t body_spotted(const GameState *s)
 {
     uint8_t i, j;
@@ -374,7 +371,8 @@ static uint8_t body_spotted(const GameState *s)
         if (GUARD_ACTIVE(b)) continue;
         for (i = 0; i < s->guard_count; i++)
             if (GUARD_ACTIVE(&s->guards[i]) && SIGHTED(i) &&
-                cone_sees(&s->guards[i], b->x, b->y, CONE_NORMAL)) return 1;
+                cone_sees(&s->guards[i], b->x, b->y,
+                          b->mode == GUARD_SUBDUED ? CONE_HOSTILE : CONE_NORMAL)) return 1;
     }
     return 0;
 }
