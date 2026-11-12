@@ -33,4 +33,8 @@
 /* Copy n bytes at src, which is in ROM bank `bank`, to dst (in RAM). */
 void far_read(uint8_t bank, void *dst, const void *src, uint16_t n);
 
+/* The same for run-length data: src is (run, byte) pairs that unpack to
+ * exactly n bytes. */
+void far_read_rle(uint8_t bank, uint8_t *dst, const uint8_t *src, uint16_t n);
+
 #endif

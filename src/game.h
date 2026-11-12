@@ -69,13 +69,27 @@ extern const ItemDef item_defs[ITEM_TYPES];
 #define DISGUISE_GUARD   1
 #define DISGUISE_OFFICER 2
 
-/* How a guard treats the disguise you're wearing. */
-#define ATT_HOSTILE  0   /* big cone (HOSTILE_RANGE) */
-#define ATT_ENFORCER 1   /* normal cone */
-#define ATT_BLIND    2   /* ignores you, but the normal cone still spots
-                            bodies, takedowns and suspicious actions */
-#define ATT_IGNORE   3   /* no cone at all: never catches you or raises the
-                            alarm (a dog, a cleaner...). Still hears noises. */
+/* Access: where each outfit may be. Every cell of a map says, for each
+ * disguise, whether someone wearing it is legal there, trespassing, or in
+ * a hostile area. Guards don't have opinions of their own: they enforce
+ * these rules for the cell the player is standing on.
+ *
+ *   legal        guards ignore you. Their normal cone still spots bodies,
+ *                takedowns and suspicious actions.
+ *   trespassing  a guard whose normal cone covers you catches you.
+ *   hostile      as trespassing, but with the big cone (HOSTILE_RANGE).
+ *
+ * The one exception is an enforcer: a guard can be tagged as seeing
+ * through particular disguises (GuardDef.enforcer), and treats someone
+ * wearing one as trespassing even where that outfit is legal.
+ *
+ * One byte per cell: two bits per disguise, disguise d in bits 2d, 2d+1. */
+#define ACCESS_LEGAL    0
+#define ACCESS_TRESPASS 1
+#define ACCESS_HOSTILE  2
+/* A map without an access layer: your own clothes trespass everywhere,
+ * uniforms are legal everywhere. */
+#define ACCESS_DEFAULT  (ACCESS_TRESPASS << (2 * DISGUISE_NONE))
 
 /* What a guard is doing. */
 #define GUARD_PATROL      0  /* following its route (or standing post) */
@@ -169,22 +183,24 @@ typedef struct {
 /* ---- Static level data (lives in ROM) ---- */
 
 /* A character: a guard, or anyone else in the map (a dog, a cleaner...).
- * They all patrol a route (or stand still), see with a cone that depends
- * on their attitude to your disguise (or not at all), hear noises, block
+ * They all patrol a route (or stand still), watch with a cone and enforce
+ * the map's access rules (or don't watch at all), hear noises, block
  * walking while standing, and can be taken down and/or talked to. The
  * code calls them all guards. */
 #define CHAR_NO_TAKEDOWN 1   /* GuardDef.flags: B can't take it down */
+#define CHAR_NO_SIGHT    2   /* no cone at all: never catches you or raises
+                                the alarm (a dog, a cleaner...). Still
+                                hears noises. */
 
 typedef struct {
     uint8_t facing;          /* initial facing; only matters if wp_count == 1 */
     uint8_t wp_count;        /* 1 = stationary sentry */
     Point   wp[MAX_WAYPOINTS]; /* patrol loop; guard starts on wp[0] */
     uint8_t uniform;         /* DISGUISE_* worn; NONE = nothing to take */
-    /* Attitude to each disguise, indexed by DISGUISE_*: 'H' hostile,
-     * 'E' enforcer, 'B' blind, 'I' ignores you. e.g. "HBE" = hostile to
-     * your own clothes, blind to GUARD, enforcer to OFFICER. 0 = enforcer
-     * to everything. */
-    const char *attitude;
+    /* Disguises it sees through: bit DISGUISE_x set = wearing x counts as
+     * trespassing to this guard even where x is legal. 0 = just enforces
+     * the map's access rules. */
+    uint8_t     enforcer;
     uint8_t     flags;       /* CHAR_* */
     uint8_t     look;        /* which sprites draw it (levels.h LOOK_*);
                                 only looks, the rules never read it */
@@ -219,6 +235,10 @@ typedef struct {
     uint8_t     transition;
     uint8_t     switch_count;
     SwitchDef   switches[MAX_SWITCHES];
+    /* The access layer (see ACCESS_*): width * height bytes, run-length
+     * encoded as (run, byte) pairs. 0 = ACCESS_DEFAULT everywhere. Like
+     * the map, it is in ROM bank BANK_MAPS and only game_use reads it. */
+    const uint8_t *access;
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */
@@ -260,6 +280,11 @@ void game_use(const LevelDef *lvl);
  * map already do). */
 void game_map_changed(void);
 
+/* Forget everything cached about level data. game_load does this; call
+ * it when the data behind a LevelDef pointer may have been replaced (the
+ * editor builds levels at addresses it reuses). */
+void game_data_changed(void);
+
 /* The player steps into this map at (x, y) from a neighbouring one: counts
  * as a turn, wins on an exit, and guards who can see the spot catch them,
  * but guards don't move. Returns 1. */
@@ -287,7 +312,8 @@ uint8_t game_guard_at(const GameState *s, uint8_t x, uint8_t y);
  *
  * A guard that sees a body (or a takedown in progress) raises the alarm.
  * Takedowns, dragging, throwing and changing clothes are suspicious: even
- * guards blind to your disguise catch you doing them in their normal cone. */
+ * where your outfit is legal, guards catch you doing them in their normal
+ * cone. */
 uint8_t game_step(GameState *s, uint8_t action);
 
 /* Index of the character ACT_TALK would talk to, or 0xFF. */
@@ -335,12 +361,19 @@ uint8_t game_height(void);
 /* Can this guard see tile (x, y) with the normal cone (+ line of sight)? */
 uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y);
 
-/* ATT_* of guard idx toward the player's current disguise. */
-uint8_t game_attitude(const GameState *s, uint8_t idx);
+/* ACCESS_* of cell (x, y) for the disguise the player is wearing.
+ * Outside the map counts as trespassing. */
+uint8_t game_access(const GameState *s, uint8_t x, uint8_t y);
+
+/* How guard idx regards the player where they stand now: ACCESS_*, with
+ * its enforcer tag applied. Always ACCESS_LEGAL for one that doesn't
+ * watch (CHAR_NO_SIGHT). */
+uint8_t game_regard(const GameState *s, uint8_t idx);
 
 /* Vision for the w x h block of tiles starting at (x0, y0), written row by
- * row into vis (w * h bytes): VIS_SEEN where a guard would spot the player,
- * VIS_WATCHED where only a blind guard looks (bodies, suspicious acts).
+ * row into vis (w * h bytes): VIS_SEEN where a guard would catch the player
+ * in what they're wearing, VIS_WATCHED where a guard is looking but the
+ * player is legal (bodies and suspicious acts are still noticed).
  * The Game Boy only asks for the part of the map on screen. */
 #define VIS_NONE    0
 #define VIS_WATCHED 1

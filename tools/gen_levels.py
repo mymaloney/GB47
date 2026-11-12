@@ -37,10 +37,13 @@ JSON format, one object per level:
           "route":    [[1, 5], [18, 5]],   patrol loop, starts at the first
                                            point; one point = stands still
           "uniform":  "none",              none/guard/officer (from body)
-          "attitude": null,                or e.g. "HBE": hostile/enforcer/
-                                           blind/ignores (I) to own clothes,
-                                           GUARD, OFFICER; null = enforcer
-                                           to all; "III" = no cone at all
+          "sees":     true,                optional: false = no cone at all
+                                           (a dog): never catches you or
+                                           notices bodies
+          "enforcer": ["officer"],         optional: outfits it sees
+                                           through (none/guard/officer):
+                                           someone wearing one trespasses
+                                           to it even where that's legal
           "look":     "guard",             optional: which sprites draw it
                                            (a name in tilesets/
                                            characters.json); default guard,
@@ -51,6 +54,15 @@ JSON format, one object per level:
           "script":   [ ... ]              HUD prompt B:PET (max 8 chars),
                                            and what it does: see below
         }],
+        "access": {                        optional: where each outfit may
+          "none":    ["TTLL...", ...],     be. Per outfit, a letter per
+          "guard":   "L",                  cell (rows like the map): L
+          "officer": "L"                   legal, T trespassing, H hostile;
+        },                                 or one letter for the whole map.
+                                           Guards enforce it: see ACCESS_*
+                                           in src/game.h. Default: T for
+                                           none (your own suit), L for the
+                                           uniforms
         "switches": [{                     optional: cells that change when
           "x": 16, "y": 13,                a flag is set
           "flag": "dog",
@@ -113,7 +125,11 @@ DEFAULT_TRANSITION = "fade"
 MAX_SWITCHES, MAX_FLAGS = 8, 8
 VERB_MAX = 8
 TEXT_COLS, TEXT_ROWS = 18, 3          # the message box (src/main.c)
-ATTITUDES = "HEBI"                    # hostile, enforcer, blind, ignores
+# Access: per outfit, what a cell is for someone wearing it (ACCESS_* in
+# src/game.h, in that order), and what a map without a layer says.
+ACCESS = "LTH"
+ACCESS_NAMES = {"L": "legal", "T": "trespassing", "H": "hostile"}
+ACCESS_DEFAULT = {"none": "T", "guard": "L", "officer": "L"}
 # script ops, as in src/game.h
 OP_END, OP_SAY, OP_SET, OP_CLEAR, OP_IF, OP_JUMP = range(6)
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
@@ -204,12 +220,86 @@ def upgrade(lv):
         for n in m.pop("npcs", []):
             m.setdefault("guards", []).append({
                 "facing": "down", "route": [[n.get("x"), n.get("y")]], "uniform": "none",
-                "attitude": "I" * len(UNIFORMS), "takedown": False,
+                "sees": False, "takedown": False,
                 "verb": n.get("verb", "TALK"), "script": n.get("script", [])})
+        for g in m.get("guards", []):
+            upgrade_attitude(g)
     lv.setdefault("links", [])
     lv.setdefault("items", {})
     lv.setdefault("transition", DEFAULT_TRANSITION)
     return lv
+
+
+def upgrade_attitude(g):
+    """Guards used to carry an attitude to each outfit ("HBE": hostile,
+    enforcer, blind, I = ignores). Now the map says who may be where and
+    guards enforce it, so only two things survive: a character that
+    ignored everyone doesn't watch, and a guard that wasn't fooled by a
+    uniform (E or H) is an enforcer for it. Attitudes to your own suit are
+    dropped: it trespasses wherever the map doesn't say otherwise."""
+    if "attitude" not in g:
+        return
+    att = g.pop("attitude")
+    if not isinstance(att, str) or len(att) != len(UNIFORMS):
+        return
+    if set(att) == {"I"}:
+        g.setdefault("sees", False)
+    else:
+        seen = [u for u, a in zip(UNIFORMS, att) if a in "EH" and ACCESS_DEFAULT[u] == "L"]
+        if seen:
+            g.setdefault("enforcer", seen)
+
+
+def access_rows(m, outfit):
+    """One outfit's access layer as rows of L/T/H, the size of the map."""
+    layer = (m.get("access") or {}).get(outfit, ACCESS_DEFAULT[outfit])
+    if isinstance(layer, str):
+        return [layer * len(r) for r in m["map"]]
+    return layer
+
+
+def access_bytes(m):
+    """The access layer as the rules read it: a byte per cell, two bits per
+    outfit (ACCESS_* in src/game.h)."""
+    layers = [access_rows(m, u) for u in UNIFORMS]
+    return [sum(ACCESS.index(layers[d][y][x]) << (2 * d) for d in range(len(UNIFORMS)))
+            for y in range(len(m["map"])) for x in range(len(m["map"][0]))]
+
+
+def access_is_default(m):
+    return all(access_rows(m, u) == [ACCESS_DEFAULT[u] * len(r) for r in m["map"]]
+               for u in UNIFORMS)
+
+
+def access_rle(m):
+    """access_bytes as (run, byte) pairs, runs of up to 255."""
+    out = []
+    for b in access_bytes(m):
+        if out and out[-1] == b and out[-2] < 255:
+            out[-2] += 1
+        else:
+            out += [1, b]
+    return out
+
+
+def validate_access(m):
+    acc = m.get("access")
+    if acc is None:
+        return []
+    if not isinstance(acc, dict) or set(acc) - set(UNIFORMS):
+        return [f"Access must give a layer for some of: {', '.join(UNIFORMS)}."]
+    rows = m["map"]
+    for u, layer in acc.items():
+        if isinstance(layer, str):
+            ok = len(layer) == 1 and layer in ACCESS
+        else:
+            ok = (isinstance(layer, list) and len(layer) == len(rows) and
+                  all(isinstance(r, str) and len(r) == len(rows[0]) and not set(r) - set(ACCESS)
+                      for r in layer))
+        if not ok:
+            return [f"The access layer for {u} must be one of L, T, H, or rows of them "
+                    "the size of the map."]
+    return []
 
 
 def map_size(m):
@@ -261,10 +351,11 @@ def validate_map(m):
             errs.append(f"{tag}: facing must be one of {', '.join(DIRS)}.")
         if g.get("uniform", "none") not in UNIFORMS:
             errs.append(f"{tag}: uniform must be one of {', '.join(UNIFORMS)}.")
-        att = g.get("attitude")
-        if att is not None and (len(att) != len(UNIFORMS) or set(att) - set(ATTITUDES)):
-            errs.append(f"{tag}: attitude must be {len(UNIFORMS)} letters of "
-                        f"{', '.join(ATTITUDES)}.")
+        if not isinstance(g.get("sees", True), bool):
+            errs.append(f"{tag}: sees must be true or false.")
+        enf = g.get("enforcer", [])
+        if not isinstance(enf, list) or set(enf) - set(UNIFORMS):
+            errs.append(f"{tag}: enforcer must be a list of {', '.join(UNIFORMS)}.")
         if g.get("look") is not None and g["look"] not in looks()["looks"]:
             errs.append(f"{tag}: there is no look called \"{g['look']}\" "
                         f"(tilesets/characters.json has {', '.join(looks()['looks'])}).")
@@ -306,6 +397,7 @@ def validate_map(m):
                             errs.append(f"{leg} walks through a {what} at ({x},{y}).")
                             break
     errs += validate_art(m)
+    errs += validate_access(m)
     return errs
 
 
@@ -759,6 +851,10 @@ def generate_maps(levels):
         rows = cell_rows(m)
         out.append(f"const char level_map{k}[] =")
         out += [f"    {c_string(r)}" + (";" if j == len(rows) - 1 else "") for j, r in enumerate(rows)]
+        if not access_is_default(m):
+            out.append("/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */")
+            out.append(f"const uint8_t level_access{k}[] = {{ "
+                       f"{', '.join(map(str, access_rle(m)))} }};")
         out.append("")
     return "\n".join(out)
 
@@ -770,6 +866,8 @@ def generate_c(levels):
     count = len(all_maps(levels))
     out.append("/* Map cells: in levels_maps.c (ROM bank BANK_MAPS). */")
     out += [f"extern const char level_map{k}[];" for k in range(count)]
+    out += [f"extern const uint8_t level_access{k}[];"
+            for k, m in enumerate(all_maps(levels)) if not access_is_default(m)]
     scripts, texts = compile_all(levels)
     if scripts:
         out += ["", "/* Characters' scripts (OP_* in game.h). */"]
@@ -794,9 +892,12 @@ def generate_c(levels):
             out.append("        {")
             for i, g in enumerate(guards):
                 pts = ", ".join(f"{{{x}, {y}}}" for x, y in g["route"])
-                att = c_string(g["attitude"]) if g.get("attitude") else "0"
+                enf = sum(1 << UNIFORMS.index(u) for u in set(g.get("enforcer", [])))
+                att = f"0x{enf:02X}" if enf else "0"
                 talk = can_talk(g)
-                flags_c = "CHAR_NO_TAKEDOWN" if talk or g.get("takedown") is False else "0"
+                flags_c = " | ".join(
+                    (["CHAR_NO_TAKEDOWN"] if talk or g.get("takedown") is False else []) +
+                    (["CHAR_NO_SIGHT"] if g.get("sees") is False else [])) or "0"
                 verb = c_string(g["verb"]) if talk else "0"
                 script = f"script{base + k}_{i}" if talk else "0"
                 out.append(f"            {{ DIR_{g['facing'].upper()}, {len(g['route'])}, "
@@ -824,6 +925,8 @@ def generate_c(levels):
             if not switches:
                 out.append("            { 0, 0, 0, 0, 0, 0 },")
             out.append("        },")
+            out.append(f"        {'0' if access_is_default(m) else f'level_access{base + k}'},"
+                       "   /* access */")
             out.append("    },")
         base += len(lv["maps"])
     out.append("};")
@@ -957,7 +1060,11 @@ def dumps(levels):
             gl = []
             for g in m.get("guards", []):
                 d = {"facing": g["facing"], "route": g["route"],
-                     "uniform": g.get("uniform", "none"), "attitude": g.get("attitude")}
+                     "uniform": g.get("uniform", "none")}
+                if g.get("sees") is False:
+                    d["sees"] = False
+                if g.get("enforcer"):
+                    d["enforcer"] = [u for u in UNIFORMS if u in g["enforcer"]]
                 if g.get("look"):
                     d["look"] = g["look"]
                 if g.get("takedown") is False and not can_talk(g):
@@ -966,6 +1073,22 @@ def dumps(levels):
                     d["verb"], d["script"] = g.get("verb", ""), g.get("script", [])
                 gl.append("          " + json.dumps(d))
             ml.append('        "guards": [' + ("\n" + ",\n".join(gl) + "\n        ]" if gl else "]"))
+            if not access_is_default(m):           # a letter where a layer is all one thing
+                acc = {}
+                for u in UNIFORMS:
+                    layer = access_rows(m, u)
+                    flat = set("".join(layer))
+                    if len(flat) == 1:
+                        if flat != {ACCESS_DEFAULT[u]}:
+                            acc[u] = flat.pop()
+                    else:
+                        acc[u] = layer
+                ml[-1] += ","
+                ml.append('        "access": {\n' + ",\n".join(
+                    f'          "{u}": ' + (json.dumps(v) if isinstance(v, str) else
+                                             "[\n" + ",\n".join(f"            {json.dumps(r)}" for r in v) +
+                                             "\n          ]")
+                    for u, v in acc.items()) + "\n        }")
             for key in ("switches",):              # only where there are any
                 if m.get(key):
                     ml[-1] += ","

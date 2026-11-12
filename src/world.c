@@ -25,7 +25,7 @@ static void blank_player(GameState *s)
 void world_use(const LevelDef *tbl)
 {
     table = tbl;
-    game_map_changed();
+    game_data_changed();
 }
 
 void world_load(const LevelDef *tbl, uint8_t first, World *w)

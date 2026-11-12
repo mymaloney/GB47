@@ -17,6 +17,9 @@ void far_read(uint8_t bank, void *dst, const void *src, uint16_t n)
     SWITCH_ROM(BANK_CODE);
 }
 
+#define RLE_BANK_IN(bank) SWITCH_ROM(bank)
+#define RLE_BANK_OUT()    SWITCH_ROM(BANK_CODE)
+
 #else
 
 void far_read(uint8_t bank, void *dst, const void *src, uint16_t n)
@@ -25,4 +28,22 @@ void far_read(uint8_t bank, void *dst, const void *src, uint16_t n)
     memcpy(dst, src, n);
 }
 
+#define RLE_BANK_IN(bank) (void)(bank)
+#define RLE_BANK_OUT()
+
 #endif
+
+void far_read_rle(uint8_t bank, uint8_t *dst, const uint8_t *src, uint16_t n)
+{
+    uint8_t run, v;
+
+    RLE_BANK_IN(bank);
+    while (n) {
+        run = *src++;
+        v   = *src++;
+        if (!run || run > n) break;     /* bad data: stop rather than overrun */
+        n -= run;
+        while (run--) *dst++ = v;
+    }
+    RLE_BANK_OUT();
+}

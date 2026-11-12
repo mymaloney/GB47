@@ -43,13 +43,17 @@ static char    __at(0xA000) map_copy[MAP_MAX_CELLS];
 static uint8_t __at(0xA800) dist[MAP_MAX_CELLS];      /* dist[row_start[y] + x] */
 static uint8_t __at(0xB000) queue_x[QUEUE_SIZE];
 static uint8_t __at(0xB400) queue_y[QUEUE_SIZE];
+static uint8_t __at(0xB800) access[MAP_MAX_CELLS];    /* ACCESS_* bits per cell */
 #define cells map_copy
 #else
 static const char *cells;
 static uint8_t dist[MAP_MAX_CELLS];
 static uint8_t queue_x[QUEUE_SIZE];
 static uint8_t queue_y[QUEUE_SIZE];
+static uint8_t access[MAP_MAX_CELLS];
 #endif
+
+static const LevelDef *access_of;       /* the map access[] was unpacked for */
 
 static const LevelDef *level;
 static uint8_t         map_w, map_h;
@@ -79,6 +83,11 @@ void game_use(const LevelDef *lvl)
 #else
     cells = lvl->map;
 #endif
+    if (lvl != access_of) {             /* unpack the access layer */
+        if (lvl->access) far_read_rle(BANK_MAPS, access, lvl->access, at);
+        else memset(access, ACCESS_DEFAULT, at);
+        access_of = lvl;
+    }
     if (lvl != level) game_map_changed();
     level = lvl;
 }
@@ -90,8 +99,8 @@ void game_load(const LevelDef *lvl, GameState *s)
 
     /* zero everything (incl. padding) so states compare with memcmp */
     memset(s, 0, sizeof(GameState));
+    game_data_changed();    /* a new game: assume nothing about the map */
     game_use(lvl);
-    game_map_changed();     /* a new game: assume nothing about the map */
     cur_flags = 0;
     said_n    = 0;
     s->px = 1;
@@ -203,20 +212,35 @@ static uint8_t line_of_sight(int8_t x0, int8_t y0, int8_t x1, int8_t y1, uint8_t
     }
 }
 
-/* Attitude toward the player's disguise, from the level's attitude string. */
-uint8_t game_attitude(const GameState *s, uint8_t idx)
+/* ---- Access: who may be where (see ACCESS_* in game.h) ---- */
+
+uint8_t game_access(const GameState *s, uint8_t x, uint8_t y)
 {
-    const char *a = level->guards[idx].attitude;
-    if (!a) return ATT_ENFORCER;
-    switch (a[s->disguise]) {
-    case 'H': return ATT_HOSTILE;
-    case 'B': return ATT_BLIND;
-    case 'I': return ATT_IGNORE;
-    default:  return ATT_ENFORCER;
-    }
+    if (x >= map_w || y >= map_h) return ACCESS_TRESPASS;
+    return (access[row_start[y] + x] >> (s->disguise << 1)) & 3;
 }
 
-/* Cone shapes (guard G facing up). Normal (enforcer) cone:
+/* How guard idx regards someone dressed like the player on cell (x, y):
+ * the cell's rule, except that an enforcer for this disguise isn't fooled
+ * where it is legal. */
+static uint8_t regard_at(const GameState *s, uint8_t idx, uint8_t x, uint8_t y)
+{
+    uint8_t st = game_access(s, x, y);
+    if (st == ACCESS_LEGAL && (level->guards[idx].enforcer & (1 << s->disguise)))
+        st = ACCESS_TRESPASS;
+    return st;
+}
+
+/* Does this character watch at all? */
+#define SIGHTED(i) (!(level->guards[i].flags & CHAR_NO_SIGHT))
+
+uint8_t game_regard(const GameState *s, uint8_t idx)
+{
+    if (!SIGHTED(idx)) return ACCESS_LEGAL;
+    return regard_at(s, idx, s->px, s->py);
+}
+
+/* Cone shapes (guard G facing up). Normal cone:
  *
  *          . . .        distance 4
  *          . . .        distance 3
@@ -224,17 +248,20 @@ uint8_t game_attitude(const GameState *s, uint8_t idx)
  *            .          distance 1
  *            G
  *
- * Hostile cone: widens by one tile per side each step (up to HOSTILE_HALF)
- * and reaches HOSTILE_RANGE: widths 1, 3, 5, 7, 7, 7, 7.
- * cone is ATT_HOSTILE or ATT_ENFORCER. */
+ * Hostile cone (for someone in a hostile area): widens by one tile per
+ * side each step (up to HOSTILE_HALF) and reaches HOSTILE_RANGE: widths
+ * 1, 3, 5, 7, 7, 7, 7. */
+#define CONE_NORMAL  0
+#define CONE_HOSTILE 1
+
 static uint8_t cone_range(uint8_t cone)
 {
-    return cone == ATT_HOSTILE ? HOSTILE_RANGE : VISION_RANGE;
+    return cone == CONE_HOSTILE ? HOSTILE_RANGE : VISION_RANGE;
 }
 
 static int8_t cone_half(uint8_t cone, int8_t fwd)
 {
-    if (cone == ATT_HOSTILE) return fwd - 1 > HOSTILE_HALF ? HOSTILE_HALF : fwd - 1;
+    if (cone == CONE_HOSTILE) return fwd - 1 > HOSTILE_HALF ? HOSTILE_HALF : fwd - 1;
     return fwd >= 2 ? 1 : 0;
 }
 
@@ -262,20 +289,13 @@ static uint8_t cone_sees(const Guard *g, uint8_t x, uint8_t y, uint8_t cone)
 
 uint8_t game_guard_sees(const Guard *g, uint8_t x, uint8_t y)
 {
-    return cone_sees(g, x, y, ATT_ENFORCER);
-}
-
-/* The cone a guard uses for bodies and suspicious acts: its own, except
- * blind guards still watch with the normal one. */
-static uint8_t watch_cone(uint8_t att)
-{
-    return att == ATT_HOSTILE ? ATT_HOSTILE : ATT_ENFORCER;
+    return cone_sees(g, x, y, CONE_NORMAL);
 }
 
 void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
                          uint8_t w, uint8_t h, uint8_t *vis)
 {
-    uint8_t  i, att, cone, mark, range;
+    uint8_t  i, st, cone, mark;
     int8_t   fwd, side, half;
     int16_t  tx, ty;
     uint8_t *v;
@@ -285,25 +305,33 @@ void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
     for (i = 0; i < s->guard_count; i++) {
         const Guard *g  = &s->guards[i];
         int8_t       fx, fy, lx, ly;
-        if (!GUARD_ACTIVE(g)) continue;
-        att   = game_attitude(s, i);
-        if (att == ATT_IGNORE) continue;           /* no cone at all */
-        cone  = watch_cone(att);
-        mark  = att == ATT_BLIND ? VIS_WATCHED : VIS_SEEN;
-        range = cone_range(cone);
+        if (!GUARD_ACTIVE(g) || !SIGHTED(i)) continue;
         fx = dir_dx[g->facing];
         fy = dir_dy[g->facing];
         /* the "side" axis is the forward axis rotated 90 degrees */
         lx = -fy;
         ly = fx;
 
-        for (fwd = 1; fwd <= (int8_t)range; fwd++) {
-            half = cone_half(cone, fwd);
+        /* Every tile of the big cone: a hostile tile is seen from that far;
+         * any other only if it is in the normal cone too, where it is
+         * either seen (trespassing) or just watched (legal). */
+        for (fwd = 1; fwd <= HOSTILE_RANGE; fwd++) {
+            half = cone_half(CONE_HOSTILE, fwd);
             for (side = -half; side <= half; side++) {
                 tx = (int16_t)g->x + fx * fwd + lx * side;
                 ty = (int16_t)g->y + fy * fwd + ly * side;
                 /* only tiles inside the requested block */
                 if (tx < x0 || ty < y0 || tx >= x0 + w || ty >= y0 + h) continue;
+                st = regard_at(s, i, (uint8_t)tx, (uint8_t)ty);
+                if (st == ACCESS_HOSTILE) {
+                    cone = CONE_HOSTILE;
+                    mark = VIS_SEEN;
+                } else {
+                    if (fwd > VISION_RANGE || side > cone_half(CONE_NORMAL, fwd) ||
+                        -side > cone_half(CONE_NORMAL, fwd)) continue;
+                    cone = CONE_NORMAL;
+                    mark = st == ACCESS_TRESPASS ? VIS_SEEN : VIS_WATCHED;
+                }
                 v = &vis[(uint16_t)(ty - y0) * w + (tx - x0)];
                 if (*v >= mark) continue;
                 if (cone_sees(g, (uint8_t)tx, (uint8_t)ty, cone)) *v = mark;
@@ -313,34 +341,33 @@ void game_compute_vision(const GameState *s, uint8_t x0, uint8_t y0,
 }
 
 /* Is the player spotted? suspicious = the player is doing something
- * (takedown, dragging, throwing, changing) that even blind guards notice. */
+ * (takedown, dragging, throwing, changing) that guards notice even where
+ * the player is allowed to be. */
 static uint8_t player_spotted(const GameState *s, uint8_t suspicious)
 {
-    uint8_t i, att;
+    uint8_t i, st;
     for (i = 0; i < s->guard_count; i++) {
         const Guard *g = &s->guards[i];
-        if (!GUARD_ACTIVE(g)) continue;
-        att = game_attitude(s, i);
-        if (att == ATT_IGNORE || (att == ATT_BLIND && !suspicious)) continue;
-        if (cone_sees(g, s->px, s->py, watch_cone(att))) return 1;
+        if (!GUARD_ACTIVE(g) || !SIGHTED(i)) continue;
+        st = regard_at(s, i, s->px, s->py);
+        if (st == ACCESS_LEGAL && !suspicious) continue;
+        if (cone_sees(g, s->px, s->py,
+                      st == ACCESS_HOSTILE ? CONE_HOSTILE : CONE_NORMAL)) return 1;
     }
     return 0;
 }
 
-/* Does any active guard see a body or a guard being taken down? */
+/* Does any watching guard see a body or a guard being taken down? (With
+ * the normal cone, wherever it lies.) */
 static uint8_t body_spotted(const GameState *s)
 {
     uint8_t i, j;
     for (j = 0; j < s->guard_count; j++) {
         const Guard *b = &s->guards[j];
         if (GUARD_ACTIVE(b)) continue;
-        for (i = 0; i < s->guard_count; i++) {
-            uint8_t att;
-            if (!GUARD_ACTIVE(&s->guards[i])) continue;
-            att = game_attitude(s, i);
-            if (att != ATT_IGNORE &&
-                cone_sees(&s->guards[i], b->x, b->y, watch_cone(att))) return 1;
-        }
+        for (i = 0; i < s->guard_count; i++)
+            if (GUARD_ACTIVE(&s->guards[i]) && SIGHTED(i) &&
+                cone_sees(&s->guards[i], b->x, b->y, CONE_NORMAL)) return 1;
     }
     return 0;
 }
@@ -354,6 +381,12 @@ static uint8_t body_spotted(const GameState *s)
 static uint8_t dist_x = NO_TARGET, dist_y;   /* the tile dist[] was filled for */
 
 #define DIST(x, y) dist[row_start[y] + (x)]
+
+void game_data_changed(void)
+{
+    access_of = 0;
+    game_map_changed();
+}
 
 void game_map_changed(void)
 {
@@ -472,7 +505,7 @@ static uint8_t step_toward(GameState *s, uint8_t idx, uint8_t x, uint8_t y)
     g->facing = d;
     if (game_blocks(nx, ny, BLOCK_GUARD)) return STEP_BESIDE;   /* e.g. railing */
     if (nx == s->px && ny == s->py) {
-        if (game_attitude(s, idx) >= ATT_BLIND) return STEP_OK;  /* waits */
+        if (game_regard(s, idx) == ACCESS_LEGAL) return STEP_OK;  /* waits */
         return STEP_BUMP;
     }
     if (guard_at(s, nx, ny, idx)) return STEP_OK;   /* blocked: wait */
@@ -506,7 +539,7 @@ static uint8_t guard_patrol(GameState *s, uint8_t idx)
         if (step_toward(s, idx, target->x, target->y) == STEP_BUMP) return 1;
     } else {
         if (nx == s->px && ny == s->py)
-            return game_attitude(s, idx) < ATT_BLIND;  /* blind ones wait */
+            return game_regard(s, idx) != ACCESS_LEGAL;  /* else it waits */
         if (guard_at(s, nx, ny, idx)) return 0;   /* blocked: wait this turn */
         g->x = nx;
         g->y = ny;
