@@ -2,7 +2,8 @@
 
 A turn-based stealth puzzle game for the original Game Boy (GBDK-2020 4.3.0,
 SDCC, MBC5), plus a browser level editor. Read `README.md` for the player
-and editor view. `docs/dialogue-plan.md` is the (finished) plan for NPCs,
+and editor view. **The next task is in `docs/zones-plan.md`** (its last
+section: designer-made disguises). `docs/dialogue-plan.md` is the (finished) plan for NPCs,
 scripts and ROM banking, kept for its reasoning.
 
 ## Commands
@@ -78,7 +79,7 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
 - Build warnings show up only in the GBDK build, not in gcc. Keep it
   warning-free.
 - **ROM banks** (MBC5, 64 KB; details in `src/far.h`):
-  - Bank 0 (2.7 KB free): files with no `#pragma bank`: `game.c`,
+  - Bank 0 (2.6 KB free): files with no `#pragma bank`: `game.c`,
     `world.c`, `art.c`, `trans.c`, `far.c`, plus GBDK. It can't overflow
     into bank 1 any more, so this is the tight one: **new rules code goes
     here, and there isn't much room.**
@@ -90,15 +91,19 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   - A pointer into bank 2 or 3 (`LevelDef.map`, `MapArt.rle`/`rows`,
     `art_tile_data`) must never be read directly on the Game Boy.
 - **Work RAM**: about 5.4 KB of 8 KB free. The current map's cells and the
-  pathfinding arrays and the access layer are in cartridge RAM
+  pathfinding arrays and the zone of each cell are in cartridge RAM
   (0xA000-0xBFFF, fixed addresses in `game.c`); all 8 KB of it is used.
   - Every byte added to `GameState` still costs 33+ bytes (undo history).
-- **Access** replaced per-guard attitudes: each cell has a rule per
-  disguise (`ACCESS_*`, two bits each in one byte), painted per map
-  (`"access"` in the JSON, run-length data in `levels_maps.c`, unpacked
-  by `game_use`). Guards enforce the rule for the cell the player stands
-  on; `GuardDef.enforcer` is the only per-guard exception. A new disguise
-  needs two more bits per cell: there is room for exactly one more.
+- **Zones** decide who may be where. Each cell holds a zone number
+  (0-15): `"zone_map"` per map in the JSON, run-length data in
+  `levels_maps.c`, unpacked by `game_use`. Each level has one rule table
+  (`"zones"` in the JSON, `LevelDef.zone_rules` pointing at
+  `zone_rules<n>` in `levels.c`): two bytes per zone, two bits per
+  disguise (`ACCESS_*`), room for `DISGUISE_MAX` 8 outfits. Guards enforce
+  the rule of the zone the player stands in (`game_access`: an array
+  read, a shift, a mask); `GuardDef.enforcer` is the only per-guard
+  exception. Old `"access"` layers are converted by `upgrade_access()`.
+  Never assume three outfits: loop over `UNIFORMS` / `A.uniforms`.
 - Guards' walking distances (`dist[]`) are cached per target tile. Call
   `game_map_changed()` whenever what guards can walk on changes without a
   change of map (e.g. a switch cell flipping).

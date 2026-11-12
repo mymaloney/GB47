@@ -51,15 +51,16 @@
         <button data-tool="switch" title="Add a cell that changes when a flag is set (e.g. stairs that appear), or click one to select it (7)"><b>7</b> Switch cell</button>
       </div>
       <div class="toolbar palette" id="palette"><span class="toolbar-label">Paint</span></div>
-      <div class="toolbar access-bar" id="access-bar">
-        <span class="toolbar-label">Access</span>
-        <label class="inline">Where
-          <select id="access-outfit" title="Whose rules you are painting"></select> is</label>
-        <button data-tool="access:L" title="Guards ignore this outfit here (they still notice bodies and suspicious acts)"><span class="dot acc-L"></span>Legal</button>
-        <button data-tool="access:T" title="A guard whose normal cone covers you catches you"><span class="dot acc-T"></span>Trespassing</button>
-        <button data-tool="access:H" title="Guards catch you from further away: the big cone"><span class="dot acc-H"></span>Hostile</button>
-        <button id="access-fill" title="Set the whole map to the selected rule for this outfit">Fill map</button>
-        <label class="check"><input type="checkbox" id="access-show"> Show</label>
+      <div class="toolbar access-bar" id="zone-bar">
+        <span class="toolbar-label">Zones</span>
+        <button data-tool="zone" id="zone-paint" title="Paint the zone picked in the Zones panel on the right; Shift+click fills a room (8)"><b>8</b> <span class="dot" id="zone-paint-dot"></span><span id="zone-paint-name">Paint zone</span></button>
+        <button id="zone-fill" title="Put the whole map in the picked zone">Fill map</button>
+        <label class="inline">Show
+          <select id="zone-view" title="What the overlay on the map shows">
+            <option value="off">nothing</option>
+            <option value="zones">zones</option>
+            <option value="rules">rules for the cone outfit</option>
+          </select></label>
       </div>
       <label class="check autotile"><input type="checkbox" id="autotile" checked>
         Auto-tile: repaint the art around walls and floor as you paint them
@@ -142,6 +143,15 @@
         both sides must line up; the offset slides the other map along the edge.</p>
     </div>
     <div class="row-buttons"><button id="map-delete" class="danger">Delete this map</button></div>
+
+    <h2>Zones <span id="zone-count" class="muted">(the whole level)</span></h2>
+    <p class="hint">Areas of the level, and whether each outfit is <b class="acc-txt-L">L</b>egal,
+      <b class="acc-txt-T">T</b>respassing or <b class="acc-txt-H">H</b>ostile there.
+      Click a zone to paint it with the Zones tool (8).</p>
+    <div id="zone-list" class="zone-list"></div>
+    <div class="row-buttons">
+      <button id="zone-add" title="Add a zone (max 16)">+ Zone</button>
+    </div>
 
     <h2>Characters <span id="guard-count" class="muted">(this map)</span></h2>
     <div id="guard-list" class="guard-list"></div>

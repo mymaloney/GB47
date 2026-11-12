@@ -17,16 +17,18 @@ extern const char level_map6[];
 extern const char level_map7[];
 extern const char level_map8[];
 extern const char level_map9[];
-extern const uint8_t level_access0[];
-extern const uint8_t level_access1[];
-extern const uint8_t level_access2[];
-extern const uint8_t level_access3[];
-extern const uint8_t level_access4[];
-extern const uint8_t level_access5[];
-extern const uint8_t level_access6[];
-extern const uint8_t level_access7[];
-extern const uint8_t level_access8[];
-extern const uint8_t level_access9[];
+extern const uint8_t level_zones5[];
+
+/* Each level's zone rules: two bytes per zone, ACCESS_* bits per outfit. */
+static const uint8_t zone_rules0[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules1[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules2[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules3[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules4[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules5[] = { 2, 0, 1, 0 };   /* zone 1, zone 2 */
+static const uint8_t zone_rules6[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules7[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules8[] = { 2, 0 };   /* everywhere */
 
 /* Characters' scripts (OP_* in game.h). */
 static const uint8_t script2_2[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
@@ -50,7 +52,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access0,   /* access */
+        0,   /* zones */
+        zone_rules0,
     },
     /* 2: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
     {
@@ -71,7 +74,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access1,   /* access */
+        0,   /* zones */
+        zone_rules1,
     },
     /* 3: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
     {
@@ -93,7 +97,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 16, 13, 1, CELL_FLOOR, CELL_EXIT, 12 },   /* dog */
         },
-        level_access2,   /* access */
+        0,   /* zones */
+        zone_rules2,
     },
     /* 4: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
     {
@@ -113,7 +118,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access3,   /* access */
+        0,   /* zones */
+        zone_rules3,
     },
     /* 5: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
     {
@@ -134,7 +140,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access4,   /* access */
+        0,   /* zones */
+        zone_rules4,
     },
     /* 6: DRESS CODE - The hall is hostile to your suit (huge cones) but legal in a guard's uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
     {
@@ -156,7 +163,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access5,   /* access */
+        level_zones5,   /* zones */
+        zone_rules5,
     },
     /* 7: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
     {
@@ -178,7 +186,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access6,   /* access */
+        0,   /* zones */
+        zone_rules6,
     },
     /* 8: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
     {
@@ -199,7 +208,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access7,   /* access */
+        0,   /* zones */
+        zone_rules7,
     },
     /* 9: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
     {
@@ -219,7 +229,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access8,   /* access */
+        0,   /* zones */
+        zone_rules8,
     },
     /* 9: ANNEX, map 2 */
     {
@@ -240,7 +251,8 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_access9,   /* access */
+        0,   /* zones */
+        zone_rules8,
     },
 };
 

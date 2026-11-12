@@ -4,6 +4,9 @@
     "notes": "Learn that guards only move when you do. Follow one through.",
     "items": {"stone": 0, "bottle": 0},
     "transition": "fade",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -44,10 +47,7 @@
         ],
         "guards": [
           {"facing": "right", "route": [[1, 5], [18, 5]], "uniform": "none"}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       }
     ],
     "links": []
@@ -57,6 +57,9 @@
     "notes": "Two patrols crossing a hall. Use the pillars as cover.",
     "items": {"stone": 0, "bottle": 0},
     "transition": "wipe",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -98,10 +101,7 @@
         "guards": [
           {"facing": "down", "route": [[7, 4], [7, 13], [7, 1]], "uniform": "none"},
           {"facing": "up", "route": [[11, 10], [11, 1], [11, 13]], "uniform": "none"}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       }
     ],
     "links": []
@@ -111,6 +111,9 @@
     "notes": "A sentry watches the door; wait for the patrol to pass.",
     "items": {"stone": 0, "bottle": 0},
     "transition": "iris",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -154,9 +157,6 @@
           {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "guard"},
           {"facing": "left", "route": [[11, 5]], "uniform": "none", "sees": false, "look": "dog", "verb": "PET", "script": [{"if": "dog", "then": [{"say": "The dog wags its tail."}], "else": [{"say": "You pet the dog."}, {"set": "dog"}]}]}
         ],
-        "access": {
-          "none": "H"
-        },
         "switches": [
           {"x": 16, "y": 13, "flag": "dog", "on": "E", "on_art": 52}
         ]
@@ -169,6 +169,9 @@
     "notes": "The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past.",
     "items": {"stone": 1, "bottle": 1},
     "transition": "dissolve",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -209,10 +212,7 @@
         ],
         "guards": [
           {"facing": "left", "route": [[12, 6]], "uniform": "none"}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       }
     ],
     "links": []
@@ -222,6 +222,9 @@
     "notes": "The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight.",
     "items": {"stone": 0, "bottle": 0},
     "transition": "curtain",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -263,10 +266,7 @@
         "guards": [
           {"facing": "up", "route": [[9, 3]], "uniform": "guard"},
           {"facing": "right", "route": [[5, 2], [13, 2]], "uniform": "none"}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       }
     ],
     "links": []
@@ -276,6 +276,10 @@
     "notes": "The hall is hostile to your suit (huge cones) but legal in a guard's uniform. Take one from the lone guard, then get past the officer, who still checks guards.",
     "items": {"stone": 0, "bottle": 0},
     "transition": "diagonal",
+    "zones": [
+      {"name": "zone 1", "rules": {"none": "H"}},
+      {"name": "zone 2", "rules": {}}
+    ],
     "maps": [
       {
         "map": [
@@ -319,26 +323,24 @@
           {"facing": "left", "route": [[17, 4]], "uniform": "guard", "enforcer": ["officer"]},
           {"facing": "down", "route": [[14, 1], [14, 7]], "uniform": "officer", "enforcer": ["guard"]}
         ],
-        "access": {
-          "none": [
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH",
-            "TTTTTTTTHHHHHHHHHHHH"
-          ]
-        }
+        "zone_map": [
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000",
+          "11111111000000000000"
+        ]
       }
     ],
     "links": []
@@ -348,6 +350,9 @@
     "notes": "Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone.",
     "items": {"stone": 1, "bottle": 0},
     "transition": "blinds",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -422,10 +427,7 @@
           {"facing": "right", "route": [[2, 20], [37, 20]], "uniform": "guard"},
           {"facing": "down", "route": [[35, 9]], "uniform": "guard"},
           {"facing": "left", "route": [[37, 4], [29, 4]], "uniform": "none", "enforcer": ["guard"]}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       }
     ],
     "links": []
@@ -435,6 +437,9 @@
     "notes": "Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to.",
     "items": {"stone": 0, "bottle": 0},
     "transition": "interlace",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -476,10 +481,7 @@
         "guards": [
           {"facing": "left", "route": [[17, 5], [2, 5]], "uniform": "guard", "enforcer": ["officer"]},
           {"facing": "down", "route": [[12, 2], [12, 8]], "uniform": "officer", "enforcer": ["officer"]}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       }
     ],
     "links": []
@@ -489,6 +491,9 @@
     "notes": "Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall.",
     "items": {"stone": 0, "bottle": 0},
     "transition": "iris",
+    "zones": [
+      {"name": "everywhere", "rules": {"none": "H"}}
+    ],
     "maps": [
       {
         "map": [
@@ -529,10 +534,7 @@
         ],
         "guards": [
           {"facing": "right", "route": [[9, 7], [18, 7]], "uniform": "none"}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       },
       {
         "map": [
@@ -574,10 +576,7 @@
         "guards": [
           {"facing": "left", "route": [[30, 7]], "uniform": "officer", "enforcer": ["officer"]},
           {"facing": "down", "route": [[18, 3], [18, 11]], "uniform": "none"}
-        ],
-        "access": {
-          "none": "H"
-        }
+        ]
       }
     ],
     "links": [

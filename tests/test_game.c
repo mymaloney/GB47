@@ -356,13 +356,11 @@ static void test_body_alarm(void)
     CHECK(s.status == STATUS_ALARM, "guard 1 saw the struggle");
 }
 
-/* Disguise tests. The whole map is hostile to your own clothes, legal in a
- * GUARD uniform and trespassing in an OFFICER one. Guard 0 at (2,3) faces
- * right; guard 1 patrols row 6. Both wear GUARD uniforms. */
-static const uint8_t dz_access[] = {
-    255, ACC(ACCESS_HOSTILE, ACCESS_LEGAL, ACCESS_TRESPASS),
-    65,  ACC(ACCESS_HOSTILE, ACCESS_LEGAL, ACCESS_TRESPASS),
-};
+/* Disguise tests. The whole map is one zone, hostile to your own
+ * clothes, legal in a GUARD uniform and trespassing in an OFFICER one.
+ * Guard 0 at (2,3) faces right; guard 1 patrols row 6. Both wear GUARD
+ * uniforms. */
+static const uint8_t dz_rules[] = { ACC(ACCESS_HOSTILE, ACCESS_LEGAL, ACCESS_TRESPASS), 0 };
 static const LevelDef dz_level = {
     "DZ",
     20, 16,
@@ -389,7 +387,7 @@ static const LevelDef dz_level = {
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT, NO_SCRIPTING, dz_access
+    TRANS_CUT, NO_SCRIPTING, 0, dz_rules     /* no zone layer: all zone 0 */
 };
 
 static void test_disguise_cones(void)
@@ -399,7 +397,8 @@ static void test_disguise_cones(void)
     LevelDef plain;
 
     plain = levels[0];
-    plain.access = 0;                 /* a map with no access layer */
+    plain.zones = 0;                  /* a level without zones */
+    plain.zone_rules = 0;
     game_load(&plain, &s);
     CHECK(game_access(&s, s.px, s.py) == ACCESS_TRESPASS && game_regard(&s, 0) == ACCESS_TRESPASS,
           "no access layer: your own clothes trespass");
@@ -790,13 +789,18 @@ static void test_walking_talker(void)
     CHECK(game_takedown_target(&s) == 1, "otherwise the blind guard can be taken down");
 }
 
-/* Access zones. An open room; for your own clothes the left part (x < 8)
- * is legal, the middle trespassing and the right part (x >= 14) hostile.
- * A GUARD uniform is legal everywhere, an OFFICER one trespasses
- * everywhere. Guard 0 at (2,8) faces right and just enforces the rules;
- * guard 1 at (2,12) faces right and is an enforcer for your own clothes
- * and for GUARD uniforms. */
-static uint8_t zone_access[2 * 20 * 16];
+/* Access zones. An open room in three zones: the left part (x < 8), the
+ * middle and the right part (x >= 14). For your own clothes they are
+ * legal, trespassing and hostile. A GUARD uniform is legal everywhere,
+ * an OFFICER one trespasses everywhere. Guard 0 at (2,8) faces right and
+ * just enforces the rules; guard 1 at (2,12) faces right and is an
+ * enforcer for your own clothes and for GUARD uniforms. */
+static uint8_t zone_cells[2 * 20 * 16];
+static const uint8_t zone_rules3[] = {
+    ACC(ACCESS_LEGAL,    ACCESS_LEGAL, ACCESS_TRESPASS), 0,
+    ACC(ACCESS_TRESPASS, ACCESS_LEGAL, ACCESS_TRESPASS), 0,
+    ACC(ACCESS_HOSTILE,  ACCESS_LEGAL, ACCESS_TRESPASS), 0,
+};
 static const LevelDef zone_level = {
     "ZONES", 20, 16, tile_map,
     2,
@@ -804,7 +808,7 @@ static const LevelDef zone_level = {
       { DIR_RIGHT, 1, { {2, 12} }, DISGUISE_GUARD,
         (1 << DISGUISE_NONE) | (1 << DISGUISE_GUARD) } },
     { 2, 0 },
-    0, { 0 }, { 0 }, TRANS_CUT, NO_SCRIPTING, zone_access
+    0, { 0 }, { 0 }, TRANS_CUT, NO_SCRIPTING, zone_cells, zone_rules3
 };
 
 static void zone_load(GameState *s, int px, int py)
@@ -813,9 +817,8 @@ static void zone_load(GameState *s, int px, int py)
     tiles_reset(0, 0);
     for (y = 0; y < 16; y++)            /* one run per cell: simple, and legal */
         for (x = 0; x < 20; x++) {
-            zone_access[n++] = 1;
-            zone_access[n++] = ACC(x < 8 ? ACCESS_LEGAL : x < 14 ? ACCESS_TRESPASS : ACCESS_HOSTILE,
-                                   ACCESS_LEGAL, ACCESS_TRESPASS);
+            zone_cells[n++] = 1;
+            zone_cells[n++] = x < 8 ? 0 : x < 14 ? 1 : 2;
         }
     game_load(&zone_level, s);
     s->px = (uint8_t)px;
@@ -835,6 +838,18 @@ static void test_access(void)
     CHECK(game_access(&s, 40, 8) == ACCESS_TRESPASS, "off the map counts as trespassing");
     s.disguise = DISGUISE_OFFICER;
     CHECK(game_access(&s, 4, 8) == ACCESS_TRESPASS, "an OFFICER uniform trespasses even there");
+    {   /* outfits 4-7 are in each zone's second rule byte */
+        static const uint8_t wide_rules[] = { 0, 0,   0, ACCESS_HOSTILE << 2,   0, 0 };
+        static LevelDef wide;
+        wide = zone_level;
+        wide.zone_rules = wide_rules;
+        game_use(&wide);
+        s.disguise = 5;
+        CHECK(game_access(&s, 8, 8) == ACCESS_HOSTILE && game_access(&s, 4, 8) == ACCESS_LEGAL &&
+              game_access(&s, 14, 8) == ACCESS_LEGAL, "outfit 5 is hostile in zone 1 only");
+        s.disguise = 4;
+        CHECK(game_access(&s, 8, 8) == ACCESS_LEGAL, "and outfit 4 isn't");
+    }
 
     /* legal: right in front of a guard is fine; it only watches */
     zone_load(&s, 4, 8);

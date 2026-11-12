@@ -16,7 +16,7 @@ const TOOL_HINTS = {
   start: "Click to place the player's start.",
   guard: "Click an empty tile to add a character (max 4): a guard, a dog, anyone. Click one to select it; drag to move it. Its panel on the right sets its look, how it sees you, and what talking to it does.",
   route: "Click to add waypoints to the selected character (corners are added for you). Drag a point to move it; right-click to remove it.",
-  access: "Click or drag to paint where this outfit is allowed. Shift+click fills the whole room.",
+  zone: "Click or drag to put cells in the zone picked in the Zones panel. Shift+click fills the whole room.",
   switch: "Click a tile to make it a switch cell: it changes (e.g. into the exit) when a script sets its flag. Click one to select it; drag to move it.",
 };
 const TALK_COLOR = "#00a6a6";
@@ -35,7 +35,9 @@ let undoStack = [];
 let redoStack = [];
 let preview = null;              // {key, view} for the current level
 let previewDisguise = 0;
-let accessOutfit = 0;            // which outfit's access layer is being painted / shown
+let selZone = 0;                 // the zone being painted (Zones panel)
+const ZONE_COLORS = ["#7d8590", "#2e86ab", "#e4572e", "#2ea043", "#c23bd4", "#f2b705", "#00a6a6",
+  "#d1495b", "#6a4c93", "#8ac926", "#ff924c", "#1982c4", "#b5838d", "#52b788", "#ffca3a", "#9d4edd"];
 const ACCESS_TINT = { L: "rgba(46, 160, 67, 0.38)", T: "rgba(242, 183, 5, 0.38)", H: "rgba(228, 87, 46, 0.5)" };
 const outfitLabel = (u) => (u === "none" ? "your own suit" : `a ${u.toUpperCase()} uniform`);
 let validity = [];               // per level: true/false/undefined
@@ -267,7 +269,7 @@ function renderEdit() {
   const fresh = preview && preview.key === previewKey() && previewDisguise >= 0;
   const tiles = fresh ? preview.view.tiles : localTiles(lv);
   tiles.forEach((row, y) => row.forEach((t, x) => drawBkg(t, x, y)));
-  if (showingAccess()) drawAccess(lv);
+  drawZones(lv);
   drawScreenGuides(lv);
 
   // routes under the sprites
@@ -383,45 +385,216 @@ function updateArtBudget(lv) {
   $("art-budget").classList.toggle("errors", u.slots > A.art_slots);
 }
 
-// ---- access: where each outfit is legal, trespassing or hostile
+// ---- zones: areas of the level, each with a rule per outfit
 
-/* One outfit's layer as rows of L/T/H (a map without one uses the default:
- * a single letter stands for the whole map). */
-function accessRows(m, outfit) {
-  const layer = (m.access || {})[outfit] ?? A.access_default[outfit];
-  return typeof layer === "string" ? m.map.map((r) => layer.repeat(r.length)) : layer;
-}
+/* The level's zones (one default zone if it has none yet). */
+const levelZones = (lv = level()) => lv.zones || [{ name: "everywhere", rules: {} }];
+/* L, T or H: what wearing this outfit is in the zone. */
+const zoneRule = (z, outfit) => (z.rules || {})[outfit] ?? A.default_rules[outfit];
+/* The map's zones as rows of hex digits. */
+const zoneRows = (m) => m.zone_map || m.map.map((r) => "0".repeat(r.length));
+const zoneColor = (i) => ZONE_COLORS[i % ZONE_COLORS.length];
 
-const showingAccess = () => tool.startsWith("access:") || $("access-show").checked;
+const zoneView = () => {
+  const v = $("zone-view").value;
+  return v === "off" && tool === "zone" ? "zones" : v;
+};
 
-/* Tint every open cell by the rule for the selected outfit. */
-function drawAccess(lv) {
-  const rows = accessRows(lv, A.uniforms[accessOutfit]);
+/* The overlay: each open cell tinted by its zone's colour, with the
+ * zone's name once per patch; or by the rule for the outfit the cones are
+ * previewed in. */
+function drawZones(lv) {
+  const view = zoneView();
+  if (view === "off") return;
+  const rows = zoneRows(lv), zones = levelZones();
+  const outfit = A.uniforms[Math.max(0, previewDisguise)];
+  ctx.save();
   lv.map.forEach((r, y) => [...r].forEach((c, x) => {
     if (c === "#") return;
-    ctx.fillStyle = ACCESS_TINT[rows[y][x]];
+    const z = A.zone_digits.indexOf(rows[y][x]);
+    if (view === "rules") ctx.fillStyle = ACCESS_TINT[zoneRule(zones[z] || {}, outfit)];
+    else { ctx.globalAlpha = 0.35; ctx.fillStyle = zoneColor(z); }
     ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+    ctx.globalAlpha = 1;
   }));
+  if (view === "zones") drawZoneNames(lv, rows, zones);
+  ctx.restore();
 }
 
-function setAccessCells(cellsToSet, letter) {
-  const m = cmap(), outfit = A.uniforms[accessOutfit];
-  const rows = accessRows(m, outfit).map((r) => [...r]);
+/* A zone's name in the middle of each patch of it (patches of open cells
+ * of one zone, cut by walls). */
+function drawZoneNames(lv, rows, zones) {
+  const w = mapW(lv), h = mapH(lv), done = new Uint8Array(w * h);
+  ctx.font = `bold ${Math.max(9, TILE * 0.5)}px ui-monospace, monospace`;
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  for (let y0 = 0; y0 < h; y0++) for (let x0 = 0; x0 < w; x0++) {
+    if (done[y0 * w + x0] || lv.map[y0][x0] === "#") continue;
+    const z = rows[y0][x0], cells = [[x0, y0]];
+    done[y0 * w + x0] = 1;
+    for (let i = 0; i < cells.length; i++) {
+      const [cx, cy] = cells[i];
+      for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+        const nx = cx + dx, ny = cy + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h || done[ny * w + nx]) continue;
+        if (lv.map[ny][nx] === "#" || rows[ny][nx] !== z) continue;
+        done[ny * w + nx] = 1;
+        cells.push([nx, ny]);
+      }
+    }
+    if (cells.length < 4) continue;               // too small to label
+    const mx = cells.reduce((a, c) => a + c[0], 0) / cells.length;
+    const my = cells.reduce((a, c) => a + c[1], 0) / cells.length;
+    const [lx, ly] = cells.reduce((b, c) =>
+      (c[0] - mx) ** 2 + (c[1] - my) ** 2 < (b[0] - mx) ** 2 + (b[1] - my) ** 2 ? c : b);
+    const zone = zones[A.zone_digits.indexOf(z)];
+    const name = zone ? zone.name : "?";
+    const tw = ctx.measureText(name).width + 6, th = Math.max(11, TILE * 0.7);
+    const px = lx * TILE + TILE / 2, py = ly * TILE + TILE / 2;
+    ctx.fillStyle = "rgba(15, 20, 17, 0.75)";
+    ctx.fillRect(px - tw / 2, py - th / 2, tw, th);
+    ctx.fillStyle = zoneColor(A.zone_digits.indexOf(z));
+    ctx.fillRect(px - tw / 2, py + th / 2 - 2, tw, 2);
+    ctx.fillStyle = "#fff";
+    ctx.fillText(name, px, py + 0.5);
+  }
+}
+
+/* Put cells in zone z of the level (making the level's zone list real if
+ * it was the implicit default). */
+function setZoneCells(cellsToSet, z) {
+  const m = cmap(), lv = level(), d = A.zone_digits[z];
+  const rows = zoneRows(m).map((r) => [...r]);
   let did = false;
   for (const [x, y] of cellsToSet) {
-    if (rows[y][x] !== letter) { rows[y][x] = letter; did = true; }
+    if (rows[y][x] !== d) { rows[y][x] = d; did = true; }
   }
-  if (did) m.access = { ...(m.access || {}), [outfit]: rows.map((r) => r.join("")) };
-  return did;
+  if (!did) return false;
+  if (!lv.zones) lv.zones = levelZones(lv);
+  const out = rows.map((r) => r.join(""));
+  if (out.every((r) => /^0*$/.test(r))) delete m.zone_map; else m.zone_map = out;
+  return true;
 }
+
+function addZone() {
+  const lv = level(), zones = levelZones(lv);
+  if (zones.length >= A.max_zones) { hint(`A level has at most ${A.max_zones} zones.`); return; }
+  pushUndo();
+  lv.zones = [...zones];
+  let n = zones.length + 1;
+  while (zones.some((z) => z.name.toLowerCase() === `zone ${n}`)) n++;
+  lv.zones.push({ name: `zone ${n}`, rules: {} });
+  selZone = lv.zones.length - 1;
+  setTool("zone");
+  changed();
+}
+
+/* Delete zone i: its cells go back to zone 0, later zones move down one. */
+function deleteZone(i) {
+  const lv = level();
+  if (i === 0) { hint("The first zone is where every unpainted cell is: rename it instead."); return; }
+  pushUndo();
+  lv.zones.splice(i, 1);
+  const digits = A.zone_digits;
+  lv.maps.forEach((m) => {
+    if (!m.zone_map) return;
+    m.zone_map = m.zone_map.map((r) => [...r].map((c) => {
+      const z = digits.indexOf(c);
+      return z === i ? "0" : z > i ? digits[z - 1] : c;
+    }).join(""));
+    if (m.zone_map.every((r) => /^0*$/.test(r))) delete m.zone_map;
+  });
+  if (selZone >= lv.zones.length) selZone = lv.zones.length - 1;
+  changed();
+}
+
+/* The Zones panel: one row per zone with its name and a rule per outfit. */
+function renderZones() {
+  const lv = level(), zones = levelZones(lv);
+  if (selZone >= zones.length) selZone = 0;
+  $("zone-count").textContent = `${zones.length}/${A.max_zones}, the whole level`;
+  $("zone-add").disabled = zones.length >= A.max_zones;
+  $("zone-paint-dot").style.background = zoneColor(selZone);
+  $("zone-paint-name").textContent = `Paint “${zones[selZone].name}”`;
+  if (zoneTyping) return;
+  const box = $("zone-list");
+  box.innerHTML = "";
+  zones.forEach((z, i) => {
+    const row = document.createElement("div");
+    row.className = "zone-row" + (i === selZone ? " active" : "");
+    const sw = document.createElement("span");
+    sw.className = "swatch";
+    sw.style.background = zoneColor(i);
+    sw.title = i === 0 ? "Click to paint this zone (where unpainted cells are)" : "Click to paint this zone";
+    const name = document.createElement("input");
+    name.value = z.name;
+    name.spellcheck = false;
+    name.maxLength = 24;
+    name.setAttribute("aria-label", `Name of zone ${i + 1}`);
+    let fresh = true;
+    name.addEventListener("input", () => {
+      if (fresh) { pushUndo(); fresh = false; }
+      if (!lv.zones) lv.zones = levelZones(lv);
+      lv.zones[i].name = name.value;
+      zoneTyping = true;
+      changed();
+      zoneTyping = false;
+    });
+    name.addEventListener("blur", () => { fresh = true; });
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "✕";
+    del.title = i === 0 ? "The first zone holds every unpainted cell: it can't be deleted"
+                        : "Delete this zone: its cells go back to zone 0";
+    del.disabled = i === 0;
+    del.addEventListener("click", (e) => { e.stopPropagation(); deleteZone(i); });
+    const rules = document.createElement("div");
+    rules.className = "zone-rules";
+    A.uniforms.forEach((u) => {
+      const l = document.createElement("label");
+      l.textContent = u === "none" ? "suit" : u;
+      l.title = `What wearing ${outfitLabel(u)} is in this zone`;
+      const sel = document.createElement("select");
+      for (const k of A.access) {
+        const o = new Option(k, k);
+        o.title = A.access_names[k] + (k === A.default_rules[u] ? " (the default)" : "");
+        sel.add(o);
+      }
+      sel.value = zoneRule(z, u);
+      sel.className = "acc-txt-" + sel.value;
+      sel.addEventListener("click", (e) => e.stopPropagation());
+      sel.addEventListener("change", () => {
+        pushUndo();
+        if (!lv.zones) lv.zones = levelZones(lv);
+        const r = { ...(lv.zones[i].rules || {}) };
+        if (sel.value === A.default_rules[u]) delete r[u]; else r[u] = sel.value;
+        lv.zones[i].rules = r;
+        preview = null;
+        changed();
+      });
+      l.appendChild(sel);
+      rules.appendChild(l);
+    });
+    row.append(sw, name, del, rules);
+    row.addEventListener("click", (e) => {
+      if (e.target === name) return;
+      selZone = i;
+      setTool("zone");
+      renderZones();
+      renderEdit();
+    });
+    box.appendChild(row);
+  });
+}
+let zoneTyping = false;
 
 /* The room around (x, y): every cell with the same rule now that can be
  * reached without crossing a wall or going through a way out. Doors,
  * vents and the like, and one-cell gaps in a wall, are filled but end the
  * room, so a click fills one room and not the whole building. */
-function accessRoom(x, y) {
+function zoneRoom(x, y) {
   const m = cmap();
-  const rows = accessRows(m, A.uniforms[accessOutfit]);
+  const rows = zoneRows(m);
   const was = rows[y][x];
   const wall = (cx, cy) => !inMap(cx, cy) || m.map[cy][cx] === "#";
   const pinched = (cx, cy, dx, dy) => wall(cx - dx, cy - dy) && wall(cx + dx, cy + dy);
@@ -517,10 +690,9 @@ function resizeMap(w, h) {
     for (let y = 0; y < h; y++) art.push(((lv.art[y] || "") + "..".repeat(w)).slice(0, 2 * w));
     lv.art = art;
   }
-  for (const [outfit, layer] of Object.entries(lv.access || {})) {   // painted layers follow
-    if (typeof layer === "string") continue;
-    const fill = A.access_default[outfit].repeat(w);
-    lv.access[outfit] = rows.map((_, y) => ((layer[y] || "") + fill).slice(0, w));
+  if (lv.zone_map) {                       // painted zones follow, new cells zone 0
+    lv.zone_map = rows.map((_, y) => ((lv.zone_map[y] || "") + "0".repeat(w)).slice(0, w));
+    if (lv.zone_map.every((r) => /^0*$/.test(r))) delete lv.zone_map;
   }
   changed();
 }
@@ -693,10 +865,9 @@ function applyTool(x, y, e, first) {
     if (did && stroke) (stroke.cells = stroke.cells || []).push([x, y]);
     return did;
   }
-  if (tool.startsWith("access:")) {
-    const letter = tool.slice(7);
-    if (first && e.shiftKey) return setAccessCells(accessRoom(x, y), letter);
-    return setAccessCells([[x, y]], letter);
+  if (tool === "zone") {
+    if (first && e.shiftKey) return setZoneCells(zoneRoom(x, y), selZone);
+    return setZoneCells([[x, y]], selZone);
   }
   if (tool === "start") return first ? setCell(x, y, "P") : false;
 
@@ -812,11 +983,11 @@ async function autoTile(cells) {
 function hint(msg) { $("tool-hint").textContent = msg; }
 
 function setTool(t) {
-  const wasAccess = showingAccess();
+  const wasView = A ? zoneView() : "off";
   tool = t;
-  document.querySelectorAll("#toolbar button, #palette button, #access-bar button[data-tool], .art-panel button[data-tool]").forEach((b) =>
+  document.querySelectorAll("#toolbar button, #palette button, #zone-bar button[data-tool], .art-panel button[data-tool]").forEach((b) =>
     b.classList.toggle("active", b.dataset.tool === t));
-  if (wasAccess !== showingAccess() && mode === "edit" && A) renderEdit();
+  if (A && wasView !== zoneView() && mode === "edit") renderEdit();
   const tile = t.startsWith("tile:") && A.tiles.find((x) => x.char === t.slice(5));
   if (t.startsWith("art:")) {
     artTile = parseInt(t.slice(4), 10);
@@ -825,9 +996,8 @@ function setTool(t) {
     const d = b && A.tiles.find((x) => x.char === b);
     hint(`Painting tileset tile ${artTile}` + (d && !$("art-only").checked
       ? `: also makes the cell a ${d.name}.` : ": changes only the look."));
-  } else if (t.startsWith("access:")) {
-    hint(`Painting where ${outfitLabel(A.uniforms[accessOutfit])} is ${A.access_names[t.slice(7)]}. ` +
-         TOOL_HINTS.access);
+  } else if (t === "zone") {
+    hint(`Painting “${levelZones()[selZone].name}”. ` + TOOL_HINTS.zone);
   } else if (t === "art-erase") {
     hint("Click or drag to remove painted art; the cell's behaviour stays.");
   } else {
@@ -842,6 +1012,7 @@ function renderAll() {
   renderMapTabs();
   renderLinks();
   renderProps();
+  renderZones();
   renderGuards();
   renderScripting();
   if (mode === "edit") renderEdit();
@@ -1134,6 +1305,7 @@ function deleteSwitch() {
 function selectLevel(i) {
   cur = i;
   curMap = 0;
+  selZone = 0;
   selGuard = -1;
   selSwitch = -1;
   preview = null;
@@ -2202,7 +2374,7 @@ window.addEventListener("keydown", async (e) => {
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "y") { e.preventDefault(); redoEdit(); return; }
-    const tools = { 4: "start", 5: "guard", 6: "route", 7: "switch", 0: "art-erase" };
+    const tools = { 4: "start", 5: "guard", 6: "route", 7: "switch", 8: "zone", 0: "art-erase" };
     if (tools[e.key]) { setTool(tools[e.key]); return; }
     const tile = !e.ctrlKey && !e.metaKey &&
       A.tiles.find((x) => x.char !== "P" && tileKey(x.char) === e.key.toUpperCase().replace(/^([123])$/, "$1"));
@@ -2296,28 +2468,17 @@ async function build() {
 }
 
 function wire() {
-  document.querySelectorAll("#toolbar button, #access-bar button[data-tool], .art-panel button[data-tool]").forEach((b) =>
+  document.querySelectorAll("#toolbar button, #zone-bar button[data-tool], .art-panel button[data-tool]").forEach((b) =>
     b.addEventListener("click", () => setTool(b.dataset.tool)));
 
-  // access: one outfit at a time, the same one the cone preview shows
-  A.uniforms.forEach((u, i) => $("access-outfit").add(new Option(outfitLabel(u), String(i))));
-  $("access-outfit").addEventListener("change", (e) => {
-    accessOutfit = parseInt(e.target.value, 10);
-    if (previewDisguise >= 0) {
-      previewDisguise = accessOutfit;
-      $("preview-disguise").value = String(accessOutfit);
-      preview = null;
-      checkLevel();
-    }
-    if (tool.startsWith("access:")) setTool(tool);     // refresh the hint
-    renderEdit();
-  });
-  $("access-show").addEventListener("change", () => renderEdit());
-  $("access-fill").addEventListener("click", () => {
-    if (!tool.startsWith("access:")) { hint("Pick Legal, Trespassing or Hostile first, then Fill map."); return; }
-    pushUndo();
-    cmap().access = { ...(cmap().access || {}), [A.uniforms[accessOutfit]]: tool.slice(7) };
-    changed();
+  // zones: the list is per level, painting per map
+  $("zone-add").addEventListener("click", addZone);
+  $("zone-view").addEventListener("change", () => renderEdit());
+  $("zone-fill").addEventListener("click", () => {
+    const m = cmap(), all = [];
+    m.map.forEach((r, y) => [...r].forEach((_, x) => all.push([x, y])));
+    const before = snapshot();
+    if (setZoneCells(all, selZone)) { undoStack.push(before); redoStack = []; changed(); }
   });
   $("tab-edit").addEventListener("click", enterEdit);
   $("tab-play").addEventListener("click", () => mode !== "play" && enterPlay());
@@ -2337,10 +2498,6 @@ function wire() {
     resizeMap(mapW(cmap()), parseInt(e.target.value, 10) * A.view_h));
   $("preview-disguise").addEventListener("change", (e) => {
     previewDisguise = parseInt(e.target.value, 10);
-    if (previewDisguise >= 0) {              // the access tools follow
-      accessOutfit = previewDisguise;
-      $("access-outfit").value = String(accessOutfit);
-    }
     preview = null;
     renderEdit();
     checkLevel();

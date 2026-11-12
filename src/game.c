@@ -43,17 +43,21 @@ static char    __at(0xA000) map_copy[MAP_MAX_CELLS];
 static uint8_t __at(0xA800) dist[MAP_MAX_CELLS];      /* dist[row_start[y] + x] */
 static uint8_t __at(0xB000) queue_x[QUEUE_SIZE];
 static uint8_t __at(0xB400) queue_y[QUEUE_SIZE];
-static uint8_t __at(0xB800) access[MAP_MAX_CELLS];    /* ACCESS_* bits per cell */
+static uint8_t __at(0xB800) zone[MAP_MAX_CELLS];      /* zone of each cell */
 #define cells map_copy
 #else
 static const char *cells;
 static uint8_t dist[MAP_MAX_CELLS];
 static uint8_t queue_x[QUEUE_SIZE];
 static uint8_t queue_y[QUEUE_SIZE];
-static uint8_t access[MAP_MAX_CELLS];
+static uint8_t zone[MAP_MAX_CELLS];
 #endif
 
-static const LevelDef *access_of;       /* the map access[] was unpacked for */
+static const LevelDef *zones_of;        /* the map zone[] was unpacked for */
+static const uint8_t default_rules[ZONE_RULE_BYTES] = { ACCESS_DEFAULT };
+/* game_access finds a zone's rules with a shift, not a multiply */
+typedef char zone_rule_bytes_must_be_2[ZONE_RULE_BYTES == 2 ? 1 : -1];
+static const uint8_t *rules = default_rules;   /* the level's zone rules */
 
 static const LevelDef *level;
 static uint8_t         map_w, map_h;
@@ -83,11 +87,12 @@ void game_use(const LevelDef *lvl)
 #else
     cells = lvl->map;
 #endif
-    if (lvl != access_of) {             /* unpack the access layer */
-        if (lvl->access) far_read_rle(BANK_MAPS, access, lvl->access, at);
-        else memset(access, ACCESS_DEFAULT, at);
-        access_of = lvl;
+    if (lvl != zones_of) {              /* unpack the zones */
+        if (lvl->zones) far_read_rle(BANK_MAPS, zone, lvl->zones, at);
+        else memset(zone, 0, at);
+        zones_of = lvl;
     }
+    rules = lvl->zone_rules ? lvl->zone_rules : default_rules;
     if (lvl != level) game_map_changed();
     level = lvl;
 }
@@ -216,8 +221,10 @@ static uint8_t line_of_sight(int8_t x0, int8_t y0, int8_t x1, int8_t y1, uint8_t
 
 uint8_t game_access(const GameState *s, uint8_t x, uint8_t y)
 {
+    uint8_t d = s->disguise;
     if (x >= map_w || y >= map_h) return ACCESS_TRESPASS;
-    return (access[row_start[y] + x] >> (s->disguise << 1)) & 3;
+    /* the zone's rule bytes, then disguise d's two bits */
+    return (rules[(zone[row_start[y] + x] << 1) | (d >> 2)] >> ((d & 3) << 1)) & 3;
 }
 
 /* How guard idx regards someone dressed like the player on cell (x, y):
@@ -384,7 +391,7 @@ static uint8_t dist_x = NO_TARGET, dist_y;   /* the tile dist[] was filled for *
 
 void game_data_changed(void)
 {
-    access_of = 0;
+    zones_of = 0;
     game_map_changed();
 }
 

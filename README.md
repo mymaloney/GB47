@@ -18,9 +18,10 @@ stealth with social stealth (disguises, dialogue) and combat.
   lure guards away
 - **Takedowns and bodies:** grab a guard from an adjacent tile, then drag or
   push the body out of sight
-- **Disguises and access:** take a uniform from a body. Every part of a
-  map is legal, trespassing or hostile for each outfit, and guards enforce
-  that for wherever you are standing
+- **Disguises and zones:** take a uniform from a body. A level is divided
+  into zones (a dance floor, a backstage...), each legal, trespassing or
+  hostile for each outfit, and guards enforce the rule of the zone you
+  are standing in
 - **Building blocks:** doors, windows, railings, security doors, curtains,
   mesh screens and vents, each blocking a different mix of movement,
   sight and throws
@@ -100,13 +101,18 @@ rules into `build/libgame.so`, starts a local server, and opens
   flag is set, e.g. floor that becomes the exit. It is drawn with a dashed
   outline and a faint picture of what it becomes. Per switch cell: the
   flag, what it turns into, and the tileset tile it then shows.
-- **Access**: paint where each outfit may be. Pick the outfit (your own
-  suit, GUARD, OFFICER), then **Legal**, **Trespassing** or **Hostile**,
-  and click or drag; Shift+click fills a room (it stops at doors and
-  doorways); **Fill map** sets the whole map. The map is tinted green,
-  amber and red while you paint, or whenever **Show** is ticked, and the
-  cone preview follows the same outfit. A new map starts with the suit
-  trespassing everywhere and uniforms legal everywhere.
+- **Zones** (the panel on the right, shared by every map of the level):
+  name each area of the level and set, per outfit, whether wearing it
+  there is **L**egal, **T**respassing or **H**ostile. **+ Zone** adds one
+  (up to 16); ✕ deletes one, and its cells go back to the first zone,
+  which holds every cell you haven't painted. Click a zone, then paint it
+  on the map with the Zones tool (`8`): click or drag, Shift+click fills a
+  room (it stops at doors and doorways), **Fill map** does the whole map.
+  **Show** tints the map by zone, with each zone's name on it (the
+  default while painting), or green/amber/red by the rules for the outfit
+  the cone preview is set to: the view that answers "is this fair in a
+  GUARD uniform?". A new level has one zone, "everywhere", where your
+  suit trespasses and uniforms are legal.
 - Per level: name, design notes, and starting stones/bottles.
 - **Transition**: how the screen dips to black when the level is finished.
   Choosing one plays it on the picture (so does **Preview**), and finishing
@@ -346,8 +352,9 @@ You start in your own clothes. Stand on a body and press B to put on its
 uniform (one turn). Your sprite changes to show what you're wearing. Each
 body has one uniform, and there's no changing back.
 
-**Access.** Every cell of a map has a rule for each outfit, painted in
-the editor, and guards enforce the rule for the cell you are standing on:
+**Zones.** A level is divided into zones, painted in the editor and
+shared by all its maps. Each zone has a rule for each outfit, and guards
+enforce the rule of the zone you are standing in:
 
 | Where you stand is | A guard | Its cone on that cell is |
 |---|---|---|
@@ -363,11 +370,12 @@ you where you're legal just waits for you to move.
 An **enforcer** is the exception: a guard tagged as seeing through an
 outfit treats anyone wearing it as trespassing, even where it is legal.
 
-Maps without painted access treat your own suit as trespassing everywhere
-and uniforms as legal everywhere; that is how levels 1-5 and 7-9 play.
-Level 6's hall is hostile to the suit. Bodies are always spotted with the
-normal cone. Disguise types are `DISGUISE_*` and the rules `ACCESS_*` in
-`src/game.h`; cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and
+A level without zones treats your own suit as trespassing everywhere and
+uniforms as legal everywhere. Levels 1-5 and 7-9 are one zone each,
+hostile to the suit; level 6 has two, with its hall hostile to the suit
+and the room on the left only trespassing. Bodies are always spotted with
+the normal cone. Disguise types are `DISGUISE_*` and the rules `ACCESS_*`
+in `src/game.h`; cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and
 `HOSTILE_HALF`.
 
 ### Characters, talking, scripts and switch cells
@@ -445,9 +453,9 @@ and 8 KB of RAM (`src/far.h` has the layout):
 
 | Bank | Holds | Free |
 |---|---|---|
-| 0 | the rules, GBDK | 2.7 KB |
+| 0 | the rules, GBDK | 2.6 KB |
 | 1 | `main.c`, built-in tiles, the level table, scripts and text | 6.4 KB |
-| 2 | map cells and access layers | 11.8 KB |
+| 2 | map cells and zone maps | 11.8 KB |
 | 3 | painted art | 13.7 KB |
 
 About 5.4 KB of the 8 KB of work RAM is free; the current map and the
@@ -483,7 +491,7 @@ gives up after 2 million and reports "too big to tell".
 | Path | What it is |
 |---|---|
 | `src/game.c`, `game.h` | All game rules: turns, patrols, vision, undo. No hardware access, so it also compiles on a PC. |
-| `levels/levels.json` | **Level data** (source of truth): maps, access layers, guard routes, uniforms and enforcer tags, starting items. |
+| `levels/levels.json` | **Level data** (source of truth): maps, zones and zone maps, guard routes, uniforms and enforcer tags, starting items. |
 | `src/levels.c`, `levels_maps.c`, `levels_art.c`, `levels.h` | Generated from the JSON by `tools/gen_levels.py`, one file per ROM bank. Don't edit. |
 | `src/far.c`, `far.h` | The ROM bank layout, and reading level data out of the data banks. |
 | `tools/editor/` | Level editor: `server.py` (local server), `game_lib.py` (Python bridge to the C rules), and the page. |
@@ -508,7 +516,9 @@ makes undo, the solver, and PC testing possible.
 5. ~~NPC dialogue and simple scripts~~ (the dog on level 3; how it was built is in
    [`docs/dialogue-plan.md`](docs/dialogue-plan.md)). Later: more script steps (give an item,
    send a guard somewhere), talking to guards, a lower-case font
-6. Title screen, save data (battery SRAM), music (hUGETracker)
+6. ~~Zones with a rule per outfit~~. **Next:** disguises made in the editor, with
+   their own looks ([`docs/zones-plan.md`](docs/zones-plan.md))
+7. Title screen, save data (battery SRAM), music (hUGETracker)
 
 Introduce each new mechanic with its own teaching level, and let the
 solver keep every level honest.

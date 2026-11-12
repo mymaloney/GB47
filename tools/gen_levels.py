@@ -54,15 +54,10 @@ JSON format, one object per level:
           "script":   [ ... ]              HUD prompt B:PET (max 8 chars),
                                            and what it does: see below
         }],
-        "access": {                        optional: where each outfit may
-          "none":    ["TTLL...", ...],     be. Per outfit, a letter per
-          "guard":   "L",                  cell (rows like the map): L
-          "officer": "L"                   legal, T trespassing, H hostile;
-        },                                 or one letter for the whole map.
-                                           Guards enforce it: see ACCESS_*
-                                           in src/game.h. Default: T for
-                                           none (your own suit), L for the
-                                           uniforms
+        "zone_map": ["0011...", ...],      optional: which of the level's
+                                           zones each cell is in, a hex
+                                           digit per cell (rows like the
+                                           map). Default: all zone 0
         "switches": [{                     optional: cells that change when
           "x": 16, "y": 13,                a flag is set
           "flag": "dog",
@@ -73,6 +68,16 @@ JSON format, one object per level:
                                            null for the built-in graphic
         }]
       }],
+      "zones": [{                          optional, shared by all the maps:
+        "name": "dance floor",             the areas of the level, and per
+        "rules": {"none": "T",             outfit whether wearing it there
+                  "guard": "L"}            is L legal, T trespassing or H
+      }],                                  hostile (see ACCESS_* in
+                                           src/game.h). An outfit left out
+                                           gets the default: T for your own
+                                           suit, L for the rest. At most 16
+                                           zones. Default: one zone,
+                                           "everywhere", all defaults
       "links": [{                          joins two maps' edges (both ways)
         "from": 0, "edge": "right",        map index and which of its edges
         "to": 1,                           the map beyond that edge
@@ -125,11 +130,17 @@ DEFAULT_TRANSITION = "fade"
 MAX_SWITCHES, MAX_FLAGS = 8, 8
 VERB_MAX = 8
 TEXT_COLS, TEXT_ROWS = 18, 3          # the message box (src/main.c)
-# Access: per outfit, what a cell is for someone wearing it (ACCESS_* in
-# src/game.h, in that order), and what a map without a layer says.
+# Access: per outfit, what a zone is for someone wearing it (ACCESS_* in
+# src/game.h, in that order). Outfit 0 is your own suit: it trespasses
+# unless a zone says otherwise; every other outfit is legal.
 ACCESS = "LTH"
 ACCESS_NAMES = {"L": "legal", "T": "trespassing", "H": "hostile"}
-ACCESS_DEFAULT = {"none": "T", "guard": "L", "officer": "L"}
+MAX_ZONES, DISGUISE_MAX = 16, 8
+ZONE_DIGITS = "0123456789abcdef"
+
+
+def default_rule(outfit):
+    return "T" if UNIFORMS.index(outfit) == 0 else "L"
 # script ops, as in src/game.h
 OP_END, OP_SAY, OP_SET, OP_CLEAR, OP_IF, OP_JUMP = range(6)
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
@@ -224,6 +235,7 @@ def upgrade(lv):
                 "verb": n.get("verb", "TALK"), "script": n.get("script", [])})
         for g in m.get("guards", []):
             upgrade_attitude(g)
+    upgrade_access(lv)
     lv.setdefault("links", [])
     lv.setdefault("items", {})
     lv.setdefault("transition", DEFAULT_TRANSITION)
@@ -245,36 +257,74 @@ def upgrade_attitude(g):
     if set(att) == {"I"}:
         g.setdefault("sees", False)
     else:
-        seen = [u for u, a in zip(UNIFORMS, att) if a in "EH" and ACCESS_DEFAULT[u] == "L"]
+        seen = [u for u, a in zip(UNIFORMS, att) if a in "EH" and default_rule(u) == "L"]
         if seen:
             g.setdefault("enforcer", seen)
 
 
-def access_rows(m, outfit):
-    """One outfit's access layer as rows of L/T/H, the size of the map."""
-    layer = (m.get("access") or {}).get(outfit, ACCESS_DEFAULT[outfit])
-    if isinstance(layer, str):
-        return [layer * len(r) for r in m["map"]]
-    return layer
+def upgrade_access(lv):
+    """Maps used to carry an access layer each: per outfit, a letter per
+    cell (or one letter for the whole map). Now a level has zones with a
+    rule per outfit, and each map says which zone each cell is in. Every
+    distinct combination of letters becomes a zone, the commonest one
+    zone 0 (so most cells need no zone map)."""
+    if not any("access" in m for m in lv["maps"]):
+        return
+    combos, counts = [], {}
+    grids = []
+    for m in lv["maps"]:
+        acc = m.pop("access", None) or {}
+        rows = m.get("map", [])
+        layers = []
+        for u in UNIFORMS:
+            layer = acc.get(u, default_rule(u))
+            layers.append([layer * len(r) for r in rows] if isinstance(layer, str) else layer)
+        grid = [[tuple(layers[d][y][x] for d in range(len(UNIFORMS))) for x in range(len(r))]
+                for y, r in enumerate(rows)]
+        for row in grid:
+            for c in row:
+                if c not in counts:
+                    combos.append(c)
+                counts[c] = counts.get(c, 0) + 1
+        grids.append(grid)
+    combos.sort(key=lambda c: -counts[c])             # stable: ties keep map order
+    if len(combos) > MAX_ZONES:
+        raise ValueError(f"{lv.get('name')}: {len(combos)} different access combinations "
+                         f"don't fit in {MAX_ZONES} zones")
+    lv["zones"] = [{"name": "everywhere" if len(combos) == 1 else f"zone {i + 1}",
+                    "rules": {u: c[d] for d, u in enumerate(UNIFORMS) if c[d] != default_rule(u)}}
+                   for i, c in enumerate(combos)]
+    for m, grid in zip(lv["maps"], grids):
+        rows = ["".join(ZONE_DIGITS[combos.index(c)] for c in row) for row in grid]
+        if any(set(r) - {"0"} for r in rows):
+            m["zone_map"] = rows
 
 
-def access_bytes(m):
-    """The access layer as the rules read it: a byte per cell, two bits per
-    outfit (ACCESS_* in src/game.h)."""
-    layers = [access_rows(m, u) for u in UNIFORMS]
-    return [sum(ACCESS.index(layers[d][y][x]) << (2 * d) for d in range(len(UNIFORMS)))
-            for y in range(len(m["map"])) for x in range(len(m["map"][0]))]
+# ---- zones: who may be where
+
+def level_zones(lv):
+    """The level's zones; one default zone if it doesn't say."""
+    return lv.get("zones") or [{"name": "everywhere", "rules": {}}]
 
 
-def access_is_default(m):
-    return all(access_rows(m, u) == [ACCESS_DEFAULT[u] * len(r) for r in m["map"]]
-               for u in UNIFORMS)
+def zone_rule(zone, outfit):
+    """L, T or H: what wearing outfit is in this zone."""
+    return (zone.get("rules") or {}).get(outfit, default_rule(outfit))
 
 
-def access_rle(m):
-    """access_bytes as (run, byte) pairs, runs of up to 255."""
+def zone_rows(m):
+    """The map's zones as rows of hex digits, the size of the map."""
+    return m.get("zone_map") or ["0" * len(r) for r in m["map"]]
+
+
+def zones_default(m):
+    return all(set(r) <= {"0"} for r in zone_rows(m))
+
+
+def zone_rle(m):
+    """The zone of each cell as (run, zone) pairs, runs of up to 255."""
     out = []
-    for b in access_bytes(m):
+    for b in (ZONE_DIGITS.index(c) for r in zone_rows(m) for c in r):
         if out and out[-1] == b and out[-2] < 255:
             out[-2] += 1
         else:
@@ -282,24 +332,60 @@ def access_rle(m):
     return out
 
 
-def validate_access(m):
-    acc = m.get("access")
-    if acc is None:
-        return []
-    if not isinstance(acc, dict) or set(acc) - set(UNIFORMS):
-        return [f"Access must give a layer for some of: {', '.join(UNIFORMS)}."]
-    rows = m["map"]
-    for u, layer in acc.items():
-        if isinstance(layer, str):
-            ok = len(layer) == 1 and layer in ACCESS
+def zone_rule_bytes(lv):
+    """The rule table as the rules read it: two bytes per zone, two bits
+    per outfit (outfit d in byte d >> 2, bits 2 * (d & 3))."""
+    out = []
+    for z in level_zones(lv):
+        b = [0, 0]
+        for d, u in enumerate(UNIFORMS):
+            b[d >> 2] |= ACCESS.index(zone_rule(z, u)) << (2 * (d & 3))
+        out += b
+    return out
+
+
+def validate_zones(lv):
+    """Problems with a level's zones and its maps' zone maps."""
+    zones = lv.get("zones")
+    if zones is None:
+        zones = []
+    elif not isinstance(zones, list) or not 1 <= len(zones) <= MAX_ZONES:
+        return [f"A level has 1-{MAX_ZONES} zones."]
+    errs, names = [], set()
+    for i, z in enumerate(zones):
+        name = z.get("name") if isinstance(z, dict) else None
+        if not isinstance(name, str) or not name.strip():
+            errs.append(f"Zone {i + 1} needs a name.")
+        elif name.strip().lower() in names:
+            errs.append(f"Two zones are called \"{name}\".")
         else:
-            ok = (isinstance(layer, list) and len(layer) == len(rows) and
-                  all(isinstance(r, str) and len(r) == len(rows[0]) and not set(r) - set(ACCESS)
-                      for r in layer))
-        if not ok:
-            return [f"The access layer for {u} must be one of L, T, H, or rows of them "
-                    "the size of the map."]
-    return []
+            names.add(name.strip().lower())
+        rules = z.get("rules", {}) if isinstance(z, dict) else None
+        if not isinstance(rules, dict) or set(rules) - set(UNIFORMS) or \
+                any(r not in ACCESS for r in rules.values()):
+            errs.append(f"Zone {i + 1}'s rules must say L, T or H for some of: "
+                        f"{', '.join(UNIFORMS)}.")
+    count = max(1, len(zones))
+    multi = len(lv["maps"]) > 1
+    for k, m in enumerate(lv["maps"]):
+        zm = m.get("zone_map")
+        if zm is None:
+            continue
+        rows = m["map"]
+        prefix = f"Map {k + 1}: " if multi else ""
+        if not (isinstance(zm, list) and len(zm) == len(rows) and
+                all(isinstance(r, str) and len(r) == len(rows[0]) for r in zm)):
+            errs.append(prefix + "The zone map doesn't match the map's size.")
+            continue
+        used = set("".join(zm))
+        bad = sorted(c for c in used if c not in ZONE_DIGITS[:count])
+        if bad:
+            last = ZONE_DIGITS[count - 1]
+            errs.append(prefix + f"The zone map has cells marked {bad[0]}, but the level's "
+                        f"zones are numbered 0-{last}." if count > 1 else
+                        prefix + f"The zone map has cells marked {bad[0]}, but the level "
+                        "has only one zone (0).")
+    return errs
 
 
 def map_size(m):
@@ -397,7 +483,6 @@ def validate_map(m):
                             errs.append(f"{leg} walks through a {what} at ({x},{y}).")
                             break
     errs += validate_art(m)
-    errs += validate_access(m)
     return errs
 
 
@@ -766,6 +851,7 @@ def validate_level(lv):
     errs += map_errs
     if map_errs:
         return errs
+    errs += validate_zones(lv)
 
     # scripts and switch cells (the maps themselves are sound by now)
     set_flags = {st["set"] for sc in level_scripts(lv) for st in script_steps(sc)
@@ -851,10 +937,10 @@ def generate_maps(levels):
         rows = cell_rows(m)
         out.append(f"const char level_map{k}[] =")
         out += [f"    {c_string(r)}" + (";" if j == len(rows) - 1 else "") for j, r in enumerate(rows)]
-        if not access_is_default(m):
-            out.append("/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */")
-            out.append(f"const uint8_t level_access{k}[] = {{ "
-                       f"{', '.join(map(str, access_rle(m)))} }};")
+        if not zones_default(m):
+            out.append("/* the zone of each cell: (run, zone) pairs */")
+            out.append(f"const uint8_t level_zones{k}[] = {{ "
+                       f"{', '.join(map(str, zone_rle(m)))} }};")
         out.append("")
     return "\n".join(out)
 
@@ -866,8 +952,16 @@ def generate_c(levels):
     count = len(all_maps(levels))
     out.append("/* Map cells: in levels_maps.c (ROM bank BANK_MAPS). */")
     out += [f"extern const char level_map{k}[];" for k in range(count)]
-    out += [f"extern const uint8_t level_access{k}[];"
-            for k, m in enumerate(all_maps(levels)) if not access_is_default(m)]
+    out += [f"extern const uint8_t level_zones{k}[];"
+            for k, m in enumerate(all_maps(levels)) if not zones_default(m)]
+    rule_tables = [n for n, lv in enumerate(map(upgrade, levels)) if lv.get("zones")]
+    if rule_tables:
+        out += ["", "/* Each level's zone rules: two bytes per zone, ACCESS_* bits per outfit. */"]
+        for n, lv in enumerate(map(upgrade, levels)):
+            if n in rule_tables:
+                names = ", ".join(z["name"] for z in lv["zones"]).replace("*/", "* /")
+                out.append(f"static const uint8_t zone_rules{n}[] = {{ "
+                           f"{', '.join(map(str, zone_rule_bytes(lv)))} }};   /* {names} */")
     scripts, texts = compile_all(levels)
     if scripts:
         out += ["", "/* Characters' scripts (OP_* in game.h). */"]
@@ -925,8 +1019,9 @@ def generate_c(levels):
             if not switches:
                 out.append("            { 0, 0, 0, 0, 0, 0 },")
             out.append("        },")
-            out.append(f"        {'0' if access_is_default(m) else f'level_access{base + k}'},"
-                       "   /* access */")
+            out.append(f"        {'0' if zones_default(m) else f'level_zones{base + k}'},"
+                       "   /* zones */")
+            out.append(f"        {f'zone_rules{n}' if n in rule_tables else '0'},")
             out.append("    },")
         base += len(lv["maps"])
     out.append("};")
@@ -1047,6 +1142,12 @@ def dumps(levels):
         lines.append(f'    "notes": {json.dumps(lv.get("notes", ""))},')
         lines.append(f'    "items": {json.dumps({k: lv.get("items", {}).get(k, 0) for k in ITEMS})},')
         lines.append(f'    "transition": {json.dumps(lv["transition"])},')
+        if lv.get("zones"):
+            lines.append('    "zones": [\n' + ",\n".join(
+                "      " + json.dumps({"name": z["name"],
+                                       "rules": {u: z["rules"][u] for u in UNIFORMS
+                                                 if u in z.get("rules", {})}})
+                for z in lv["zones"]) + "\n    ],")
         lines.append('    "maps": [')
         ms = []
         for m in lv["maps"]:
@@ -1073,22 +1174,11 @@ def dumps(levels):
                     d["verb"], d["script"] = g.get("verb", ""), g.get("script", [])
                 gl.append("          " + json.dumps(d))
             ml.append('        "guards": [' + ("\n" + ",\n".join(gl) + "\n        ]" if gl else "]"))
-            if not access_is_default(m):           # a letter where a layer is all one thing
-                acc = {}
-                for u in UNIFORMS:
-                    layer = access_rows(m, u)
-                    flat = set("".join(layer))
-                    if len(flat) == 1:
-                        if flat != {ACCESS_DEFAULT[u]}:
-                            acc[u] = flat.pop()
-                    else:
-                        acc[u] = layer
+            if not zones_default(m):
                 ml[-1] += ","
-                ml.append('        "access": {\n' + ",\n".join(
-                    f'          "{u}": ' + (json.dumps(v) if isinstance(v, str) else
-                                             "[\n" + ",\n".join(f"            {json.dumps(r)}" for r in v) +
-                                             "\n          ]")
-                    for u, v in acc.items()) + "\n        }")
+                ml.append('        "zone_map": [')
+                ml.append(",\n".join(f"          {json.dumps(r)}" for r in m["zone_map"]))
+                ml.append("        ]")
             for key in ("switches",):              # only where there are any
                 if m.get(key):
                     ml[-1] += ","

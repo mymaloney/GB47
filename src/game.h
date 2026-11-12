@@ -65,14 +65,17 @@ extern const ItemDef item_defs[ITEM_TYPES];
 
 /* Disguises. A guard's uniform is what you get from its body. */
 #define DISGUISE_TYPES   3
+#define DISGUISE_MAX     8   /* room in the enforcer mask and zone rules */
 #define DISGUISE_NONE    0   /* your own clothes */
 #define DISGUISE_GUARD   1
 #define DISGUISE_OFFICER 2
 
-/* Access: where each outfit may be. Every cell of a map says, for each
- * disguise, whether someone wearing it is legal there, trespassing, or in
- * a hostile area. Guards don't have opinions of their own: they enforce
- * these rules for the cell the player is standing on.
+/* Access: where each outfit may be. A level is divided into numbered
+ * zones (a dance floor, a backstage, a security office...), shared by all
+ * its maps; every cell of a map belongs to one zone. Each zone has a rule
+ * per disguise: someone wearing it there is legal, trespassing, or in a
+ * hostile area. Guards don't have opinions of their own: they enforce the
+ * rule of the zone the player is standing in.
  *
  *   legal        guards ignore you. Their normal cone still spots bodies,
  *                takedowns and suspicious actions.
@@ -83,12 +86,16 @@ extern const ItemDef item_defs[ITEM_TYPES];
  * through particular disguises (GuardDef.enforcer), and treats someone
  * wearing one as trespassing even where that outfit is legal.
  *
- * One byte per cell: two bits per disguise, disguise d in bits 2d, 2d+1. */
+ * One byte per cell: its zone. The level's rule table has ZONE_RULE_BYTES
+ * per zone, two bits per disguise: disguise d's ACCESS_* is in byte
+ * d >> 2, bits 2 * (d & 3). */
 #define ACCESS_LEGAL    0
 #define ACCESS_TRESPASS 1
 #define ACCESS_HOSTILE  2
-/* A map without an access layer: your own clothes trespass everywhere,
- * uniforms are legal everywhere. */
+#define MAX_ZONES       16
+#define ZONE_RULE_BYTES (DISGUISE_MAX / 4)
+/* The rule byte for disguises 0-3 where a level has no rule table: your
+ * own clothes trespass, uniforms are legal. */
 #define ACCESS_DEFAULT  (ACCESS_TRESPASS << (2 * DISGUISE_NONE))
 
 /* What a guard is doing. */
@@ -235,10 +242,14 @@ typedef struct {
     uint8_t     transition;
     uint8_t     switch_count;
     SwitchDef   switches[MAX_SWITCHES];
-    /* The access layer (see ACCESS_*): width * height bytes, run-length
-     * encoded as (run, byte) pairs. 0 = ACCESS_DEFAULT everywhere. Like
-     * the map, it is in ROM bank BANK_MAPS and only game_use reads it. */
-    const uint8_t *access;
+    /* The zone of each cell (see ACCESS_*): width * height bytes, run-
+     * length encoded as (run, zone) pairs. 0 = zone 0 everywhere. Like the
+     * map, it is in ROM bank BANK_MAPS and only game_use reads it. */
+    const uint8_t *zones;
+    /* The level's zone rules (the same pointer in each of its maps):
+     * ZONE_RULE_BYTES per zone, in the level table (always mapped). 0 = a
+     * single zone with ACCESS_DEFAULT. */
+    const uint8_t *zone_rules;
 } LevelDef;
 
 /* ---- Dynamic state (lives in RAM, snapshotted for undo) ---- */

@@ -23,8 +23,6 @@ const char level_map0[] =
     "####################"
     "####################"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access0[] = { 255, 2, 65, 2 };
 
 const char level_map1[] =
     "####################"
@@ -43,8 +41,6 @@ const char level_map1[] =
     "#..................#"
     "####################"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access1[] = { 255, 2, 65, 2 };
 
 const char level_map2[] =
     "####################"
@@ -63,8 +59,6 @@ const char level_map2[] =
     "#####...........0..#"
     "#####..............#"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access2[] = { 255, 2, 65, 2 };
 
 const char level_map3[] =
     "####################"
@@ -83,8 +77,6 @@ const char level_map3[] =
     "####################"
     "####################"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access3[] = { 255, 2, 65, 2 };
 
 const char level_map4[] =
     "####################"
@@ -103,8 +95,6 @@ const char level_map4[] =
     "####################"
     "####################"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access4[] = { 255, 2, 65, 2 };
 
 const char level_map5[] =
     "####################"
@@ -123,8 +113,8 @@ const char level_map5[] =
     "####################"
     "####################"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access5[] = { 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2, 8, 1, 12, 2 };
+/* the zone of each cell: (run, zone) pairs */
+const uint8_t level_zones5[] = { 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0, 8, 1, 12, 0 };
 
 const char level_map6[] =
     "########################################"
@@ -159,8 +149,6 @@ const char level_map6[] =
     "#............###########################"
     "#............###########################"
     "########################################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access6[] = { 255, 2, 255, 2, 255, 2, 255, 2, 255, 2, 5, 2 };
 
 const char level_map7[] =
     "####################"
@@ -179,8 +167,6 @@ const char level_map7[] =
     "####################"
     "####################"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access7[] = { 255, 2, 65, 2 };
 
 const char level_map8[] =
     "####################"
@@ -199,8 +185,6 @@ const char level_map8[] =
     "####################"
     "####################"
     "####################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access8[] = { 255, 2, 65, 2 };
 
 const char level_map9[] =
     "########################################"
@@ -219,5 +203,3 @@ const char level_map9[] =
     "########################################"
     "########################################"
     "########################################";
-/* who may be where: (run, byte) pairs, ACCESS_* bits per cell */
-const uint8_t level_access9[] = { 255, 2, 255, 2, 130, 2 };

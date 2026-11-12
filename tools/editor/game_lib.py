@@ -79,7 +79,7 @@ class LevelDef(C.Structure):
                 ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4),
                 ("transition", C.c_uint8),
                 ("switch_count", C.c_uint8), ("switches", SwitchDef * MAX_SWITCHES),
-                ("access", C.POINTER(C.c_uint8))]
+                ("zones", C.POINTER(C.c_uint8)), ("zone_rules", C.POINTER(C.c_uint8))]
 
 
 class Guard(C.Structure):
@@ -200,6 +200,8 @@ class Level:
         name = self._b(data["name"])
         # scripts as the ROM gets them; a SAY's number indexes self.texts
         self.flags = gen_levels.level_flags(data)
+        rules = gen_levels.zone_rule_bytes(data)
+        self.zone_rules = (C.c_uint8 * len(rules))(*rules)
         self.texts = []
         # painted art per map: grid of tileset tiles (None = built-in), and
         # how many variants each tile has
@@ -251,11 +253,13 @@ class Level:
                 items = data.get("items", {})
                 for i, it in enumerate(ITEMS):
                     d.items[i] = items.get(it["name"].lower(), 0)
-            if not gen_levels.access_is_default(m):     # who may be where
-                rle = gen_levels.access_rle(m)
+            if not gen_levels.zones_default(m):         # which zone each cell is in
+                rle = gen_levels.zone_rle(m)
                 buf = (C.c_uint8 * len(rle))(*rle)
                 self._keep.append(buf)
-                d.access = C.cast(buf, C.POINTER(C.c_uint8))
+                d.zones = C.cast(buf, C.POINTER(C.c_uint8))
+            if data.get("zones"):                       # the level's rules, shared
+                d.zone_rules = C.cast(self.zone_rules, C.POINTER(C.c_uint8))
             d.part = k
             d.transition = TRANSITIONS.index(data["transition"])
             for di, dname in enumerate(DIRS):

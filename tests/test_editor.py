@@ -380,24 +380,32 @@ assert gen_levels.guard_look({"uniform": "guard"}) == "guard"
 assets = server.looks_assets()
 assert assets["first_tile"] == g.T["SPRITE_TILE_COUNT"] and len(assets["frames"][2]) == 6
 
-# access: where each outfit may be. Level 6's hall is hostile to your own
-# suit; maps without a layer trespass in the suit and are legal in uniforms
+# zones: who may be where. Level 6 has two: the hall, hostile to your own
+# suit, and the room on the left, where the suit only trespasses. Every
+# other level is one zone, hostile to the suit. Uniforms are legal.
 A_ = {k: g.G["ACCESS_" + k] for k in ("LEGAL", "TRESPASS", "HOSTILE")}
 assert gen_levels.ACCESS == "LTH" and [A_["LEGAL"], A_["TRESPASS"], A_["HOSTILE"]] == [0, 1, 2]
-plain, hall = {"map": levels[0]["maps"][0]["map"], "guards": []}, levels[5]["maps"][0]
-assert gen_levels.access_is_default(plain) and set(gen_levels.access_bytes(plain)) == {1}
-assert not gen_levels.access_is_default(hall)
-assert gen_levels.access_rows(hall, "none")[4] == "T" * 8 + "H" * 12
-assert gen_levels.access_rows(hall, "guard")[4] == "L" * 20
-rle = gen_levels.access_rle(hall)
+assert gen_levels.MAX_ZONES == g.G["MAX_ZONES"] and gen_levels.DISGUISE_MAX == g.G["DISGUISE_MAX"]
+dress = levels[5]
+assert [z["name"] for z in dress["zones"]] == ["zone 1", "zone 2"]
+assert gen_levels.zone_rule(dress["zones"][0], "none") == "H"
+assert gen_levels.zone_rule(dress["zones"][1], "none") == "T"
+assert all(gen_levels.zone_rule(z, u) == "L" for z in dress["zones"] for u in ("guard", "officer"))
+hall = dress["maps"][0]
+assert gen_levels.zone_rows(hall)[4] == "1" * 8 + "0" * 12
+rle = gen_levels.zone_rle(hall)
 unpacked = [b for n, b in zip(rle[::2], rle[1::2]) for _ in range(n)]
-assert unpacked == gen_levels.access_bytes(hall) and max(rle[::2]) <= 255
+assert unpacked == [int(c, 16) for r in gen_levels.zone_rows(hall) for c in r] and max(rle[::2]) <= 255
+assert gen_levels.zone_rule_bytes(dress) == [A_["HOSTILE"], 0, A_["TRESPASS"], 0]
+assert all(lv["zones"] == [{"name": "everywhere", "rules": {"none": "H"}}]
+           for n, lv in enumerate(levels) if n != 5)
 c6 = gen_levels.generated_files(levels)
-assert "const uint8_t level_access5[] = { 8, 1, 12, 2," in c6["levels_maps.c"]
-assert "level_access5,   /* access */" in c6["levels.c"]
+assert "const uint8_t level_zones5[] = { 8, 1, 12, 0," in c6["levels_maps.c"]
+assert "level_zones5,   /* zones */" in c6["levels.c"] and "zone_rules5,\n" in c6["levels.c"]
+assert "level_zones0" not in c6["levels.c"], "one zone everywhere: no zone map"
 bare = json.loads(json.dumps(levels[0]))
-bare["maps"][0].pop("access", None)
-assert "level_access0" not in gen_levels.generated_files([bare])["levels.c"], "no layer, no data"
+bare.pop("zones")
+assert "zone_rules0" not in gen_levels.generated_files([bare])["levels.c"], "no zones, no table"
 l6 = g.Level(levels[5])
 w6 = g.new_game(l6)
 st = w6.part[0]
@@ -415,19 +423,50 @@ assert old_g == {"facing": "down", "route": [[1, 1]], "uniform": "guard", "enfor
 old_d = {"attitude": "III"}
 gen_levels.upgrade_attitude(old_d)
 assert old_d == {"sees": False}
-# a layer that is all one thing is saved as a letter; defaults aren't saved
-painted = json.loads(json.dumps(levels[0]))
-pm = painted["maps"][0]
-pm["access"] = {"none": ["L" * 20] * 16, "guard": ["L" * 20] * 16,
-                "officer": ["T" * 20] * 8 + ["H" * 20] * 8}
-assert not gen_levels.validate_level(painted)
-text = gen_levels.dumps([painted])
-back = json.loads(text)[0]["maps"][0]["access"]
-assert back["none"] == "L" and "guard" not in back and back["officer"][8] == "H" * 20
-pm["access"] = {"none": ["L" * 19] * 16}
-assert any("access layer for none" in e for e in gen_levels.validate_level(painted))
-pm["access"] = {"cook": "L"}
-assert any("Access must give" in e for e in gen_levels.validate_level(painted))
+# old access layers become zones: one per combination, the commonest zone 0
+old = json.loads(json.dumps(levels[0]))
+old.pop("zones")
+old["maps"][0]["access"] = {"none": ["T" * 5 + "H" * 15] * 16,
+                            "officer": ["T" * 20] * 8 + ["L" * 20] * 8}
+up = gen_levels.upgrade(old)
+assert "access" not in up["maps"][0]
+assert [z["rules"] for z in up["zones"]] == [{"none": "H", "officer": "T"}, {"none": "H"},
+                                              {"officer": "T"}, {}]
+assert up["maps"][0]["zone_map"][0] == "2" * 5 + "0" * 15
+assert up["maps"][0]["zone_map"][15] == "3" * 5 + "1" * 15
+assert not gen_levels.validate_level(up)
+# saved: zones per level, zone maps per map, defaults left out
+text = gen_levels.dumps([up])
+back = json.loads(text)[0]
+assert back["zones"][1] == {"name": "zone 2", "rules": {"none": "H"}} and "access" not in text
+assert back["maps"][0]["zone_map"] == up["maps"][0]["zone_map"]
+assert "zone_map" not in gen_levels.dumps(levels[:1]), "all zone 0: no zone map"
+
+
+def zoned(change):
+    lv = json.loads(json.dumps(up))
+    change(lv)
+    return gen_levels.validate_level(lv)
+
+
+assert any("marked 3, but the level's zones are numbered 0-2." in e
+           for e in zoned(lambda lv: lv["zones"].pop()))
+assert any("Two zones are called \"Zone 1\"" in e for e in zoned(lambda lv: lv["zones"][1].update(name="Zone 1")))
+assert any("needs a name" in e for e in zoned(lambda lv: lv["zones"][0].update(name=" ")))
+assert any("L, T or H" in e for e in zoned(lambda lv: lv["zones"][0]["rules"].update(none="X")))
+assert any("L, T or H" in e for e in zoned(lambda lv: lv["zones"][0]["rules"].update(cook="L")))
+assert any("1-16 zones" in e for e in zoned(
+    lambda lv: lv["zones"].extend({"name": f"z{i}", "rules": {}} for i in range(13))))
+assert any("size" in e for e in zoned(lambda lv: lv["maps"][0]["zone_map"].pop()))
+# the rules read the rule table through the zone of each cell
+lu = g.Level(up)
+wu = g.new_game(lu)
+su = wu.part[0]
+assert g.lib.game_access(C.byref(su), 2, 3) == A_["TRESPASS"]     # zone 2: suit trespasses
+assert g.lib.game_access(C.byref(su), 9, 3) == A_["HOSTILE"]      # zone 0
+su.disguise = g.G["DISGUISE_OFFICER"]
+assert g.lib.game_access(C.byref(su), 9, 3) == A_["TRESPASS"]
+assert g.lib.game_access(C.byref(su), 9, 12) == A_["LEGAL"]       # zone 1
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])
