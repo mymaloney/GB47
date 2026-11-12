@@ -222,3 +222,12 @@ dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); paddi
   padding: 4px 6px; font-size: 11px; }
 .tile-frames .frame.active { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .tile-frames canvas { width: 32px; height: 32px; image-rendering: pixelated; border-radius: 3px; }
+
+/* access painting: who may be where, per outfit */
+.access-bar { align-items: center; margin-top: 6px; }
+.access-bar select { width: auto; }
+.access-bar .dot, .enforcer .dot { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; }
+.acc-L { background: #2ea043; } .acc-T { background: #f2b705; } .acc-H { background: #e4572e; }
+.enforcer { font-size: 13px; margin: 2px 0 6px; }
+.enforcer label { display: inline-flex; align-items: center; gap: 4px; margin-right: 10px; }
+.enforcer input { width: auto; }

@@ -19,6 +19,11 @@
 
 static int failures = 0;
 
+/* Access layers for 20x16 test maps (run, byte pairs; two bits per
+ * disguise: own clothes, GUARD, OFFICER). */
+#define ACC(suit, guard, officer) ((suit) | (guard) << 2 | (officer) << 4)
+static const uint8_t all_legal[] = { 255, 0, 65, 0 };
+
 /* For test maps without switch cells. */
 #define NO_SCRIPTING 0, { { 0, 0, 0, 0, 0, 0 } }
 
@@ -351,9 +356,13 @@ static void test_body_alarm(void)
     CHECK(s.status == STATUS_ALARM, "guard 1 saw the struggle");
 }
 
-/* Disguise tests. Guard 0 at (2,3) faces right: hostile to own clothes,
- * blind to GUARD. Guard 1 patrols row 6: enforcer to own clothes, blind to
- * GUARD. Both wear GUARD uniforms. */
+/* Disguise tests. The whole map is hostile to your own clothes, legal in a
+ * GUARD uniform and trespassing in an OFFICER one. Guard 0 at (2,3) faces
+ * right; guard 1 patrols row 6. Both wear GUARD uniforms. */
+static const uint8_t dz_access[] = {
+    255, ACC(ACCESS_HOSTILE, ACCESS_LEGAL, ACCESS_TRESPASS),
+    65,  ACC(ACCESS_HOSTILE, ACCESS_LEGAL, ACCESS_TRESPASS),
+};
 static const LevelDef dz_level = {
     "DZ",
     20, 16,
@@ -375,12 +384,12 @@ static const LevelDef dz_level = {
         "####################",
     2,
     {
-        { DIR_RIGHT, 1, { {2, 3} },           DISGUISE_GUARD, "HBE" },
-        { DIR_RIGHT, 2, { {2, 6}, {17, 6} },  DISGUISE_GUARD, "EBE" },
+        { DIR_RIGHT, 1, { {2, 3} },           DISGUISE_GUARD, 0 },
+        { DIR_RIGHT, 2, { {2, 6}, {17, 6} },  DISGUISE_GUARD, 0 },
     },
     { 0, 0 },
     0, { 0 }, { 0 },   /* single map: no links */
-    TRANS_CUT, NO_SCRIPTING
+    TRANS_CUT, NO_SCRIPTING, dz_access
 };
 
 static void test_disguise_cones(void)
@@ -389,11 +398,14 @@ static void test_disguise_cones(void)
     GameState s;
 
     game_load(&levels[0], &s);
-    CHECK(game_attitude(&s, 0) == ATT_ENFORCER, "no attitude string = enforcer");
+    CHECK(game_access(&s, s.px, s.py) == ACCESS_TRESPASS && game_regard(&s, 0) == ACCESS_TRESPASS,
+          "no access layer: your own clothes trespass");
+    s.disguise = DISGUISE_GUARD;
+    CHECK(game_access(&s, s.px, s.py) == ACCESS_LEGAL, "and uniforms are legal");
 
     /* hostile: 7 deep, up to 7 wide */
     game_load(&dz_level, &s);
-    CHECK(game_attitude(&s, 0) == ATT_HOSTILE, "hostile to own clothes");
+    CHECK(game_access(&s, 9, 3) == ACCESS_HOSTILE, "hostile to own clothes");
     s.guards[1].x = 17;   /* move guard 1's cone out of the way */
     game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
     CHECK(vis[3][9] == VIS_SEEN, "hostile cone reaches 7");
@@ -408,7 +420,8 @@ static void test_disguise_cones(void)
     /* blind: no cone for the player, normal cone still watching */
     game_load(&dz_level, &s);
     s.disguise = DISGUISE_GUARD;
-    CHECK(game_attitude(&s, 0) == ATT_BLIND, "blind to GUARD");
+    CHECK(game_access(&s, 4, 3) == ACCESS_LEGAL && game_regard(&s, 0) == ACCESS_LEGAL,
+          "a GUARD uniform is legal here");
     game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
     CHECK(vis[3][5] == VIS_WATCHED, "blind guard's cone shown as watched");
     CHECK(vis[3][7] == VIS_NONE, "watch cone is the normal size");
@@ -638,9 +651,9 @@ static const LevelDef npc_level = {
     "NPC", 20, 16, npc_map,
     4,
     { { DIR_UP, 1, { {17, 13} }, DISGUISE_NONE, 0 },      /* far away, looking at a wall */
-      { DIR_LEFT, 1, { {5, 3} }, DISGUISE_NONE, "III", CHAR_NO_TAKEDOWN, 0, "PET", pet_script },
-      { DIR_DOWN, 1, { {5, 8} }, DISGUISE_NONE, "III", CHAR_NO_TAKEDOWN, 0, "READ", two_lines },
-      { DIR_DOWN, 1, { {15, 3} }, DISGUISE_NONE, "III", CHAR_NO_TAKEDOWN, 0, 0, 0 } },
+      { DIR_LEFT, 1, { {5, 3} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, 0, "PET", pet_script },
+      { DIR_DOWN, 1, { {5, 8} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, 0, "READ", two_lines },
+      { DIR_DOWN, 1, { {15, 3} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, 0, 0, 0 } },
     { 0, 0 },
     0, { 0 }, { 0 }, TRANS_CUT,
     2,
@@ -748,11 +761,11 @@ static void test_walking_talker(void)
     static const LevelDef lv = {
         "WALKER", 20, 16, tile_map,
         2,
-        { { DIR_RIGHT, 2, { {3, 7}, {12, 7} }, DISGUISE_NONE, "III", CHAR_NO_TAKEDOWN, 0,
+        { { DIR_RIGHT, 2, { {3, 7}, {12, 7} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, 0,
             "TALK", hello },
-          { DIR_DOWN, 1, { {1, 9} }, DISGUISE_NONE, "BBB" } },     /* blind: never sees you */
+          { DIR_DOWN, 1, { {1, 9} }, DISGUISE_NONE, 0 } },    /* (you're legal here: ignored) */
         { 0, 0 },
-        0, { 0 }, { 0 }, TRANS_CUT, NO_SCRIPTING
+        0, { 0 }, { 0 }, TRANS_CUT, NO_SCRIPTING, all_legal
     };
     GameState s;
     tiles_reset(0, 0);                           /* an open room */
@@ -772,6 +785,117 @@ static void test_walking_talker(void)
           "B talks while someone talkable is next to you");
     s.guards[0].x = 12; s.guards[0].y = 7;
     CHECK(game_takedown_target(&s) == 1, "otherwise the blind guard can be taken down");
+}
+
+/* Access zones. An open room; for your own clothes the left part (x < 8)
+ * is legal, the middle trespassing and the right part (x >= 14) hostile.
+ * A GUARD uniform is legal everywhere, an OFFICER one trespasses
+ * everywhere. Guard 0 at (2,8) faces right and just enforces the rules;
+ * guard 1 at (2,12) faces right and is an enforcer for your own clothes
+ * and for GUARD uniforms. */
+static uint8_t zone_access[2 * 20 * 16];
+static const LevelDef zone_level = {
+    "ZONES", 20, 16, tile_map,
+    2,
+    { { DIR_RIGHT, 1, { {2, 8} },  DISGUISE_GUARD, 0 },
+      { DIR_RIGHT, 1, { {2, 12} }, DISGUISE_GUARD,
+        (1 << DISGUISE_NONE) | (1 << DISGUISE_GUARD) } },
+    { 2, 0 },
+    0, { 0 }, { 0 }, TRANS_CUT, NO_SCRIPTING, zone_access
+};
+
+static void zone_load(GameState *s, int px, int py)
+{
+    int x, y, n = 0;
+    tiles_reset(0, 0);
+    for (y = 0; y < 16; y++)            /* one run per cell: simple, and legal */
+        for (x = 0; x < 20; x++) {
+            zone_access[n++] = 1;
+            zone_access[n++] = ACC(x < 8 ? ACCESS_LEGAL : x < 14 ? ACCESS_TRESPASS : ACCESS_HOSTILE,
+                                   ACCESS_LEGAL, ACCESS_TRESPASS);
+        }
+    game_load(&zone_level, s);
+    s->px = (uint8_t)px;
+    s->py = (uint8_t)py;
+}
+
+static void test_access(void)
+{
+    static uint8_t vis[VIEW_H][VIEW_W];
+    GameState s;
+    int i;
+
+    /* the rules for a cell depend on what you wear */
+    zone_load(&s, 4, 8);
+    CHECK(game_access(&s, 4, 8) == ACCESS_LEGAL && game_access(&s, 8, 8) == ACCESS_TRESPASS &&
+          game_access(&s, 14, 8) == ACCESS_HOSTILE, "three zones for your own clothes");
+    CHECK(game_access(&s, 40, 8) == ACCESS_TRESPASS, "off the map counts as trespassing");
+    s.disguise = DISGUISE_OFFICER;
+    CHECK(game_access(&s, 4, 8) == ACCESS_TRESPASS, "an OFFICER uniform trespasses even there");
+
+    /* legal: right in front of a guard is fine; it only watches */
+    zone_load(&s, 4, 8);
+    CHECK(game_regard(&s, 0) == ACCESS_LEGAL, "guard 0 lets you be");
+    game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
+    CHECK(vis[8][3] == VIS_WATCHED && vis[8][6] == VIS_WATCHED && vis[8][7] == VIS_NONE,
+          "its cone is shown as watching, normal size");
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING, "standing in a legal area");
+    CHECK(game_throw(&s, ITEM_STONE, 4, 5) && s.status == STATUS_CAUGHT,
+          "but suspicious acts are still noticed");
+
+    /* the same guard catches you the moment you cross the line */
+    zone_load(&s, 7, 8);
+    s.guards[0].x = 5;                       /* its cone reaches x = 9 */
+    game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
+    CHECK(vis[8][7] == VIS_WATCHED && vis[8][8] == VIS_SEEN && vis[8][9] == VIS_SEEN,
+          "one cone, watching the legal part and seeing the rest");
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING, "legal side of the line");
+    CHECK(game_step(&s, ACT_RIGHT) && s.status == STATUS_CAUGHT, "trespassing in its cone");
+    zone_load(&s, 7, 8);
+    s.guards[0].x = 5;
+    s.disguise = DISGUISE_GUARD;
+    CHECK(game_step(&s, ACT_RIGHT) && s.status == STATUS_PLAYING, "not in a GUARD uniform");
+
+    /* hostile: the big cone, but only for cells that are hostile */
+    zone_load(&s, 15, 8);
+    s.guards[0].x = 9;                       /* 6 away from the player */
+    game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
+    CHECK(vis[8][13] == VIS_SEEN && vis[8][14] == VIS_SEEN && vis[8][16] == VIS_SEEN &&
+          vis[8][17] == VIS_NONE, "normal cone to x=13, big cone over the hostile part");
+    CHECK(vis[6][13] == VIS_NONE && vis[6][14] == VIS_SEEN,
+          "the big cone's width only counts on hostile cells");
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_CAUGHT, "seen from 6 away in a hostile area");
+    zone_load(&s, 13, 8);
+    s.guards[0].x = 8;                       /* 5 away, on a trespassing cell */
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING,
+          "5 away is out of the normal cone when only trespassing");
+
+    /* an enforcer isn't fooled where the outfit is legal */
+    zone_load(&s, 4, 12);
+    CHECK(game_regard(&s, 1) == ACCESS_TRESPASS && game_regard(&s, 0) == ACCESS_LEGAL,
+          "guard 1 is an enforcer for your own clothes");
+    game_compute_vision(&s, 0, 0, VIEW_W, VIEW_H, &vis[0][0]);
+    CHECK(vis[12][4] == VIS_SEEN, "so its cone is a seeing one");
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_CAUGHT, "and it catches you");
+    zone_load(&s, 4, 12);
+    s.disguise = DISGUISE_GUARD;
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_CAUGHT, "and sees through a GUARD uniform");
+    zone_load(&s, 4, 8);
+    s.disguise = DISGUISE_GUARD;
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING, "which fools guard 0");
+
+    /* a guard walking into you waits if you're allowed there */
+    zone_load(&s, 3, 8);
+    for (i = 0; i < 3; i++) game_step(&s, ACT_WAIT);
+    CHECK(s.status == STATUS_PLAYING, "nose to nose with a guard, legally");
+
+    /* bodies are spotted wherever they lie, with the normal cone */
+    zone_load(&s, 1, 1);
+    s.guards[1].mode = GUARD_BODY;
+    s.guards[1].x = 8; s.guards[1].y = 8;    /* 6 away from guard 0 */
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_PLAYING, "a body out of the cone");
+    s.guards[1].x = 6;
+    CHECK(game_step(&s, ACT_WAIT) && s.status == STATUS_ALARM, "a body in a legal area is still a body");
 }
 
 /* A patrol leg with something in the way (the editor refuses these, but
@@ -976,11 +1100,8 @@ static void test_level_data(void)
         game_load(lv, &s);
         for (i = 0; i < lv->guard_count; i++) {
             const GuardDef *d = &lv->guards[i];
-            CHECK(d->attitude == 0 || strlen(d->attitude) == DISGUISE_TYPES,
-                  "level %d guard %d attitude must have %d letters", l + 1, i,
-                  DISGUISE_TYPES);
-            CHECK(d->attitude == 0 || strspn(d->attitude, "HEBI") == DISGUISE_TYPES,
-                  "level %d guard %d attitude letters are H, E, B or I", l + 1, i);
+            CHECK(d->enforcer < (1 << DISGUISE_TYPES),
+                  "level %d guard %d: enforcer is a mask of the disguises", l + 1, i);
             for (w = 0; w < d->wp_count; w++) {
                 Point a = d->wp[w], b = d->wp[(w + 1) % d->wp_count];
                 CHECK(game_cell(a.x, a.y) != CELL_WALL,
@@ -1229,6 +1350,7 @@ int main(void)
     test_disguise_cones();
     test_disguise_suspicious();
     test_take_uniform();
+    test_access();
     test_big_map();
     test_tile_types();
     test_patrol_detour();

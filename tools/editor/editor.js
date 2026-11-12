@@ -16,6 +16,7 @@ const TOOL_HINTS = {
   start: "Click to place the player's start.",
   guard: "Click an empty tile to add a character (max 4): a guard, a dog, anyone. Click one to select it; drag to move it. Its panel on the right sets its look, how it sees you, and what talking to it does.",
   route: "Click to add waypoints to the selected character (corners are added for you). Drag a point to move it; right-click to remove it.",
+  access: "Click or drag to paint where this outfit is allowed. Shift+click fills the whole room.",
   switch: "Click a tile to make it a switch cell: it changes (e.g. into the exit) when a script sets its flag. Click one to select it; drag to move it.",
 };
 const TALK_COLOR = "#00a6a6";
@@ -34,6 +35,9 @@ let undoStack = [];
 let redoStack = [];
 let preview = null;              // {key, view} for the current level
 let previewDisguise = 0;
+let accessOutfit = 0;            // which outfit's access layer is being painted / shown
+const ACCESS_TINT = { L: "rgba(46, 160, 67, 0.38)", T: "rgba(242, 183, 5, 0.38)", H: "rgba(228, 87, 46, 0.5)" };
+const outfitLabel = (u) => (u === "none" ? "your own suit" : `a ${u.toUpperCase()} uniform`);
 let validity = [];               // per level: true/false/undefined
 let lastSolve = null;            // {key, steps}
 
@@ -263,6 +267,7 @@ function renderEdit() {
   const fresh = preview && preview.key === previewKey() && previewDisguise >= 0;
   const tiles = fresh ? preview.view.tiles : localTiles(lv);
   tiles.forEach((row, y) => row.forEach((t, x) => drawBkg(t, x, y)));
+  if (showingAccess()) drawAccess(lv);
   drawScreenGuides(lv);
 
   // routes under the sprites
@@ -378,6 +383,75 @@ function updateArtBudget(lv) {
   $("art-budget").classList.toggle("errors", u.slots > A.art_slots);
 }
 
+// ---- access: where each outfit is legal, trespassing or hostile
+
+/* One outfit's layer as rows of L/T/H (a map without one uses the default:
+ * a single letter stands for the whole map). */
+function accessRows(m, outfit) {
+  const layer = (m.access || {})[outfit] ?? A.access_default[outfit];
+  return typeof layer === "string" ? m.map.map((r) => layer.repeat(r.length)) : layer;
+}
+
+const showingAccess = () => tool.startsWith("access:") || $("access-show").checked;
+
+/* Tint every open cell by the rule for the selected outfit. */
+function drawAccess(lv) {
+  const rows = accessRows(lv, A.uniforms[accessOutfit]);
+  lv.map.forEach((r, y) => [...r].forEach((c, x) => {
+    if (c === "#") return;
+    ctx.fillStyle = ACCESS_TINT[rows[y][x]];
+    ctx.fillRect(x * TILE, y * TILE, TILE, TILE);
+  }));
+}
+
+function setAccessCells(cellsToSet, letter) {
+  const m = cmap(), outfit = A.uniforms[accessOutfit];
+  const rows = accessRows(m, outfit).map((r) => [...r]);
+  let did = false;
+  for (const [x, y] of cellsToSet) {
+    if (rows[y][x] !== letter) { rows[y][x] = letter; did = true; }
+  }
+  if (did) m.access = { ...(m.access || {}), [outfit]: rows.map((r) => r.join("")) };
+  return did;
+}
+
+/* The room around (x, y): every cell with the same rule now that can be
+ * reached without crossing a wall or going through a way out. Doors,
+ * vents and the like, and one-cell gaps in a wall, are filled but end the
+ * room, so a click fills one room and not the whole building. */
+function accessRoom(x, y) {
+  const m = cmap();
+  const rows = accessRows(m, A.uniforms[accessOutfit]);
+  const was = rows[y][x];
+  const wall = (cx, cy) => !inMap(cx, cy) || m.map[cy][cx] === "#";
+  const pinched = (cx, cy, dx, dy) => wall(cx - dx, cy - dy) && wall(cx + dx, cy + dy);
+  const wayOut = (cx, cy) => {
+    if (!".PE".includes(m.map[cy][cx])) return true;
+    // a gap: wall on both sides, and it opens into somewhere wider
+    for (const [sx, sy] of [[1, 0], [0, 1]]) {
+      if (!pinched(cx, cy, sx, sy)) continue;
+      for (const k of [-1, 1]) {
+        const nx = cx + k * sy, ny = cy + k * sx;
+        if (!wall(nx, ny) && !pinched(nx, ny, sx, sy)) return true;
+      }
+    }
+    return false;
+  };
+  const seen = new Set([y * 256 + x]), out = [[x, y]];
+  for (let i = 0; i < out.length; i++) {
+    const [cx, cy] = out[i];
+    if (i > 0 && wayOut(cx, cy)) continue;
+    for (const [dx, dy] of [[0, -1], [1, 0], [0, 1], [-1, 0]]) {
+      const nx = cx + dx, ny = cy + dy;
+      if (!inMap(nx, ny) || seen.has(ny * 256 + nx)) continue;
+      if (m.map[ny][nx] === "#" || rows[ny][nx] !== was) continue;
+      seen.add(ny * 256 + nx);
+      out.push([nx, ny]);
+    }
+  }
+  return out;
+}
+
 /* Dashed lines on the screen boundaries: the Game Boy shows one screen at
  * a time and cuts to the next when you cross a line. */
 function drawScreenGuides(lv) {
@@ -442,6 +516,11 @@ function resizeMap(w, h) {
     const art = [];
     for (let y = 0; y < h; y++) art.push(((lv.art[y] || "") + "..".repeat(w)).slice(0, 2 * w));
     lv.art = art;
+  }
+  for (const [outfit, layer] of Object.entries(lv.access || {})) {   // painted layers follow
+    if (typeof layer === "string") continue;
+    const fill = A.access_default[outfit].repeat(w);
+    lv.access[outfit] = rows.map((_, y) => ((layer[y] || "") + fill).slice(0, w));
   }
   changed();
 }
@@ -614,6 +693,11 @@ function applyTool(x, y, e, first) {
     if (did && stroke) (stroke.cells = stroke.cells || []).push([x, y]);
     return did;
   }
+  if (tool.startsWith("access:")) {
+    const letter = tool.slice(7);
+    if (first && e.shiftKey) return setAccessCells(accessRoom(x, y), letter);
+    return setAccessCells([[x, y]], letter);
+  }
   if (tool === "start") return first ? setCell(x, y, "P") : false;
 
   if (tool === "guard") {
@@ -623,7 +707,7 @@ function applyTool(x, y, e, first) {
       const here = A.tiles.find((d) => d.char === lv.map[y][x]);
       if (here && here.blocks.guards) { hint(`Characters can't stand on a ${here.name}.`); return false; }
       if (lv.guards.length >= A.max_guards) { hint(`At most ${A.max_guards} characters in a map.`); return false; }
-      lv.guards.push({ facing: "down", route: [[x, y]], uniform: "none", attitude: null });
+      lv.guards.push({ facing: "down", route: [[x, y]], uniform: "none" });
       selGuard = lv.guards.length - 1;
       stroke.drag = { guard: selGuard, point: 0 };
       return true;
@@ -728,9 +812,11 @@ async function autoTile(cells) {
 function hint(msg) { $("tool-hint").textContent = msg; }
 
 function setTool(t) {
+  const wasAccess = showingAccess();
   tool = t;
-  document.querySelectorAll("#toolbar button, #palette button, .art-panel button[data-tool]").forEach((b) =>
+  document.querySelectorAll("#toolbar button, #palette button, #access-bar button[data-tool], .art-panel button[data-tool]").forEach((b) =>
     b.classList.toggle("active", b.dataset.tool === t));
+  if (wasAccess !== showingAccess() && mode === "edit" && A) renderEdit();
   const tile = t.startsWith("tile:") && A.tiles.find((x) => x.char === t.slice(5));
   if (t.startsWith("art:")) {
     artTile = parseInt(t.slice(4), 10);
@@ -739,6 +825,9 @@ function setTool(t) {
     const d = b && A.tiles.find((x) => x.char === b);
     hint(`Painting tileset tile ${artTile}` + (d && !$("art-only").checked
       ? `: also makes the cell a ${d.name}.` : ": changes only the look."));
+  } else if (t.startsWith("access:")) {
+    hint(`Painting where ${outfitLabel(A.uniforms[accessOutfit])} is ${A.access_names[t.slice(7)]}. ` +
+         TOOL_HINTS.access);
   } else if (t === "art-erase") {
     hint("Click or drag to remove painted art; the cell's behaviour stays.");
   } else {
@@ -810,7 +899,7 @@ function renderGuards() {
     b.innerHTML = `<span class="dot" style="background:${GUARD_COLORS[i]}"></span>${i + 1} ${lookName(g)}` +
       (talks(g) ? ` <span class="muted">B:${g.verb || "?"}</span>` : "");
     b.title = (g.route.length === 1 ? "Stands still" : `Patrols, ${g.route.length} points`) +
-      (g.attitude === "III" ? "; never sees you" : "");
+      (g.sees === false ? "; doesn't watch" : "");
     b.addEventListener("click", () => { selGuard = i; renderAll(); });
     list.appendChild(b);
   });
@@ -843,7 +932,7 @@ function renderGuards() {
   }
   $("g-facing").value = g.facing;
   $("g-uniform").value = g.uniform || "none";
-  $("g-sees").value = !g.attitude ? "normal" : g.attitude === "III" ? "never" : "custom";
+  $("g-sees").value = g.sees === false ? "no" : "yes";
   const talking = talks(g);
   $("g-takedown").checked = !talking && g.takedown !== false;
   $("g-takedown").disabled = talking;
@@ -856,26 +945,23 @@ function renderGuards() {
     g.script = g.script || [];
     $("n-script").replaceChildren(scriptEditor(g.script));
   }
-  const att = $("g-attitudes");
-  att.innerHTML = "";
-  att.hidden = $("g-sees").value !== "custom";
-  ["own clothes", "GUARD", "OFFICER"].forEach((label, k) => {
-    const s = document.createElement("span");
-    s.textContent = "To " + label;
-    const sel = document.createElement("select");
-    [["H", "Hostile (big cone)"], ["E", "Enforcer (normal)"], ["B", "Blind (watches bodies)"],
-     ["I", "Ignores (no cone at all)"]]
-      .forEach(([v, t]) => sel.add(new Option(t, v)));
-    sel.value = g.attitude ? g.attitude[k] : "E";
-    sel.disabled = !g.attitude;
-    sel.addEventListener("change", () => {
+  // enforcer: outfits this one isn't fooled by
+  const enf = $("g-enforcer");
+  enf.hidden = g.sees === false;
+  enf.replaceChildren(document.createTextNode("Sees through: "));
+  A.uniforms.forEach((u) => {
+    const l = document.createElement("label");
+    const box = document.createElement("input");
+    box.type = "checkbox";
+    box.checked = (g.enforcer || []).includes(u);
+    box.addEventListener("change", () => {
       pushUndo();
-      const a = [...g.attitude];
-      a[k] = sel.value;
-      g.attitude = a.join("");
+      const set = A.uniforms.filter((v) => (v === u ? box.checked : (g.enforcer || []).includes(v)));
+      if (set.length) g.enforcer = set; else delete g.enforcer;
       changed();
     });
-    att.append(s, sel);
+    l.append(box, u === "none" ? "your suit" : u.toUpperCase());
+    enf.appendChild(l);
   });
   const ol = $("g-route");
   ol.innerHTML = "";
@@ -2210,8 +2296,29 @@ async function build() {
 }
 
 function wire() {
-  document.querySelectorAll("#toolbar button, .art-panel button[data-tool]").forEach((b) =>
+  document.querySelectorAll("#toolbar button, #access-bar button[data-tool], .art-panel button[data-tool]").forEach((b) =>
     b.addEventListener("click", () => setTool(b.dataset.tool)));
+
+  // access: one outfit at a time, the same one the cone preview shows
+  A.uniforms.forEach((u, i) => $("access-outfit").add(new Option(outfitLabel(u), String(i))));
+  $("access-outfit").addEventListener("change", (e) => {
+    accessOutfit = parseInt(e.target.value, 10);
+    if (previewDisguise >= 0) {
+      previewDisguise = accessOutfit;
+      $("preview-disguise").value = String(accessOutfit);
+      preview = null;
+      checkLevel();
+    }
+    if (tool.startsWith("access:")) setTool(tool);     // refresh the hint
+    renderEdit();
+  });
+  $("access-show").addEventListener("change", () => renderEdit());
+  $("access-fill").addEventListener("click", () => {
+    if (!tool.startsWith("access:")) { hint("Pick Legal, Trespassing or Hostile first, then Fill map."); return; }
+    pushUndo();
+    cmap().access = { ...(cmap().access || {}), [A.uniforms[accessOutfit]]: tool.slice(7) };
+    changed();
+  });
   $("tab-edit").addEventListener("click", enterEdit);
   $("tab-play").addEventListener("click", () => mode !== "play" && enterPlay());
   $("play-exit").addEventListener("click", enterEdit);
@@ -2230,6 +2337,10 @@ function wire() {
     resizeMap(mapW(cmap()), parseInt(e.target.value, 10) * A.view_h));
   $("preview-disguise").addEventListener("change", (e) => {
     previewDisguise = parseInt(e.target.value, 10);
+    if (previewDisguise >= 0) {              // the access tools follow
+      accessOutfit = previewDisguise;
+      $("access-outfit").value = String(accessOutfit);
+    }
     preview = null;
     renderEdit();
     checkLevel();
@@ -2292,7 +2403,7 @@ function wire() {
   const ch = () => cmap().guards[selGuard];
   $("g-sees").addEventListener("change", (e) => {
     pushUndo();
-    ch().attitude = { normal: null, never: "III", custom: "EEE" }[e.target.value];
+    if (e.target.value === "no") { ch().sees = false; delete ch().enforcer; } else delete ch().sees;
     changed();
   });
   $("g-look").addEventListener("change", (e) => { pushUndo(); ch().look = e.target.value; changed(); });

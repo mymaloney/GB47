@@ -38,7 +38,7 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   `far_read()`.
 - Characters: guards, dogs and anyone else are all `GuardDef`/`Guard`
   (the code and `levels.json` still say "guards"). Talking (`verb`,
-  `script`), `CHAR_NO_TAKEDOWN`, the `ATT_IGNORE` attitude ('I': no cone)
+  `script`), `CHAR_NO_TAKEDOWN`, `CHAR_NO_SIGHT` (no cone), the `enforcer` mask
   and the `look` (sprites, presentation only) are per character. Looks
   are `tilesets/characters.png` (6 frames per row, names in
   `characters.json`), generated into `levels.c` as `look_tile_data` and
@@ -78,7 +78,7 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
 - Build warnings show up only in the GBDK build, not in gcc. Keep it
   warning-free.
 - **ROM banks** (MBC5, 64 KB; details in `src/far.h`):
-  - Bank 0 (3.4 KB free): files with no `#pragma bank`: `game.c`,
+  - Bank 0 (2.7 KB free): files with no `#pragma bank`: `game.c`,
     `world.c`, `art.c`, `trans.c`, `far.c`, plus GBDK. It can't overflow
     into bank 1 any more, so this is the tight one: **new rules code goes
     here, and there isn't much room.**
@@ -90,9 +90,15 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   - A pointer into bank 2 or 3 (`LevelDef.map`, `MapArt.rle`/`rows`,
     `art_tile_data`) must never be read directly on the Game Boy.
 - **Work RAM**: about 5.4 KB of 8 KB free. The current map's cells and the
-  pathfinding arrays are in cartridge RAM (0xA000-0xB7FF, fixed addresses
-  in `game.c`); 2 KB of it is unused.
+  pathfinding arrays and the access layer are in cartridge RAM
+  (0xA000-0xBFFF, fixed addresses in `game.c`); all 8 KB of it is used.
   - Every byte added to `GameState` still costs 33+ bytes (undo history).
+- **Access** replaced per-guard attitudes: each cell has a rule per
+  disguise (`ACCESS_*`, two bits each in one byte), painted per map
+  (`"access"` in the JSON, run-length data in `levels_maps.c`, unpacked
+  by `game_use`). Guards enforce the rule for the cell the player stands
+  on; `GuardDef.enforcer` is the only per-guard exception. A new disguise
+  needs two more bits per cell: there is room for exactly one more.
 - Guards' walking distances (`dist[]`) are cached per target tile. Call
   `game_map_changed()` whenever what guards can walk on changes without a
   change of map (e.g. a switch cell flipping).

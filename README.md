@@ -18,8 +18,9 @@ stealth with social stealth (disguises, dialogue) and combat.
   lure guards away
 - **Takedowns and bodies:** grab a guard from an adjacent tile, then drag or
   push the body out of sight
-- **Disguises:** take a uniform from a body; each guard is hostile,
-  an enforcer, or blind to what you're wearing, which sets its vision cone
+- **Disguises and access:** take a uniform from a body. Every part of a
+  map is legal, trespassing or hostile for each outfit, and guards enforce
+  that for wherever you are standing
 - **Building blocks:** doors, windows, railings, security doors, curtains,
   mesh screens and vents, each blocking a different mix of movement,
   sight and throws
@@ -78,9 +79,11 @@ rules into `build/libgame.so`, starts a local server, and opens
     one from a copy. Looks are saved to `tilesets/characters.png` straight
     away, like tileset tiles, and every level can use them.
   - **Facing**, and the **uniform** you get from its body.
-  - **Sees you**: like a guard (normal cone), never (no cone at all: it
-    doesn't catch you or notice bodies, like the dog), or depending on
-    your clothes (hostile, enforcer, blind or ignores, per disguise).
+  - **Watches**: yes (it has a cone and enforces who may be where), or no
+    (no cone at all: it doesn't catch you or notice bodies, like the dog).
+  - **Sees through**: tick an outfit to make it an enforcer for it. It
+    then treats someone wearing that outfit as trespassing even where the
+    outfit is legal (the officer who knows every guard's face).
   - **Can be taken down**.
   - **Can be talked to (B)**: its prompt word (`PET` shows as `B:PET`)
     and its script. Someone you can talk to can't be taken down: B talks.
@@ -97,13 +100,20 @@ rules into `build/libgame.so`, starts a local server, and opens
   flag is set, e.g. floor that becomes the exit. It is drawn with a dashed
   outline and a faint picture of what it becomes. Per switch cell: the
   flag, what it turns into, and the tileset tile it then shows.
+- **Access**: paint where each outfit may be. Pick the outfit (your own
+  suit, GUARD, OFFICER), then **Legal**, **Trespassing** or **Hostile**,
+  and click or drag; Shift+click fills a room (it stops at doors and
+  doorways); **Fill map** sets the whole map. The map is tinted green,
+  amber and red while you paint, or whenever **Show** is ticked, and the
+  cone preview follows the same outfit. A new map starts with the suit
+  trespassing everywhere and uniforms legal everywhere.
 - Per level: name, design notes, and starting stones/bottles.
 - **Transition**: how the screen dips to black when the level is finished.
   Choosing one plays it on the picture (so does **Preview**), and finishing
   a level in Playtest plays it too. The patterns come from the same code
   the ROM uses (`src/trans.c`).
 - **Cones preview:** shows every guard's starting cone as seen by a player
-  in your own clothes, the GUARD uniform, or the OFFICER uniform.
+  in your own suit, the GUARD uniform, or the OFFICER uniform.
 - **Problems** are listed live, in plain language: missing start, a route
   through a wall, a name too long for the HUD, and so on.
 - **Solve** finds the shortest solution and reports which mechanics the
@@ -336,31 +346,38 @@ You start in your own clothes. Stand on a body and press B to put on its
 uniform (one turn). Your sprite changes to show what you're wearing. Each
 body has one uniform, and there's no changing back.
 
-Every guard has an attitude to each disguise, and that sets its cone:
+**Access.** Every cell of a map has a rule for each outfit, painted in
+the editor, and guards enforce the rule for the cell you are standing on:
 
-| Attitude | Cone | Shown as |
+| Where you stand is | A guard | Its cone on that cell is |
 |---|---|---|
-| **Hostile** | Huge: 7 tiles deep, widening to 7 tiles across | Shaded |
-| **Enforcer** | Normal: 4 deep, 3 across | Shaded |
-| **Blind** | Ignores you. Still uses the normal cone to spot bodies, takedowns, and you doing something **suspicious** | Dotted |
+| **Legal** | Ignores you. It still spots bodies, takedowns, and you doing something **suspicious** | Dotted |
+| **Trespassing** | Catches you in its normal cone: 4 tiles deep, 3 across | Shaded |
+| **Hostile** | Catches you in a huge cone: 7 deep, widening to 7 across | Shaded |
 
-Suspicious means: a takedown, dragging or pushing a body, throwing, or
-changing clothes. A blind guard who walks into you just waits for you to
-move.
+So one cone can be dotted on the dance floor and shaded backstage, and it
+changes when you change clothes. Suspicious means: a takedown, dragging
+or pushing a body, throwing, or changing clothes. A guard who walks into
+you where you're legal just waits for you to move.
 
-Uniforms and attitudes are set per guard in `src/levels.c`. Guards in
-levels 1-5 have no uniform and are enforcers to everything. Disguise
-types are `DISGUISE_*` in `src/game.h` (own clothes, GUARD, OFFICER).
-Cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and `HOSTILE_HALF`.
+An **enforcer** is the exception: a guard tagged as seeing through an
+outfit treats anyone wearing it as trespassing, even where it is legal.
+
+Maps without painted access treat your own suit as trespassing everywhere
+and uniforms as legal everywhere; that is how levels 1-5 and 7-9 play.
+Level 6's hall is hostile to the suit. Bodies are always spotted with the
+normal cone. Disguise types are `DISGUISE_*` and the rules `ACCESS_*` in
+`src/game.h`; cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and
+`HOSTILE_HALF`.
 
 ### Characters, talking, scripts and switch cells
 
 Everyone in a map is a character: guards, the dog, anyone. They all work
 the same way. Each walks a route or stands still, blocks walking while
-standing, hears noises (the closest one goes to look), and sees you by
-its attitude to your disguise. One more attitude, **ignores**, means no
-cone at all: it never catches you, notices bodies or raises the alarm.
-The dog ignores every disguise. A character can also be made impossible
+standing, hears noises (the closest one goes to look), and watches with
+a cone, enforcing the map's access rules. One that **doesn't watch** has
+no cone at all: it never catches you, notices bodies or raises the alarm.
+The dog doesn't watch. A character can also be made impossible
 to take down.
 
 A character with a script can be talked to. Stand next to it and the HUD
@@ -395,7 +412,7 @@ Text is upper case for now: the font has only `0-9 A-Z : ! - . > ?`.
 6. Step 3's checks again; a guard walking into the player also catches them.
 7. A takedown in progress counts down; when it ends, the guard is a body.
 
-"Sees" depends on each guard's attitude to your disguise (see above).
+"Sees" depends on what you wear and where you stand (see Disguises).
 
 ## Building
 
@@ -428,9 +445,9 @@ and 8 KB of RAM (`src/far.h` has the layout):
 
 | Bank | Holds | Free |
 |---|---|---|
-| 0 | the rules, GBDK | 3.4 KB |
+| 0 | the rules, GBDK | 2.7 KB |
 | 1 | `main.c`, built-in tiles, the level table, scripts and text | 6.4 KB |
-| 2 | map cells | 11.9 KB |
+| 2 | map cells and access layers | 11.8 KB |
 | 3 | painted art | 13.7 KB |
 
 About 5.4 KB of the 8 KB of work RAM is free; the current map and the
@@ -466,7 +483,7 @@ gives up after 2 million and reports "too big to tell".
 | Path | What it is |
 |---|---|
 | `src/game.c`, `game.h` | All game rules: turns, patrols, vision, undo. No hardware access, so it also compiles on a PC. |
-| `levels/levels.json` | **Level data** (source of truth): maps, guard routes, uniforms and attitudes, starting items. |
+| `levels/levels.json` | **Level data** (source of truth): maps, access layers, guard routes, uniforms and enforcer tags, starting items. |
 | `src/levels.c`, `levels_maps.c`, `levels_art.c`, `levels.h` | Generated from the JSON by `tools/gen_levels.py`, one file per ROM bank. Don't edit. |
 | `src/far.c`, `far.h` | The ROM bank layout, and reading level data out of the data banks. |
 | `tools/editor/` | Level editor: `server.py` (local server), `game_lib.py` (Python bridge to the C rules), and the page. |

@@ -280,7 +280,7 @@ assert g.transition("fade", 0, 0)["steps"] == 0
 # characters you talk to, scripts and switch cells: level 3's dog
 dog = levels[2]
 npc, sw = dog["maps"][0]["guards"][2], dog["maps"][0]["switches"][0]
-assert npc["look"] == "dog" and npc["attitude"] == "III" and npc["route"] == [[11, 5]]
+assert npc["look"] == "dog" and npc["sees"] is False and npc["route"] == [[11, 5]]
 assert gen_levels.level_flags(dog) == ["dog"]
 texts = []
 code = gen_levels.compile_script(npc["script"], ["dog"], texts)
@@ -289,7 +289,7 @@ assert code == [OP["IF"], 1, 4, OP["SAY"], 0, OP["JUMP"], 4, OP["SAY"], 1, OP["S
 assert texts == ["THE DOG WAGS ITS\nTAIL.", "YOU PET THE DOG."]
 assert gen_levels.cell_rows(dog["maps"][0])[sw["y"]][sw["x"]] == "0", "switch cells are digits to the rules"
 c3 = gen_levels.generate_c(levels)
-assert ('{ DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, "III", CHAR_NO_TAKEDOWN, LOOK_DOG, '
+assert ('{ DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, LOOK_DOG, '
         '"PET", script2_2 },') in c3, "the dog in levels.c"
 assert "LOOK_DOG 2" in gen_levels.generate_h(levels) and "look_tile_data" in c3
 assert "CELL_FLOOR, CELL_EXIT," in c3 and '"YOU PET THE DOG.",' in c3
@@ -346,7 +346,8 @@ assert any("can't say" in e for e in scripted(
     lambda m: talker(m)["script"].append({"say": "don't"})))
 assert any("prompt word" in e for e in scripted(lambda m: talker(m).update(verb="pet the dog")))
 assert any("no look called" in e for e in scripted(lambda m: talker(m).update(look="cat")))
-assert any("attitude must be" in e for e in scripted(lambda m: talker(m).update(attitude="IIX")))
+assert any("sees must be" in e for e in scripted(lambda m: talker(m).update(sees="no")))
+assert any("enforcer must be" in e for e in scripted(lambda m: talker(m).update(enforcer=["cook"])))
 assert any("shares its cell" in e for e in scripted(
     lambda m: m["switches"].append(dict(m["switches"][0]))))
 assert any("turns into" in e for e in scripted(lambda m: m["switches"][0].update(on="?")))
@@ -363,7 +364,7 @@ old = json.loads(json.dumps(dog))
 old["maps"][0]["guards"].pop(2)
 old["maps"][0]["npcs"] = [{"x": 11, "y": 5, "verb": "PET", "blocks": "move", "script": npc["script"]}]
 up = gen_levels.upgrade(old)["maps"][0]
-assert "npcs" not in up and up["guards"][2]["route"] == [[11, 5]] and up["guards"][2]["attitude"] == "III"
+assert "npcs" not in up and up["guards"][2]["route"] == [[11, 5]] and up["guards"][2]["sees"] is False
 # auto-paint leaves the hidden stairs as painted
 import autopaint as ap   # noqa: E402
 m3 = dog["maps"][0]
@@ -378,6 +379,52 @@ assert gen_levels.guard_look({"uniform": "officer"}) == "officer"
 assert gen_levels.guard_look({"uniform": "guard"}) == "guard"
 assets = server.looks_assets()
 assert assets["first_tile"] == g.T["SPRITE_TILE_COUNT"] and len(assets["frames"][2]) == 6
+
+# access: where each outfit may be. Level 6's hall is hostile to your own
+# suit; maps without a layer trespass in the suit and are legal in uniforms
+A_ = {k: g.G["ACCESS_" + k] for k in ("LEGAL", "TRESPASS", "HOSTILE")}
+assert gen_levels.ACCESS == "LTH" and [A_["LEGAL"], A_["TRESPASS"], A_["HOSTILE"]] == [0, 1, 2]
+plain, hall = levels[0]["maps"][0], levels[5]["maps"][0]
+assert gen_levels.access_is_default(plain) and set(gen_levels.access_bytes(plain)) == {1}
+assert not gen_levels.access_is_default(hall)
+assert gen_levels.access_rows(hall, "none")[4] == "T" * 8 + "H" * 12
+assert gen_levels.access_rows(hall, "guard")[4] == "L" * 20
+rle = gen_levels.access_rle(hall)
+unpacked = [b for n, b in zip(rle[::2], rle[1::2]) for _ in range(n)]
+assert unpacked == gen_levels.access_bytes(hall) and max(rle[::2]) <= 255
+c6 = gen_levels.generated_files(levels)
+assert "const uint8_t level_access5[] = { 8, 1, 12, 2," in c6["levels_maps.c"]
+assert "level_access5,   /* access */" in c6["levels.c"] and "level_access0" not in c6["levels.c"]
+l6 = g.Level(levels[5])
+w6 = g.new_game(l6)
+st = w6.part[0]
+assert g.lib.game_access(C.byref(st), 3, 3) == A_["TRESPASS"]
+assert g.lib.game_access(C.byref(st), 12, 3) == A_["HOSTILE"]
+st.disguise = g.G["DISGUISE_GUARD"]
+assert g.lib.game_access(C.byref(st), 12, 3) == A_["LEGAL"]
+st.px, st.py = 14, 5                      # in front of the officer, who checks guards
+assert g.view(l6, w6)["guards"][2]["regard"] == A_["TRESPASS"]
+assert g.view(l6, w6)["guards"][1]["regard"] == A_["LEGAL"]
+# old levels: attitudes become "doesn't watch" and enforcer tags
+old_g = {"facing": "down", "route": [[1, 1]], "uniform": "guard", "attitude": "HEB"}
+gen_levels.upgrade_attitude(old_g)
+assert old_g == {"facing": "down", "route": [[1, 1]], "uniform": "guard", "enforcer": ["guard"]}
+old_d = {"attitude": "III"}
+gen_levels.upgrade_attitude(old_d)
+assert old_d == {"sees": False}
+# a layer that is all one thing is saved as a letter; defaults aren't saved
+painted = json.loads(json.dumps(levels[0]))
+pm = painted["maps"][0]
+pm["access"] = {"none": ["L" * 20] * 16, "guard": ["L" * 20] * 16,
+                "officer": ["T" * 20] * 8 + ["H" * 20] * 8}
+assert not gen_levels.validate_level(painted)
+text = gen_levels.dumps([painted])
+back = json.loads(text)[0]["maps"][0]["access"]
+assert back["none"] == "L" and "guard" not in back and back["officer"][8] == "H" * 20
+pm["access"] = {"none": ["L" * 19] * 16}
+assert any("access layer for none" in e for e in gen_levels.validate_level(painted))
+pm["access"] = {"cook": "L"}
+assert any("Access must give" in e for e in gen_levels.validate_level(painted))
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])

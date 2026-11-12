@@ -63,7 +63,7 @@ class Point(C.Structure):
 class GuardDef(C.Structure):
     _fields_ = [("facing", C.c_uint8), ("wp_count", C.c_uint8),
                 ("wp", Point * MAX_WAYPOINTS), ("uniform", C.c_uint8),
-                ("attitude", C.c_char_p), ("flags", C.c_uint8), ("look", C.c_uint8),
+                ("enforcer", C.c_uint8), ("flags", C.c_uint8), ("look", C.c_uint8),
                 ("verb", C.c_char_p), ("script", C.POINTER(C.c_uint8))]
 
 
@@ -78,7 +78,8 @@ class LevelDef(C.Structure):
                 ("items", C.c_uint8 * ITEM_TYPES),
                 ("part", C.c_uint8), ("link", C.c_uint8 * 4), ("link_offset", C.c_int8 * 4),
                 ("transition", C.c_uint8),
-                ("switch_count", C.c_uint8), ("switches", SwitchDef * MAX_SWITCHES)]
+                ("switch_count", C.c_uint8), ("switches", SwitchDef * MAX_SWITCHES),
+                ("access", C.POINTER(C.c_uint8))]
 
 
 class Guard(C.Structure):
@@ -136,7 +137,8 @@ _sig = {
     "game_said": (C.c_uint8, [C.c_uint8]),
     "game_uniform_here": (C.c_uint8, [S]),
     "game_body_adjacent": (C.c_uint8, [S]),
-    "game_attitude": (C.c_uint8, [S, C.c_uint8]),
+    "game_regard": (C.c_uint8, [S, C.c_uint8]),
+    "game_access": (C.c_uint8, [S, C.c_uint8, C.c_uint8]),
     "world_use": (None, [L]),
     "world_load": (None, [L, C.c_uint8, Wp]),
     "world_activate": (None, [Wp]),
@@ -232,12 +234,13 @@ class Level:
                 for w, (x, y) in enumerate(route):
                     gd.wp[w].x, gd.wp[w].y = x, y
                 gd.uniform = UNIFORMS.index(g.get("uniform", "none"))
-                gd.attitude = self._b(g["attitude"]) if g.get("attitude") else None
+                gd.enforcer = sum(1 << UNIFORMS.index(u) for u in set(g.get("enforcer", [])))
                 names = gen_levels.looks()["looks"]
                 look = gen_levels.guard_look(g)
                 gd.look = names.index(look) if look in names else 0
                 talk = gen_levels.can_talk(g)
-                gd.flags = G["CHAR_NO_TAKEDOWN"] if talk or g.get("takedown") is False else 0
+                gd.flags = (G["CHAR_NO_TAKEDOWN"] if talk or g.get("takedown") is False else 0) | \
+                    (G["CHAR_NO_SIGHT"] if g.get("sees") is False else 0)
                 if talk:
                     gd.verb = self._b(g.get("verb") or "TALK")
                     code = gen_levels.compile_script(g.get("script", []), self.flags, self.texts)
@@ -248,6 +251,11 @@ class Level:
                 items = data.get("items", {})
                 for i, it in enumerate(ITEMS):
                     d.items[i] = items.get(it["name"].lower(), 0)
+            if not gen_levels.access_is_default(m):     # who may be where
+                rle = gen_levels.access_rle(m)
+                buf = (C.c_uint8 * len(rle))(*rle)
+                self._keep.append(buf)
+                d.access = C.cast(buf, C.POINTER(C.c_uint8))
             d.part = k
             d.transition = TRANSITIONS.index(data["transition"])
             for di, dname in enumerate(DIRS):
@@ -372,7 +380,7 @@ def view(level, world, aim_item=None):
         if g.mode == G["GUARD_INVESTIGATE"]:
             noise.append({"t": T["SPR_NOISE"], "x": g.tx, "y": g.ty})
         guards.append({"x": g.x, "y": g.y, "facing": g.facing, "mode": g.mode,
-                       "attitude": lib.game_attitude(C.byref(state), i)})
+                       "regard": lib.game_regard(C.byref(state), i)})
     return {
         "map": world.cur, "w": w, "h": h,
         "tiles": tiles,

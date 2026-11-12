@@ -51,6 +51,16 @@
         <button data-tool="switch" title="Add a cell that changes when a flag is set (e.g. stairs that appear), or click one to select it (7)"><b>7</b> Switch cell</button>
       </div>
       <div class="toolbar palette" id="palette"><span class="toolbar-label">Paint</span></div>
+      <div class="toolbar access-bar" id="access-bar">
+        <span class="toolbar-label">Access</span>
+        <label class="inline">Where
+          <select id="access-outfit" title="Whose rules you are painting"></select> is</label>
+        <button data-tool="access:L" title="Guards ignore this outfit here (they still notice bodies and suspicious acts)"><span class="dot acc-L"></span>Legal</button>
+        <button data-tool="access:T" title="A guard whose normal cone covers you catches you"><span class="dot acc-T"></span>Trespassing</button>
+        <button data-tool="access:H" title="Guards catch you from further away: the big cone"><span class="dot acc-H"></span>Hostile</button>
+        <button id="access-fill" title="Set the whole map to the selected rule for this outfit">Fill map</button>
+        <label class="check"><input type="checkbox" id="access-show"> Show</label>
+      </div>
       <label class="check autotile"><input type="checkbox" id="autotile" checked>
         Auto-tile: repaint the art around walls and floor as you paint them
         (learns from how you've painted your levels)</label>
@@ -88,7 +98,7 @@
       <label class="inline">Show cones as seen by a player in
         <select id="preview-disguise">
           <option value="-1">(hide cones)</option>
-          <option value="0" selected>own clothes</option>
+          <option value="0" selected>your own suit</option>
           <option value="1">GUARD uniform</option>
           <option value="2">OFFICER uniform</option>
         </select>
@@ -148,13 +158,12 @@
         <label>Facing <select id="g-facing"></select></label>
         <label>Uniform <span class="muted">(to take)</span> <select id="g-uniform"></select></label>
       </div>
-      <label>Sees you
+      <label>Watches
         <select id="g-sees">
-          <option value="normal">like a guard (normal cone)</option>
-          <option value="never">never: no cone (a dog, a cleaner…)</option>
-          <option value="custom">depends on your clothes…</option>
+          <option value="yes">yes: enforces who may be where</option>
+          <option value="no">no: no cone (a dog, a cleaner…)</option>
         </select></label>
-      <div id="g-attitudes" class="attitudes"></div>
+      <div id="g-enforcer" class="enforcer" title="An enforcer isn't fooled: someone in that outfit is trespassing to it even where the outfit is legal"></div>
       <label class="check"><input type="checkbox" id="g-takedown"> Can be taken down</label>
       <label class="check"><input type="checkbox" id="g-talks"> Can be talked to (B)</label>
       <div id="g-talk" hidden>
