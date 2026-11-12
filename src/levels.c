@@ -17,21 +17,24 @@ extern const char level_map6[];
 extern const char level_map7[];
 extern const char level_map8[];
 extern const char level_map9[];
-extern const uint8_t level_zones5[];
+extern const char level_map10[];
+extern const uint8_t level_zones1[];
+extern const uint8_t level_zones6[];
 
 /* Each level's zone rules: two bytes per zone, ACCESS_* bits per outfit. */
 static const uint8_t zone_rules0[] = { 1, 0 };   /* everywhere */
-static const uint8_t zone_rules1[] = { 1, 0 };   /* everywhere */
+static const uint8_t zone_rules1[] = { 65, 0, 0, 0, 5, 1, 1, 0 };   /* Crew, Guest, Private Deck, checkpoint */
 static const uint8_t zone_rules2[] = { 1, 0 };   /* everywhere */
-static const uint8_t zone_rules3[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules3[] = { 1, 0 };   /* everywhere */
 static const uint8_t zone_rules4[] = { 1, 0 };   /* everywhere */
-static const uint8_t zone_rules5[] = { 2, 0, 1, 0 };   /* zone 1, zone 2 */
-static const uint8_t zone_rules6[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules5[] = { 1, 0 };   /* everywhere */
+static const uint8_t zone_rules6[] = { 2, 0, 1, 0 };   /* zone 1, zone 2 */
 static const uint8_t zone_rules7[] = { 2, 0 };   /* everywhere */
 static const uint8_t zone_rules8[] = { 2, 0 };   /* everywhere */
+static const uint8_t zone_rules9[] = { 2, 0 };   /* everywhere */
 
 /* Characters' scripts (OP_* in game.h). */
-static const uint8_t script2_2[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
+static const uint8_t script3_2[] = { 4, 1, 4, 1, 0, 5, 4, 1, 1, 2, 1, 0 };
 
 const LevelDef levels[LEVEL_COUNT] = {
     /* 1: FIRST STEPS - Learn that guards only move when you do. Follow one through. */
@@ -55,11 +58,35 @@ const LevelDef levels[LEVEL_COUNT] = {
         0,   /* zones */
         zone_rules0,
     },
-    /* 2: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
+    /* 2: NEW LEVEL */
+    {
+        "NEW LEVEL",
+        40, 48,
+        level_map1,
+        4,
+        {
+            { DIR_DOWN, 1, { {14, 7} }, DISGUISE_NONE, 0, CHAR_NO_SIGHT, LOOK_TERRY, 0, 0 },
+            { DIR_DOWN, 1, { {14, 2} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
+            { DIR_LEFT, 1, { {18, 3} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
+            { DIR_UP, 1, { {2, 3} }, 4 /* mechanic */, 0, 0, LOOK_MECHANIC, 0, 0 },
+        },
+        { 0, 0 },
+        0,   /* map 1 of 1 */
+        { 0, 0, 0, 0 },   /* up right down left */
+        { 0, 0, 0, 0 },
+        TRANS_FADE,
+        0,
+        {
+            { 0, 0, 0, 0, 0, 0 },
+        },
+        level_zones1,   /* zones */
+        zone_rules1,
+    },
+    /* 3: CROSSFIRE - Two patrols crossing a hall. Use the pillars as cover. */
     {
         "CROSSFIRE",
         20, 16,
-        level_map1,
+        level_map2,
         2,
         {
             { DIR_DOWN, 3, { {7, 4}, {7, 13}, {7, 1} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
@@ -75,18 +102,18 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules1,
+        zone_rules2,
     },
-    /* 3: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
+    /* 4: THE SENTRY - A sentry watches the door; wait for the patrol to pass. */
     {
         "THE SENTRY",
         20, 16,
-        level_map2,
+        level_map3,
         3,
         {
             { DIR_LEFT, 1, { {14, 10} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
             { DIR_DOWN, 4, { {6, 1}, {6, 9}, {18, 9}, {18, 1} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
-            { DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, LOOK_DOG, "PET", script2_2 },
+            { DIR_LEFT, 1, { {11, 5} }, DISGUISE_NONE, 0, CHAR_NO_TAKEDOWN | CHAR_NO_SIGHT, LOOK_DOG, "PET", script3_2 },
         },
         { 0, 0 },
         0,   /* map 1 of 1 */
@@ -98,13 +125,13 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 16, 13, 1, CELL_FLOOR, CELL_EXIT, 12 },   /* dog */
         },
         0,   /* zones */
-        zone_rules2,
+        zone_rules3,
     },
-    /* 4: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
+    /* 5: LURE - The sentry never leaves the door... unless it hears something. SELECT opens the inventory; throw to lure it out, then slip past. */
     {
         "LURE",
         20, 16,
-        level_map3,
+        level_map4,
         1,
         {
             { DIR_LEFT, 1, { {12, 6} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
@@ -119,13 +146,13 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules3,
+        zone_rules4,
     },
-    /* 5: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
+    /* 6: CLEANUP - The doorway guard faces away: take him down from behind (B), then hold B and drag the body out of the patrol's sight. */
     {
         "CLEANUP",
         20, 16,
-        level_map4,
+        level_map5,
         2,
         {
             { DIR_UP, 1, { {9, 3} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
@@ -141,13 +168,13 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules4,
+        zone_rules5,
     },
-    /* 6: DRESS CODE - The hall is hostile to your suit (huge cones) but legal in a guard's uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
+    /* 7: DRESS CODE - The hall is hostile to your suit (huge cones) but legal in a guard's uniform. Take one from the lone guard, then get past the officer, who still checks guards. */
     {
         "DRESS CODE",
         20, 16,
-        level_map5,
+        level_map6,
         3,
         {
             { DIR_RIGHT, 2, { {2, 6}, {7, 6} }, 1 /* guard */, 0x04, 0, LOOK_GUARD, 0, 0 },
@@ -163,14 +190,14 @@ const LevelDef levels[LEVEL_COUNT] = {
         {
             { 0, 0, 0, 0, 0, 0 },
         },
-        level_zones5,   /* zones */
-        zone_rules5,
+        level_zones6,   /* zones */
+        zone_rules6,
     },
-    /* 7: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
+    /* 8: COMPOUND - Two screens by two. The corridor patrol crosses both screens: duck into the alcoves. The shaft sentry fills the whole shaft with its cone, so lure it out with the stone. */
     {
         "COMPOUND",
         40, 32,
-        level_map6,
+        level_map7,
         3,
         {
             { DIR_RIGHT, 2, { {2, 20}, {37, 20} }, 1 /* guard */, 0, 0, LOOK_GUARD, 0, 0 },
@@ -187,13 +214,13 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules6,
+        zone_rules7,
     },
-    /* 8: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
+    /* 9: AIR DUCTS - Windows let the guards see between the rooms, and only guards can use the security door. Crawl through the vent (V); hide in the curtains (C) if you need to. */
     {
         "AIR DUCTS",
         20, 16,
-        level_map7,
+        level_map8,
         2,
         {
             { DIR_LEFT, 2, { {17, 5}, {2, 5} }, 1 /* guard */, 0x04, 0, LOOK_GUARD, 0, 0 },
@@ -209,20 +236,20 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules7,
+        zone_rules8,
     },
-    /* 9: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
+    /* 10: ANNEX, map 1 - Two maps: the corridor off map 1's right edge continues into map 2. Duck into the alcove to let the corridor guard pass, then cross over and get round the sentry behind the window wall. */
     {
         "ANNEX",
         20, 16,
-        level_map8,
+        level_map9,
         1,
         {
             { DIR_RIGHT, 2, { {9, 7}, {18, 7} }, DISGUISE_NONE, 0, 0, LOOK_GUARD, 0, 0 },
         },
         { 0, 0 },
         0,   /* map 1 of 2 */
-        { 0, 10, 0, 0 },   /* up right down left */
+        { 0, 11, 0, 0 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
         0,
@@ -230,13 +257,13 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules8,
+        zone_rules9,
     },
-    /* 9: ANNEX, map 2 */
+    /* 10: ANNEX, map 2 */
     {
         "ANNEX",
         40, 16,
-        level_map9,
+        level_map10,
         2,
         {
             { DIR_LEFT, 1, { {30, 7} }, 2 /* officer */, 0x04, 0, LOOK_OFFICER, 0, 0 },
@@ -244,7 +271,7 @@ const LevelDef levels[LEVEL_COUNT] = {
         },
         { 0, 0 },
         1,   /* map 2 of 2 */
-        { 0, 0, 0, 9 },   /* up right down left */
+        { 0, 0, 0, 10 },   /* up right down left */
         { 0, 0, 0, 0 },
         TRANS_IRIS,
         0,
@@ -252,7 +279,7 @@ const LevelDef levels[LEVEL_COUNT] = {
             { 0, 0, 0, 0, 0, 0 },
         },
         0,   /* zones */
-        zone_rules8,
+        zone_rules9,
     },
 };
 
@@ -265,57 +292,62 @@ const char *const level_text[] = {
 /* Painted art. The run-length data is in levels_art.c (ROM bank BANK_ART). */
 extern const uint8_t art0_rle[];
 extern const uint16_t art0_rows[];
-static const uint8_t art0_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 12, 16, 18 };
+static const uint8_t art0_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 13, 17, 20 };
 static const uint8_t art0_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
 static const MapArt art0 = { 10, art0_tiles, art0_kinds, art0_rle, art0_rows };
 extern const uint8_t art1_rle[];
 extern const uint16_t art1_rows[];
-static const uint8_t art1_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 16, 18, 19, 21 };
-static const uint8_t art1_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 3, 1, 5, 1 };
-static const MapArt art1 = { 11, art1_tiles, art1_kinds, art1_rle, art1_rows };
+static const uint8_t art1_tiles[] = { 0, 1, 2, 3, 10, 11, 12, 13, 17, 19, 20, 21, 22 };
+static const uint8_t art1_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 5, 5 };
+static const MapArt art1 = { 13, art1_tiles, art1_kinds, art1_rle, art1_rows };
 extern const uint8_t art2_rle[];
 extern const uint16_t art2_rows[];
-static const uint8_t art2_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 10, 11, 12, 13, 14, 15, 18 };
-static const uint8_t art2_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 3, 1 };
-static const MapArt art2 = { 14, art2_tiles, art2_kinds, art2_rle, art2_rows };
+static const uint8_t art2_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 17, 20, 21, 23 };
+static const uint8_t art2_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 3, 1, 5, 1 };
+static const MapArt art2 = { 11, art2_tiles, art2_kinds, art2_rle, art2_rows };
 extern const uint8_t art3_rle[];
 extern const uint16_t art3_rows[];
-static const uint8_t art3_tiles[] = { 0, 1, 2, 5, 7, 9, 10, 11, 15, 18 };
-static const uint8_t art3_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
-static const MapArt art3 = { 10, art3_tiles, art3_kinds, art3_rle, art3_rows };
+static const uint8_t art3_tiles[] = { 0, 1, 3, 4, 5, 8, 10, 11, 12, 13, 14, 15, 16, 20 };
+static const uint8_t art3_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 5, 1, 1, 3, 1 };
+static const MapArt art3 = { 14, art3_tiles, art3_kinds, art3_rle, art3_rows };
 extern const uint8_t art4_rle[];
 extern const uint16_t art4_rows[];
-static const uint8_t art4_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 13, 14, 15, 18 };
-static const uint8_t art4_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
-static const MapArt art4 = { 11, art4_tiles, art4_kinds, art4_rle, art4_rows };
+static const uint8_t art4_tiles[] = { 0, 1, 3, 6, 8, 10, 11, 12, 16, 20 };
+static const uint8_t art4_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
+static const MapArt art4 = { 10, art4_tiles, art4_kinds, art4_rle, art4_rows };
 extern const uint8_t art5_rle[];
 extern const uint16_t art5_rows[];
-static const uint8_t art5_tiles[] = { 0, 1, 2, 3, 4, 7, 9, 10, 11, 13, 14, 16, 18 };
-static const uint8_t art5_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
-static const MapArt art5 = { 13, art5_tiles, art5_kinds, art5_rle, art5_rows };
+static const uint8_t art5_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 14, 15, 16, 20 };
+static const uint8_t art5_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
+static const MapArt art5 = { 11, art5_tiles, art5_kinds, art5_rle, art5_rows };
 extern const uint8_t art6_rle[];
 extern const uint16_t art6_rows[];
-static const uint8_t art6_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 12, 13, 14, 15, 18, 19 };
-static const uint8_t art6_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 5 };
+static const uint8_t art6_tiles[] = { 0, 1, 3, 4, 5, 8, 10, 11, 12, 14, 15, 17, 20 };
+static const uint8_t art6_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1 };
 static const MapArt art6 = { 13, art6_tiles, art6_kinds, art6_rle, art6_rows };
 extern const uint8_t art7_rle[];
 extern const uint16_t art7_rows[];
-static const uint8_t art7_tiles[] = { 0, 1, 2, 7, 8, 9, 10, 11, 15, 17, 18, 20, 21 };
-static const uint8_t art7_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1 };
+static const uint8_t art7_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 13, 14, 15, 16, 20, 21 };
+static const uint8_t art7_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 5 };
 static const MapArt art7 = { 13, art7_tiles, art7_kinds, art7_rle, art7_rows };
 extern const uint8_t art8_rle[];
 extern const uint16_t art8_rows[];
-static const uint8_t art8_tiles[] = { 0, 1, 2, 5, 6, 7, 9, 10, 11, 12, 18 };
-static const uint8_t art8_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
-static const MapArt art8 = { 11, art8_tiles, art8_kinds, art8_rle, art8_rows };
+static const uint8_t art8_tiles[] = { 0, 1, 3, 8, 9, 10, 11, 12, 16, 18, 20, 22, 23 };
+static const uint8_t art8_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 1, 1 };
+static const MapArt art8 = { 13, art8_tiles, art8_kinds, art8_rle, art8_rows };
 extern const uint8_t art9_rle[];
 extern const uint16_t art9_rows[];
-static const uint8_t art9_tiles[] = { 0, 1, 2, 7, 9, 10, 11, 14, 15, 17, 18, 19, 21 };
-static const uint8_t art9_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 5, 1 };
-static const MapArt art9 = { 13, art9_tiles, art9_kinds, art9_rle, art9_rows };
+static const uint8_t art9_tiles[] = { 0, 1, 3, 6, 7, 8, 10, 11, 12, 13, 20 };
+static const uint8_t art9_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1 };
+static const MapArt art9 = { 11, art9_tiles, art9_kinds, art9_rle, art9_rows };
+extern const uint8_t art10_rle[];
+extern const uint16_t art10_rows[];
+static const uint8_t art10_tiles[] = { 0, 1, 3, 8, 10, 11, 12, 15, 16, 18, 20, 21, 23 };
+static const uint8_t art10_kinds[] = { 1, 1, 1, 1, 1, 1, 1, 1, 3, 1, 1, 5, 1 };
+static const MapArt art10 = { 13, art10_tiles, art10_kinds, art10_rle, art10_rows };
 
 /* Art for each entry of levels[] (0 = built-in graphics only). */
-const MapArt *const level_art[LEVEL_COUNT] = { &art0, &art1, &art2, &art3, &art4, &art5, &art6, &art7, &art8, &art9 };
+const MapArt *const level_art[LEVEL_COUNT] = { &art0, &art1, &art2, &art3, &art4, &art5, &art6, &art7, &art8, &art9, &art10 };
 
 /* Character looks, from tilesets/characters.png: up right down left
  * subdued body. */
@@ -326,7 +358,7 @@ const uint8_t look_tile_data[] = {
     0x00, 0x00, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x18, 0x66, 0x00, 0xBD, 0x42, 0x3C, 0x24, 0x24,
     0x00, 0x00, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x18, 0x26, 0x00, 0x3D, 0x02, 0x3C, 0x24, 0x24,
     0x00, 0x00, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x18, 0x66, 0x00, 0xBD, 0x42, 0x3C, 0x24, 0x24,
-    0x00, 0x00, 0x00, 0x00, 0x21, 0x2F, 0x78, 0x66, 0x78, 0x66, 0x21, 0x2F, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x1B, 0x04, 0x78, 0x06, 0x78, 0x06, 0x1B, 0x04, 0x00, 0x00, 0x00, 0x00,
     /* officer */
     0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xBD, 0x42, 0x3C, 0x24, 0x24,
     0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x18, 0x64, 0x00, 0xBC, 0x40, 0x3C, 0x24, 0x24,
@@ -347,22 +379,50 @@ const uint8_t look_tile_data[] = {
     0x18, 0x00, 0x3C, 0x24, 0x66, 0x7E, 0xEF, 0xFF, 0xAD, 0xBD, 0xBD, 0x3C, 0x3C, 0x3C, 0x24, 0x24,
     0x18, 0x00, 0x1C, 0x0C, 0x3E, 0x3E, 0x3F, 0x3F, 0x3D, 0x3D, 0x3D, 0x3C, 0x3C, 0x3C, 0x24, 0x24,
     0x1C, 0x18, 0x30, 0x30, 0x7F, 0x7F, 0xFE, 0x7E, 0xFE, 0x7E, 0x7F, 0x7F, 0x30, 0x30, 0x1C, 0x18,
-    0x1C, 0x18, 0x30, 0x30, 0x7F, 0x7F, 0xFE, 0x7E, 0xFE, 0x7E, 0x7F, 0x7F, 0x30, 0x30, 0x1C, 0x18,
+    0x00, 0x00, 0x00, 0x00, 0x37, 0x08, 0xF0, 0x0C, 0xF0, 0x0C, 0x37, 0x08, 0x00, 0x00, 0x00, 0x00,
     /* player_guard */
     0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xFF, 0x00, 0xBD, 0x81, 0x3C, 0x24, 0x24,
     0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x7C, 0x00, 0xFC, 0x00, 0xBC, 0x80, 0x3C, 0x24, 0x24,
     0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xFF, 0x00, 0xBD, 0x81, 0x3C, 0x24, 0x24,
     0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x3E, 0x00, 0x3F, 0x00, 0x3D, 0x01, 0x3C, 0x24, 0x24,
     0x02, 0x0C, 0x00, 0x18, 0x41, 0x5F, 0xE0, 0xDE, 0xE0, 0xDE, 0x41, 0x5F, 0x00, 0x18, 0x02, 0x0C,
-    0x02, 0x0C, 0x00, 0x18, 0x41, 0x5F, 0xE0, 0xDE, 0xE0, 0xDE, 0x41, 0x5F, 0x00, 0x18, 0x02, 0x0C,
+    0x00, 0x00, 0x00, 0x00, 0x37, 0x08, 0xF0, 0x0C, 0xF0, 0x0C, 0x37, 0x08, 0x00, 0x00, 0x00, 0x00,
     /* player_officer */
     0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xFF, 0x00, 0xBD, 0xA5, 0x24,
     0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x7C, 0x00, 0xFC, 0x00, 0xBC, 0xA4, 0x24,
     0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xFF, 0x00, 0xBD, 0xA5, 0x24,
     0x18, 0x18, 0x18, 0x18, 0x3C, 0x3C, 0x18, 0x00, 0x00, 0x3E, 0x00, 0x3F, 0x00, 0x3D, 0x25, 0x24,
     0x01, 0x06, 0x00, 0x0C, 0x21, 0x2F, 0xF0, 0xEE, 0xF0, 0xEE, 0x21, 0x2F, 0x00, 0x0C, 0x01, 0x06,
-    0x01, 0x06, 0x00, 0x0C, 0x21, 0x2F, 0xF0, 0xEE, 0xF0, 0xEE, 0x21, 0x2F, 0x00, 0x0C, 0x01, 0x06,
+    0x00, 0x00, 0x00, 0x00, 0x37, 0x08, 0xF0, 0x0C, 0xF0, 0x0C, 0x37, 0x08, 0x00, 0x00, 0x00, 0x00,
+    /* player_terry */
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xFF, 0x00, 0xBD, 0x81, 0x3C, 0x00, 0x24,
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x08, 0x70, 0x04, 0xFC, 0x04, 0xBC, 0x80, 0x3C, 0x00, 0x24,
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x18, 0x66, 0x18, 0xFF, 0x18, 0xBD, 0x81, 0x3C, 0x00, 0x24,
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x10, 0x0E, 0x20, 0x3F, 0x20, 0x3D, 0x01, 0x3C, 0x00, 0x24,
+    0x00, 0x00, 0x00, 0x40, 0x00, 0x5F, 0x20, 0xDE, 0x20, 0xDE, 0x00, 0x5F, 0x00, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x37, 0x08, 0xF0, 0x0C, 0xF0, 0x0C, 0x37, 0x08, 0x00, 0x00, 0x00, 0x00,
+    /* terry */
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xBD, 0x42, 0x3C, 0x00, 0x3C, 0x00, 0x24,
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x08, 0x70, 0x04, 0xBC, 0x44, 0x3C, 0x00, 0x3C, 0x00, 0x24,
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x18, 0x66, 0x18, 0xBD, 0x5A, 0x3C, 0x00, 0x3C, 0x00, 0x24,
+    0x00, 0x18, 0x00, 0x7E, 0x18, 0x00, 0x10, 0x0E, 0x20, 0x3D, 0x22, 0x3C, 0x00, 0x3C, 0x00, 0x24,
+    0x00, 0x00, 0x00, 0x40, 0x00, 0x5F, 0x20, 0xDE, 0x20, 0xDE, 0x00, 0x5F, 0x00, 0x40, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x00, 0x1B, 0x04, 0x78, 0x06, 0x78, 0x06, 0x1B, 0x04, 0x00, 0x00, 0x00, 0x00,
+    /* player_mechanic */
+    0x00, 0x3C, 0x00, 0x3C, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xFF, 0x00, 0xBD, 0x81, 0x3C, 0x00, 0x24,
+    0x00, 0x3C, 0x08, 0x30, 0x18, 0x00, 0x00, 0x7C, 0x00, 0xFC, 0x00, 0xBC, 0x80, 0x3C, 0x00, 0x24,
+    0x00, 0x3C, 0x18, 0x24, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xFF, 0x00, 0xBD, 0x81, 0x3C, 0x00, 0x24,
+    0x00, 0x3C, 0x10, 0x0C, 0x18, 0x00, 0x00, 0x3E, 0x00, 0x3F, 0x00, 0x3D, 0x01, 0x3C, 0x00, 0x24,
+    0x02, 0x0C, 0x00, 0x18, 0x00, 0xDF, 0x20, 0xDE, 0x20, 0xDE, 0x00, 0xDF, 0x00, 0x18, 0x02, 0x0C,
+    0x00, 0x00, 0x00, 0x00, 0x37, 0x08, 0xF0, 0x0C, 0xF0, 0x0C, 0x37, 0x08, 0x00, 0x00, 0x00, 0x00,
+    /* mechanic */
+    0x00, 0x00, 0x00, 0x3C, 0x00, 0x3C, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xBD, 0x42, 0x3C, 0x00, 0x24,
+    0x00, 0x00, 0x00, 0x3C, 0x08, 0x30, 0x18, 0x00, 0x00, 0x7C, 0x00, 0xBC, 0x40, 0x3C, 0x00, 0x24,
+    0x00, 0x00, 0x00, 0x3C, 0x18, 0x24, 0x18, 0x00, 0x00, 0x7E, 0x00, 0xBD, 0x42, 0x3C, 0x00, 0x24,
+    0x00, 0x00, 0x00, 0x3C, 0x10, 0x0C, 0x18, 0x00, 0x00, 0x3E, 0x00, 0x3D, 0x02, 0x3C, 0x00, 0x24,
+    0x00, 0x04, 0x02, 0x08, 0x00, 0x6F, 0x10, 0x6E, 0x10, 0x6E, 0x00, 0x6F, 0x02, 0x08, 0x00, 0x04,
+    0x00, 0x00, 0x00, 0x00, 0x1B, 0x04, 0x78, 0x06, 0x78, 0x06, 0x1B, 0x04, 0x00, 0x00, 0x00, 0x00,
 };
 
 /* Each disguise's look (the player faces the way it last moved; down at the start). */
-const uint8_t disguise_look[DISGUISE_TYPES] = { LOOK_PLAYER, LOOK_PLAYER_GUARD, LOOK_PLAYER_OFFICER };   /* suit, guard, officer */
+const uint8_t disguise_look[DISGUISE_TYPES] = { LOOK_PLAYER, LOOK_PLAYER_GUARD, LOOK_PLAYER_OFFICER, LOOK_PLAYER_TERRY, LOOK_PLAYER_MECHANIC };   /* suit, guard, officer, terry, mechanic */

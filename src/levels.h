@@ -7,7 +7,7 @@
 #include "trans.h"
 
 /* One entry per map; a level's maps are consecutive (part 0 first). */
-#define LEVEL_COUNT 10
+#define LEVEL_COUNT 11
 extern const LevelDef levels[LEVEL_COUNT];
 /* 16 bytes per tile; in ROM bank BANK_ART (far.h): read with far_read */
 extern const uint8_t art_tile_data[];
@@ -15,7 +15,7 @@ extern const MapArt *const level_art[LEVEL_COUNT];
 extern const char *const level_text[];        /* what characters say */
 
 /* Character looks (GuardDef.look), from tilesets/characters.json. */
-#define LOOK_COUNT 6
+#define LOOK_COUNT 10
 #define LOOK_FRAMES 6   /* up right down left subdued body */
 #define LOOK_GUARD 0
 #define LOOK_OFFICER 1
@@ -23,10 +23,14 @@ extern const char *const level_text[];        /* what characters say */
 #define LOOK_PLAYER 3
 #define LOOK_PLAYER_GUARD 4
 #define LOOK_PLAYER_OFFICER 5
+#define LOOK_PLAYER_TERRY 6
+#define LOOK_TERRY 7
+#define LOOK_PLAYER_MECHANIC 8
+#define LOOK_MECHANIC 9
 extern const uint8_t look_tile_data[];         /* LOOK_COUNT * LOOK_FRAMES tiles */
 
 /* Disguises (tilesets/characters.json): 0 is your own suit. */
-#define DISGUISE_TYPES 3   /* suit, guard, officer */
+#define DISGUISE_TYPES 5   /* suit, guard, officer, terry, mechanic */
 extern const uint8_t disguise_look[DISGUISE_TYPES];
 
 #endif

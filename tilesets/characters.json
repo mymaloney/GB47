@@ -21,7 +21,11 @@
     "dog",
     "player",
     "player_guard",
-    "player_officer"
+    "player_officer",
+    "player_terry",
+    "terry",
+    "player_mechanic",
+    "mechanic"
   ],
   "disguises": [
     {
@@ -35,6 +39,14 @@
     {
       "name": "officer",
       "look": "player_officer"
+    },
+    {
+      "name": "terry",
+      "look": "player_terry"
+    },
+    {
+      "name": "mechanic",
+      "look": "player_mechanic"
     }
   ]
 }
