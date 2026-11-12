@@ -202,10 +202,14 @@ function hudRows(lv, idx, v, ui) {
     : textRow([[0, num], [num.length + 1, lv.name], [16, "T" + pad3(v.turn)]]);
   const G = A.G;
   let msg;
-  if (ui.msg) msg = ui.msg;
-  else if (v.status === G.STATUS_CAUGHT) msg = "SPOTTED! START:UNDO";
-  else if (v.status === G.STATUS_ALARM) msg = "BODY SEEN START:UNDO";
+  // how the turn ended outranks a message about what was going on (a
+  // takedown seen halfway must say so); only the restart hint outranks it
+  if (ui.msg === "HOLD TO RESTART") msg = ui.msg;
+  else if (v.status === G.STATUS_CAUGHT) msg = "CAUGHT! START:UNDO";
+  else if (v.status === G.STATUS_ALARM)   // a guard saw a takedown, or a body
+    msg = v.takedown_left ? "CAUGHT! START:UNDO" : "BODY SEEN START:UNDO";
   else if (v.status === G.STATUS_WON) msg = "ESCAPED!   A:NEXT";
+  else if (ui.msg) msg = ui.msg;
   else if (ui.mode === "aim") msg = "A:THROW B:BACK";
   else if (v.prompt.talk) msg = "B:" + v.prompt.talk;
   else if (v.prompt.takedown) msg = "B:TAKEDOWN";
@@ -2348,6 +2352,7 @@ async function doTakedown() {
     renderPlay();
   }
   P.ui.msg = null;
+  renderPlay();                    // e.g. caught on the first turn of it
 }
 
 const DIRKEYS = { ArrowUp: 0, ArrowRight: 1, ArrowDown: 2, ArrowLeft: 3 };

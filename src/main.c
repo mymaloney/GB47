@@ -95,6 +95,7 @@ static uint8_t     say_at;       /* which of this turn's messages is showing */
 static uint8_t     inv_item;     /* highlighted / chosen item type */
 static uint8_t     aim_x, aim_y; /* aiming cursor */
 static const char *hud_msg;
+static const char  msg_restart[] = "HOLD TO RESTART";
 static uint8_t     player_facing;   /* DIR_*: only how the player is drawn, so
                                        not in GameState (the rules, undo and
                                        the solver don't care) */      /* one-off message for the HUD's 2nd row */
@@ -192,10 +193,15 @@ static void draw_hud(void)
 
     /* Row 2: what the player can do right now */
     clear_row_buf();
-    if (hud_msg)                         put_text(0, hud_msg);
-    else if (state.status == STATUS_CAUGHT) put_text(0, "SPOTTED! START:UNDO");
-    else if (state.status == STATUS_ALARM)  put_text(0, "BODY SEEN START:UNDO");
+    /* how the turn ended outranks a message about what was going on (a
+     * takedown seen halfway must say so); only the restart hint, shown
+     * while START is held, outranks it */
+    if (hud_msg == msg_restart)          put_text(0, hud_msg);
+    else if (state.status == STATUS_CAUGHT) put_text(0, "CAUGHT! START:UNDO");
+    else if (state.status == STATUS_ALARM)  /* a guard saw a takedown, or a body */
+        put_text(0, state.takedown_left ? "CAUGHT! START:UNDO" : "BODY SEEN START:UNDO");
     else if (state.status == STATUS_WON)    put_text(0, "ESCAPED!   A:NEXT");
+    else if (hud_msg)                    put_text(0, hud_msg);
     else if (ui_mode == UI_AIM)          put_text(0, "A:THROW B:BACK");
     else if ((n = game_talk_target(&state)) != 0xFF)
         put_text(put_text(0, "B:"), world_def(&world)->guards[n].verb);
@@ -908,7 +914,7 @@ static void handle_start(uint8_t keys, uint8_t released)
     if (keys & J_START) {
         if (held < 255) held++;
         if (held == 15) {
-            hud_msg = "HOLD TO RESTART";
+            hud_msg = msg_restart;
             draw_hud();
         }
         if (held == RESTART_HOLD) load_level(level_idx);
