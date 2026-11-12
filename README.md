@@ -118,8 +118,17 @@ rules into `build/libgame.so`, starts a local server, and opens
   Choosing one plays it on the picture (so does **Preview**), and finishing
   a level in Playtest plays it too. The patterns come from the same code
   the ROM uses (`src/trans.c`).
+- **Disguises** (shared by every level): what the player can wear. Your
+  own suit is always first; the rest are the uniforms characters' bodies
+  give (up to 8 in all). Each is drawn with a look (the player uses its
+  Down frame): pick one, or **Edit…** to paint it. **+ Disguise** makes a
+  new one with a copy of the suit's look and opens the painter. Renaming
+  one renames it everywhere, saved levels included; deleting one is
+  refused while any level uses it (the message names them). Changes save
+  straight away, like looks. Every outfit list in the editor (zone rules,
+  uniforms, "sees through", the cones preview) follows this list.
 - **Cones preview:** shows every guard's starting cone as seen by a player
-  in your own suit, the GUARD uniform, or the OFFICER uniform.
+  in your own suit or any of the disguises.
 - **Problems** are listed live, in plain language: missing start, a route
   through a wall, a name too long for the HUD, and so on.
 - **Solve** finds the shortest solution and reports which mechanics the
@@ -350,7 +359,9 @@ Takedown length is `TAKEDOWN_TURNS` in `src/game.h`.
 
 You start in your own clothes. Stand on a body and press B to put on its
 uniform (one turn). Your sprite changes to show what you're wearing. Each
-body has one uniform, and there's no changing back.
+body has one uniform, and there's no changing back. Which disguises
+exist, and how you look in each, is up to the level designer: they are
+listed in `tilesets/characters.json` and made in the editor.
 
 **Zones.** A level is divided into zones, painted in the editor and
 shared by all its maps. Each zone has a rule for each outfit, and guards
@@ -374,8 +385,8 @@ A level without zones treats your own suit as trespassing everywhere and
 uniforms as legal everywhere. Levels 1-5 and 7-9 are one zone each,
 hostile to the suit; level 6 has two, with its hall hostile to the suit
 and the room on the left only trespassing. Bodies are always spotted with
-the normal cone. Disguise types are `DISGUISE_*` and the rules `ACCESS_*`
-in `src/game.h`; cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and
+the normal cone. The rules are `ACCESS_*` in `src/game.h` and the number
+of disguises `DISGUISE_TYPES` in the generated `src/levels.h`; cone sizes are `VISION_RANGE`, `HOSTILE_RANGE` and
 `HOSTILE_HALF`.
 
 ### Characters, talking, scripts and switch cells
@@ -399,8 +410,8 @@ talking while they patrol: talk to them wherever they are.
 Each character has a **look**: six 8×8 sprites (facing up, right, down,
 left, being taken down, a body) in `tilesets/characters.png`, one row
 per look, named in `tilesets/characters.json`. Paint them in the editor.
-With no look set, a character in an officer's uniform looks like an
-officer and anyone else like a guard. The Game Boy has room for 41 looks.
+The player's look depends on the disguise worn (see Disguises in the
+editor). The Game Boy has room for 42 looks, the player's included.
 
 Scripts set and clear the level's flags, and switch cells follow them at
 once. Undo takes flags back like everything else. In Playtest, the line
@@ -454,7 +465,7 @@ and 8 KB of RAM (`src/far.h` has the layout):
 | Bank | Holds | Free |
 |---|---|---|
 | 0 | the rules, GBDK | 2.6 KB |
-| 1 | `main.c`, built-in tiles, the level table, scripts and text | 6.4 KB |
+| 1 | `main.c`, built-in tiles, the level table, scripts and text, looks | 6.0 KB |
 | 2 | map cells and zone maps | 11.8 KB |
 | 3 | painted art | 13.7 KB |
 
@@ -500,7 +511,7 @@ gives up after 2 million and reports "too big to tell".
 | `src/art.c`, `tools/tileset.py` | Painted art: map art layers, shaded copies for cones and aiming, and the tileset loader (with a standard-library PNG reader, `tools/png.py`). |
 | `src/trans.c`, `trans.h` | Level transition patterns (which screen tile changes at which step). No hardware access: `main.c` plays them, the editor previews them. |
 | `src/main.c` | Game Boy side: input, drawing the map/sprites/HUD. Only reads `GameState`. |
-| `tools/gen_tiles.py` | Turns ASCII pixel art into `src/tiles.c`/`tiles.h` (built-in graphics, font, the player). Run `make tiles` after editing the art. Character looks are `tilesets/characters.png` instead. |
+| `tools/gen_tiles.py` | Turns ASCII pixel art into `src/tiles.c`/`tiles.h` (built-in graphics, font). Run `make tiles` after editing the art. Character and player looks are `tilesets/characters.png` instead. |
 | `tests/test_game.c` | Unit tests, plus solver checks for every level. |
 | `tests/test_editor.py` | Checks the editor's bridge and that `src/levels.c` matches the JSON (`make test-editor`). |
 
@@ -516,8 +527,8 @@ makes undo, the solver, and PC testing possible.
 5. ~~NPC dialogue and simple scripts~~ (the dog on level 3; how it was built is in
    [`docs/dialogue-plan.md`](docs/dialogue-plan.md)). Later: more script steps (give an item,
    send a guard somewhere), talking to guards, a lower-case font
-6. ~~Zones with a rule per outfit~~. **Next:** disguises made in the editor, with
-   their own looks ([`docs/zones-plan.md`](docs/zones-plan.md))
+6. ~~Zones with a rule per outfit~~, ~~disguises made in the editor, with their own
+   looks~~ ([`docs/zones-plan.md`](docs/zones-plan.md))
 7. Title screen, save data (battery SRAM), music (hUGETracker)
 
 Introduce each new mechanic with its own teaching level, and let the

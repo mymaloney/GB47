@@ -36,12 +36,15 @@ JSON format, one object per level:
           "facing":   "right",             up/right/down/left
           "route":    [[1, 5], [18, 5]],   patrol loop, starts at the first
                                            point; one point = stands still
-          "uniform":  "none",              none/guard/officer (from body)
+          "uniform":  "guard",             the disguise its body gives (a
+                                           name from "disguises" in
+                                           tilesets/characters.json, not
+                                           the suit), or "none"
           "sees":     true,                optional: false = no cone at all
                                            (a dog): never catches you or
                                            notices bodies
           "enforcer": ["officer"],         optional: outfits it sees
-                                           through (none/guard/officer):
+                                           through (disguise names):
                                            someone wearing one trespasses
                                            to it even where that's legal
           "look":     "guard",             optional: which sprites draw it
@@ -70,7 +73,7 @@ JSON format, one object per level:
       }],
       "zones": [{                          optional, shared by all the maps:
         "name": "dance floor",             the areas of the level, and per
-        "rules": {"none": "T",             outfit whether wearing it there
+        "rules": {"suit": "T",             outfit whether wearing it there
                   "guard": "L"}            is L legal, T trespassing or H
       }],                                  hostile (see ACCESS_* in
                                            src/game.h). An outfit left out
@@ -121,7 +124,11 @@ MAX_MAPS = 4
 NAME_MAX = 12
 DIRS = ["up", "right", "down", "left"]
 OPPOSITE = {"up": "down", "down": "up", "left": "right", "right": "left"}
-UNIFORMS = ["none", "guard", "officer"]
+# Disguises (outfits), in order: made by the level designer, so read from
+# tilesets/characters.json (see disguises()). The first is your own suit.
+UNIFORMS = []
+NO_UNIFORM = "none"          # a character whose body gives no disguise
+DISGUISE_NAME = r"[a-z][a-z0-9_]{0,11}"
 ITEMS = ["stone", "bottle"]
 # Level transitions, in TRANS_* order (src/trans.h); tests check they match.
 TRANSITIONS = ["cut", "fade", "wipe", "curtain", "iris", "dissolve", "diagonal",
@@ -141,6 +148,65 @@ ZONE_DIGITS = "0123456789abcdef"
 
 def default_rule(outfit):
     return "T" if UNIFORMS.index(outfit) == 0 else "L"
+
+
+def disguises():
+    """[{"name", "look"}] from tilesets/characters.json, the suit first."""
+    return json.loads(ts.CHARACTERS.read_text()).get("disguises") or [{"name": "suit", "look": "guard"}]
+
+
+def reload_disguises():
+    """Re-read the disguise names into UNIFORMS (the same list object, so
+    modules that imported it see the change)."""
+    UNIFORMS[:] = [d["name"] for d in disguises()]
+
+
+def outfit_users(levels, name):
+    """Names of the levels that use outfit `name`: in a zone's rules, as a
+    character's uniform, or in what a character sees through."""
+    out = []
+    for lv in levels:
+        used = any(name in (z.get("rules") or {}) for z in lv.get("zones") or [])
+        used = used or any(g.get("uniform") == name or name in (g.get("enforcer") or [])
+                           for m in lv.get("maps", []) for g in m.get("guards", []))
+        if used:
+            out.append(lv.get("name", "?"))
+    return out
+
+
+def rename_outfit(levels, old, new):
+    """Rename an outfit everywhere levels mention it (in place)."""
+    for lv in levels:
+        for z in lv.get("zones") or []:
+            r = z.get("rules") or {}
+            if old in r:
+                z["rules"] = {(new if k == old else k): v for k, v in r.items()}
+        for m in lv.get("maps", []):
+            for g in m.get("guards", []):
+                if g.get("uniform") == old:
+                    g["uniform"] = new
+                if old in (g.get("enforcer") or []):
+                    g["enforcer"] = [new if u == old else u for u in g["enforcer"]]
+
+
+def validate_disguises():
+    """Problems with the disguise list itself."""
+    ds, errs, seen = disguises(), [], set()
+    if not 1 <= len(ds) <= DISGUISE_MAX:
+        errs.append(f"There can be 1-{DISGUISE_MAX} disguises (there are {len(ds)}).")
+    names = looks()["looks"]
+    for i, d in enumerate(ds):
+        n = d.get("name", "")
+        if not re.fullmatch(DISGUISE_NAME, n or "") or n == NO_UNIFORM:
+            errs.append(f"Disguise {i + 1}: a name is 1-12 lower-case letters, digits or _ "
+                        f"(not \"{NO_UNIFORM}\").")
+        elif n in seen:
+            errs.append(f"Two disguises are called \"{n}\".")
+        seen.add(n)
+        if d.get("look") not in names:
+            errs.append(f"Disguise \"{n}\" is drawn with a look that doesn't exist "
+                        f"(\"{d.get('look')}\").")
+    return errs
 # script ops, as in src/game.h
 OP_END, OP_SAY, OP_SET, OP_CLEAR, OP_IF, OP_JUMP = range(6)
 FONT_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 :!-.>?")
@@ -173,10 +239,11 @@ def looks():
 
 
 def forget_tilesets():
-    """Re-read the tileset and looks next time (after the editor changed
+    """Re-read the tileset, looks and disguises (after the editor changed
     them)."""
     global _tileset, _looks
     _tileset = _looks = None
+    reload_disguises()
 
 
 def sprite_slots_available():
@@ -190,8 +257,10 @@ def guard_look(g):
     if g.get("look"):
         return g["look"]
     names = looks()["looks"]
-    want = "officer" if g.get("uniform") == "officer" else "guard"
-    return want if want in names else names[0]
+    want = g.get("uniform")                 # a look named after its uniform
+    if want in names and want != NO_UNIFORM:
+        return want
+    return "guard" if "guard" in names else names[0]
 
 
 def can_talk(g):
@@ -235,11 +304,36 @@ def upgrade(lv):
                 "verb": n.get("verb", "TALK"), "script": n.get("script", [])})
         for g in m.get("guards", []):
             upgrade_attitude(g)
+            if not g.get("look"):
+                # characters used to look like their uniform; write it down,
+                # so renaming a disguise can't change how anyone looks
+                g["look"] = guard_look(g)
     upgrade_access(lv)
+    upgrade_suit(lv)
     lv.setdefault("links", [])
     lv.setdefault("items", {})
     lv.setdefault("transition", DEFAULT_TRANSITION)
     return lv
+
+
+# Before disguises were made in the editor, there were exactly these three,
+# and your own suit was called "none".
+OLD_OUTFITS = ["none", "guard", "officer"]
+
+
+def upgrade_suit(lv):
+    """Zone rules and enforcer tags called your own suit "none"."""
+    suit = UNIFORMS[0]
+    if suit == "none":
+        return
+    for z in lv.get("zones") or []:
+        r = z.get("rules") or {}
+        if "none" in r:
+            z["rules"] = {(suit if k == "none" else k): v for k, v in r.items()}
+    for m in lv["maps"]:
+        for g in m.get("guards", []):
+            if "none" in (g.get("enforcer") or []):
+                g["enforcer"] = [suit if u == "none" else u for u in g["enforcer"]]
 
 
 def upgrade_attitude(g):
@@ -252,12 +346,12 @@ def upgrade_attitude(g):
     if "attitude" not in g:
         return
     att = g.pop("attitude")
-    if not isinstance(att, str) or len(att) != len(UNIFORMS):
+    if not isinstance(att, str) or len(att) != len(OLD_OUTFITS):
         return
     if set(att) == {"I"}:
         g.setdefault("sees", False)
     else:
-        seen = [u for u, a in zip(UNIFORMS, att) if a in "EH" and default_rule(u) == "L"]
+        seen = [u for u, a in zip(OLD_OUTFITS[1:], att[1:]) if a in "EH"]
         if seen:
             g.setdefault("enforcer", seen)
 
@@ -273,7 +367,9 @@ def upgrade_access(lv):
     combos, counts = [], {}
     grids = []
     for m in lv["maps"]:
-        acc = m.pop("access", None) or {}
+        acc = dict(m.pop("access", None) or {})
+        if "none" in acc and "none" not in UNIFORMS:     # the suit's old name
+            acc[UNIFORMS[0]] = acc.pop("none")
         rows = m.get("map", [])
         layers = []
         for u in UNIFORMS:
@@ -435,8 +531,9 @@ def validate_map(m):
             continue
         if g.get("facing") not in DIRS:
             errs.append(f"{tag}: facing must be one of {', '.join(DIRS)}.")
-        if g.get("uniform", "none") not in UNIFORMS:
-            errs.append(f"{tag}: uniform must be one of {', '.join(UNIFORMS)}.")
+        if g.get("uniform", NO_UNIFORM) not in [NO_UNIFORM] + UNIFORMS[1:]:
+            errs.append(f"{tag}: the uniform its body gives must be {NO_UNIFORM} or one of: "
+                        f"{', '.join(UNIFORMS[1:])}.")
         if not isinstance(g.get("sees", True), bool):
             errs.append(f"{tag}: sees must be true or false.")
         enf = g.get("enforcer", [])
@@ -887,6 +984,7 @@ def validate_all(levels):
         errs.append("There must be at least one level.")
     if sum(len(upgrade(lv)["maps"]) for lv in levels) > 250:
         errs.append("Too many maps in total (max 250).")
+    errs += validate_disguises()
     for n, lv in enumerate(levels):
         errs += [f"Level {n + 1} ({lv.get('name', '?')}): {e}" for e in validate_level(lv)]
     need = len(looks()["looks"]) * ts.LOOK_FRAMES
@@ -995,7 +1093,7 @@ def generate_c(levels):
                 verb = c_string(g["verb"]) if talk else "0"
                 script = f"script{base + k}_{i}" if talk else "0"
                 out.append(f"            {{ DIR_{g['facing'].upper()}, {len(g['route'])}, "
-                           f"{{ {pts} }}, DISGUISE_{g.get('uniform', 'none').upper()}, {att}, "
+                           f"{{ {pts} }}, {uniform_c(g)}, {att}, "
                            f"{flags_c}, LOOK_{guard_look(g).upper()}, {verb}, {script} }},")
             out.append("        },")
             items = lv.get("items", {}) if k == 0 else {}
@@ -1036,6 +1134,12 @@ def generate_c(levels):
     return "\n".join(out)
 
 
+def uniform_c(g):
+    """A character's uniform as C: the disguise number, or DISGUISE_NONE."""
+    u = g.get("uniform", NO_UNIFORM)
+    return "DISGUISE_NONE" if u == NO_UNIFORM else f"{UNIFORMS.index(u)} /* {u} */"
+
+
 def generate_looks():
     """Character looks (sprites, 16 bytes per tile): LOOK_FRAMES tiles per
     look, loaded into sprite VRAM after the built-in ones."""
@@ -1045,7 +1149,10 @@ def generate_looks():
         out.append(f"    /* {name} */")
         for px in frames:
             out.append("    " + ", ".join(f"0x{b:02X}" for b in ts.to_2bpp(px)) + ",")
-    out += ["};", ""]
+    out += ["};", "", "/* Each disguise's look (the player is drawn with its down frame). */",
+            "const uint8_t disguise_look[DISGUISE_TYPES] = { " +
+            ", ".join(f"LOOK_{d['look'].upper()}" for d in disguises()) + " };   /* " +
+            ", ".join(UNIFORMS) + " */", ""]
     return out
 
 
@@ -1127,6 +1234,10 @@ def generate_h(levels):
         f"#define LOOK_FRAMES {ts.LOOK_FRAMES}   /* up right down left subdued body */",
     ] + [f"#define LOOK_{n.upper()} {i}" for i, n in enumerate(looks()["looks"])] + [
         "extern const uint8_t look_tile_data[];         /* LOOK_COUNT * LOOK_FRAMES tiles */",
+        "",
+        "/* Disguises (tilesets/characters.json): 0 is your own suit. */",
+        f"#define DISGUISE_TYPES {len(UNIFORMS)}   /* {', '.join(UNIFORMS)} */",
+        "extern const uint8_t disguise_look[DISGUISE_TYPES];",
         "",
         "#endif",
         "",
@@ -1232,6 +1343,9 @@ def main():
         sys.exit(1)
     write_c(levels)
     print(f"wrote {len(levels)} levels to src/levels.c")
+
+
+reload_disguises()
 
 
 if __name__ == "__main__":

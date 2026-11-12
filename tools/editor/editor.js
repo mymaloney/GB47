@@ -39,7 +39,7 @@ let selZone = 0;                 // the zone being painted (Zones panel)
 const ZONE_COLORS = ["#7d8590", "#2e86ab", "#e4572e", "#2ea043", "#c23bd4", "#f2b705", "#00a6a6",
   "#d1495b", "#6a4c93", "#8ac926", "#ff924c", "#1982c4", "#b5838d", "#52b788", "#ffca3a", "#9d4edd"];
 const ACCESS_TINT = { L: "rgba(46, 160, 67, 0.38)", T: "rgba(242, 183, 5, 0.38)", H: "rgba(228, 87, 46, 0.5)" };
-const outfitLabel = (u) => (u === "none" ? "your own suit" : `a ${u.toUpperCase()} uniform`);
+const outfitLabel = (u) => (u === A.uniforms[0] ? "your own suit" : `a ${u.toUpperCase()} uniform`);
 let validity = [];               // per level: true/false/undefined
 let lastSolve = null;            // {key, steps}
 
@@ -140,10 +140,15 @@ function buildSprites() {
 function lookName(g) {
   const names = A.looks.names;
   if (g.look && names.includes(g.look)) return g.look;
-  const want = g.uniform === "officer" ? "officer" : "guard";
-  return names.includes(want) ? want : names[0];
+  if (g.uniform && g.uniform !== A.no_uniform && names.includes(g.uniform)) return g.uniform;
+  return names.includes("guard") ? "guard" : names[0];
 }
 const lookIndex = (g) => A.looks.names.indexOf(lookName(g));
+/* The player in disguise d: its look's down frame (main.c does the same). */
+function playerSprite(d) {
+  const ds = A.disguises[d] || A.disguises[0];
+  return A.looks.first_tile + Math.max(0, A.looks.names.indexOf(ds.look)) * A.looks.frame_count + A.G.DIR_DOWN;
+}
 const talks = (g) => !!(g.verb || (g.script && g.script.length));
 
 function drawSpr(t, tx, ty) { ctx.drawImage(sprTiles[t], tx * TILE, ty * TILE, TILE, TILE); }
@@ -277,7 +282,7 @@ function renderEdit() {
 
   // player start and guards at their first point
   lv.map.forEach((r, y) => [...r].forEach((c, x) => {
-    if (c === "P") drawSpr(A.T.SPR_PLAYER_NONE + (fresh ? preview.view.disguise : 0), x, y);
+    if (c === "P") drawSpr(playerSprite(fresh ? preview.view.disguise : 0), x, y);
   }));
   lv.guards.forEach((g) => {
     const [x, y] = g.route[0];
@@ -383,6 +388,119 @@ function updateArtBudget(lv) {
     ? `This map paints ${u.tiles} different tiles, using ${u.slots} of ${A.art_slots} Game Boy tile slots.`
     : "Pick a tile and paint: unpainted cells use the built-in look.";
   $("art-budget").classList.toggle("errors", u.slots > A.art_slots);
+}
+
+// ---- disguises: what the player can wear, made here (tilesets/characters.json)
+
+/* Everything that lists the outfits follows the disguise list. */
+function refreshOutfits() {
+  const sel = $("g-uniform");
+  sel.innerHTML = "";
+  sel.add(new Option("none", A.no_uniform));
+  A.uniforms.slice(1).forEach((u) => sel.add(new Option(u.toUpperCase(), u)));
+  const pv = $("preview-disguise");
+  pv.innerHTML = "";
+  pv.add(new Option("(hide cones)", "-1"));
+  A.uniforms.forEach((u, i) => pv.add(new Option(i === 0 ? "your own suit" : `${u.toUpperCase()} uniform`, String(i))));
+  if (previewDisguise >= A.uniforms.length) previewDisguise = 0;
+  pv.value = String(previewDisguise);
+}
+
+/* What the editor's in-memory levels (and their undo history) call an
+ * outfit, renamed: the server renames it in tilesets/characters.json and
+ * the saved levels. */
+function renameOutfitIn(lvs, old, name) {
+  for (const lv of lvs) {
+    for (const z of lv.zones || []) {
+      if (z.rules && old in z.rules) {
+        z.rules = Object.fromEntries(Object.entries(z.rules).map(([k, v]) => [k === old ? name : k, v]));
+      }
+    }
+    for (const m of lv.maps) for (const g of m.guards) {
+      if (g.uniform === old) g.uniform = name;
+      if (g.enforcer) g.enforcer = g.enforcer.map((u) => (u === old ? name : u));
+    }
+  }
+}
+
+async function changeDisguises(body, done) {
+  const res = await api("/api/disguises", { ...body, levels });
+  if (res.error) { hint(res.error); renderDisguises(); return false; }
+  Object.assign(A, { uniforms: res.uniforms, disguises: res.disguises, default_rules: res.default_rules });
+  if (done) done(res);
+  A.looks = res.looks;
+  buildSprites();
+  refreshOutfits();
+  preview = null;
+  renderAll();
+  checkLevel();
+  return true;
+}
+
+function renderDisguises() {
+  const box = $("disguise-list");
+  $("disguise-count").textContent = `${A.disguises.length}/${A.disguise_max}, every level`;
+  $("disguise-add").disabled = A.disguises.length >= A.disguise_max;
+  box.innerHTML = "";
+  A.disguises.forEach((d, i) => {
+    const row = document.createElement("div");
+    row.className = "disguise-row";
+    const c = document.createElement("canvas");
+    c.width = c.height = 8;
+    const cg = c.getContext("2d");
+    cg.drawImage(bkgTiles[A.T.TILE_FLOOR], 0, 0);
+    cg.drawImage(sprTiles[playerSprite(i)], 0, 0);
+    c.title = "How the player looks in it";
+    const name = document.createElement("input");
+    name.value = d.name;
+    name.spellcheck = false;
+    name.maxLength = 12;
+    name.disabled = i === 0;
+    name.title = i === 0 ? "Your own suit: always the first disguise" : "Rename (every level follows)";
+    name.setAttribute("aria-label", `Name of disguise ${i + 1}`);
+    name.addEventListener("change", () => {
+      const old = d.name, nu = name.value.trim().toLowerCase();
+      if (nu === old) return;
+      changeDisguises({ action: "rename", index: i, name: nu }, () => {
+        renameOutfitIn(levels, old, nu);
+        const fix = (snap) => { const o = JSON.parse(snap); renameOutfitIn(o.levels, old, nu); return JSON.stringify(o); };
+        undoStack = undoStack.map(fix);
+        redoStack = redoStack.map(fix);
+        hint(`Renamed ${old} to ${nu} everywhere, saved levels included.`);
+      });
+    });
+    const look = document.createElement("select");
+    A.looks.names.forEach((n) => look.add(new Option(n, n)));
+    look.value = d.look;
+    look.title = "Which look draws the player in it (its down frame)";
+    look.addEventListener("change", () => changeDisguises({ action: "look", index: i, look: look.value }));
+    const edit = document.createElement("button");
+    edit.textContent = "Edit…";
+    edit.title = "Paint this look (the player is drawn with its Down frame)";
+    edit.addEventListener("click", () => tpOpenLook(A.looks.names.indexOf(d.look)));
+    const del = document.createElement("button");
+    del.className = "del";
+    del.textContent = "✕";
+    del.disabled = i === 0;
+    del.title = i === 0 ? "Your own suit can't be deleted" : "Delete (refused while a level uses it)";
+    del.addEventListener("click", () => {
+      if (!confirm(`Delete the ${d.name} disguise? (Its look stays.)`)) return;
+      changeDisguises({ action: "delete", index: i }, () => hint(`Deleted the ${d.name} disguise.`));
+    });
+    row.append(c, name, del, look, edit);       // name on top, its look below
+    box.appendChild(row);
+  });
+}
+
+async function addDisguise() {
+  const name = prompt("Name for the new disguise (lower case, e.g. waiter). It starts with a copy of your suit's look:", "");
+  if (name === null) return;
+  const ok = await changeDisguises({ action: "add", name: name.trim().toLowerCase() });
+  if (ok) {
+    const d = A.disguises[A.disguises.length - 1];
+    hint(`Added the ${d.name} disguise, drawn with the look "${d.look}". Paint it, then give it to a character as its uniform.`);
+    tpOpenLook(A.looks.names.indexOf(d.look));
+  }
 }
 
 // ---- zones: areas of the level, each with a rule per outfit
@@ -552,7 +670,7 @@ function renderZones() {
     rules.className = "zone-rules";
     A.uniforms.forEach((u) => {
       const l = document.createElement("label");
-      l.textContent = u === "none" ? "suit" : u;
+      l.textContent = u;
       l.title = `What wearing ${outfitLabel(u)} is in this zone`;
       const sel = document.createElement("select");
       for (const k of A.access) {
@@ -878,7 +996,7 @@ function applyTool(x, y, e, first) {
       const here = A.tiles.find((d) => d.char === lv.map[y][x]);
       if (here && here.blocks.guards) { hint(`Characters can't stand on a ${here.name}.`); return false; }
       if (lv.guards.length >= A.max_guards) { hint(`At most ${A.max_guards} characters in a map.`); return false; }
-      lv.guards.push({ facing: "down", route: [[x, y]], uniform: "none" });
+      lv.guards.push({ facing: "down", route: [[x, y]], uniform: A.no_uniform });
       selGuard = lv.guards.length - 1;
       stroke.drag = { guard: selGuard, point: 0 };
       return true;
@@ -1013,6 +1131,7 @@ function renderAll() {
   renderLinks();
   renderProps();
   renderZones();
+  renderDisguises();
   renderGuards();
   renderScripting();
   if (mode === "edit") renderEdit();
@@ -1102,7 +1221,7 @@ function renderGuards() {
     frames.appendChild(c);
   }
   $("g-facing").value = g.facing;
-  $("g-uniform").value = g.uniform || "none";
+  $("g-uniform").value = g.uniform || A.no_uniform;
   $("g-sees").value = g.sees === false ? "no" : "yes";
   const talking = talks(g);
   $("g-takedown").checked = !talking && g.takedown !== false;
@@ -1131,7 +1250,7 @@ function renderGuards() {
       if (set.length) g.enforcer = set; else delete g.enforcer;
       changed();
     });
-    l.append(box, u === "none" ? "your suit" : u.toUpperCase());
+    l.append(box, u === A.uniforms[0] ? "your suit" : u.toUpperCase());
     enf.appendChild(l);
   });
   const ol = $("g-route");
@@ -2473,6 +2592,7 @@ function wire() {
 
   // zones: the list is per level, painting per map
   $("zone-add").addEventListener("click", addZone);
+  $("disguise-add").addEventListener("click", addDisguise);
   $("zone-view").addEventListener("change", () => renderEdit());
   $("zone-fill").addEventListener("click", () => {
     const m = cmap(), all = [];
@@ -2554,7 +2674,7 @@ function wire() {
   $("trans-preview").addEventListener("click", previewTransition);
 
   A.dirs.forEach((d) => $("g-facing").add(new Option(d, d)));
-  A.uniforms.forEach((u) => $("g-uniform").add(new Option(u === "none" ? "none" : u.toUpperCase(), u)));
+  refreshOutfits();
   $("g-facing").addEventListener("change", (e) => { pushUndo(); cmap().guards[selGuard].facing = e.target.value; changed(); });
   $("g-uniform").addEventListener("change", (e) => { pushUndo(); cmap().guards[selGuard].uniform = e.target.value; changed(); });
   const ch = () => cmap().guards[selGuard];

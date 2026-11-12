@@ -98,10 +98,6 @@
       <p id="size-info" class="hint"></p>
       <label class="inline">Show cones as seen by a player in
         <select id="preview-disguise">
-          <option value="-1">(hide cones)</option>
-          <option value="0" selected>your own suit</option>
-          <option value="1">GUARD uniform</option>
-          <option value="2">OFFICER uniform</option>
         </select>
       </label>
     </div>
@@ -151,6 +147,14 @@
     <div id="zone-list" class="zone-list"></div>
     <div class="row-buttons">
       <button id="zone-add" title="Add a zone (max 16)">+ Zone</button>
+    </div>
+
+    <h2>Disguises <span id="disguise-count" class="muted"></span></h2>
+    <p class="hint">What the player can wear: your own suit, and the uniforms
+      characters' bodies give. Shared by every level.</p>
+    <div id="disguise-list" class="zone-list"></div>
+    <div class="row-buttons">
+      <button id="disguise-add" title="Make a new disguise (max 8)">+ Disguise</button>
     </div>
 
     <h2>Characters <span id="guard-count" class="muted">(this map)</span></h2>

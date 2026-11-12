@@ -349,7 +349,9 @@ static void draw_sprites(void)
 {
     uint8_t i;
 
-    set_sprite_tile(SPRITE_PLAYER, SPR_PLAYER + state.disguise);
+    /* the player has no facing: its look's "down" frame */
+    set_sprite_tile(SPRITE_PLAYER, SPRITE_TILE_COUNT +
+                    disguise_look[state.disguise] * LOOK_FRAMES + DIR_DOWN);
     place_sprite(SPRITE_PLAYER, state.px, state.py);
 
     for (i = 0; i < MAX_GUARDS; i++) {

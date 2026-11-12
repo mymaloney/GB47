@@ -2,9 +2,9 @@
 
 A turn-based stealth puzzle game for the original Game Boy (GBDK-2020 4.3.0,
 SDCC, MBC5), plus a browser level editor. Read `README.md` for the player
-and editor view. **The next task is in `docs/zones-plan.md`** (its last
-section: designer-made disguises). `docs/dialogue-plan.md` is the (finished) plan for NPCs,
-scripts and ROM banking, kept for its reasoning.
+and editor view. `docs/zones-plan.md` (zones, then disguises made in the
+editor) and `docs/dialogue-plan.md` are finished plans, kept for their
+reasoning.
 
 ## Commands
 
@@ -83,7 +83,7 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
     `world.c`, `art.c`, `trans.c`, `far.c`, plus GBDK. It can't overflow
     into bank 1 any more, so this is the tight one: **new rules code goes
     here, and there isn't much room.**
-  - Bank 1 (6.4 KB free): `main.c`, `tiles.c`, `levels.c` (the level
+  - Bank 1 (6.0 KB free): `main.c`, `tiles.c`, `levels.c` (the level
     table, scripts, text). Always mapped, like bank 0.
   - Banks 2 and 3 (12-14 KB free): map cells and painted art. Only
     `far_read()` and `art_row()` map them in, and only code in bank 0 may
@@ -114,9 +114,19 @@ GBDK 4.3.0 from its GitHub releases if `make` can't find `lcc`.
   - The first `BKG_TILE_COUNT` (61) are built in (`src/tiles.c`, generated
     by `tools/gen_tiles.py`).
   - Painted art uses the rest (195 slots per map).
-- VRAM sprite tiles: the built-in ones (`SPRITE_TILE_COUNT`, 7: player,
-  stripped body, cursor, noise), then 6 per character look, so 41 looks
-  at most (`validate_all` checks).
+- VRAM sprite tiles: the built-in ones (`SPRITE_TILE_COUNT`, 4: stripped
+  body, cursor, noise), then 6 per look, so 42 looks at most, the
+  player's included (`validate_all` checks).
+- **Disguises** are data: `"disguises"` in `tilesets/characters.json`
+  (name + look; the first is always "suit", your own clothes; at most
+  `DISGUISE_MAX` 8). `gen_levels.UNIFORMS` is read from it (and reloaded
+  in place by `forget_tilesets()`); `levels.h` gets `DISGUISE_TYPES` and
+  `disguise_look[]`. Only `DISGUISE_NONE` (0) is fixed in `game.h`. The
+  player is drawn with its disguise's look, Down frame. A character's
+  `"uniform"` is a disguise name or `"none"`; old levels called the suit
+  `"none"` in zone rules and enforcer tags (`upgrade_suit()`). Characters
+  always store their `"look"`. The editor's Disguises panel goes through
+  `/api/disguises` (`change_disguises()` in `server.py`).
 - The font is `0-9 A-Z : ! - . > ?` only (`FONT_CHARS` in `gen_levels.py`),
   so dialogue is upper-cased. Lower case would cost 26 of the art slots.
 - Switch cells are the characters `0`-`7` in the map the rules read

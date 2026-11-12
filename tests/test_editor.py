@@ -388,8 +388,8 @@ assert gen_levels.ACCESS == "LTH" and [A_["LEGAL"], A_["TRESPASS"], A_["HOSTILE"
 assert gen_levels.MAX_ZONES == g.G["MAX_ZONES"] and gen_levels.DISGUISE_MAX == g.G["DISGUISE_MAX"]
 dress = levels[5]
 assert [z["name"] for z in dress["zones"]] == ["zone 1", "zone 2"]
-assert gen_levels.zone_rule(dress["zones"][0], "none") == "H"
-assert gen_levels.zone_rule(dress["zones"][1], "none") == "T"
+assert gen_levels.zone_rule(dress["zones"][0], "suit") == "H"
+assert gen_levels.zone_rule(dress["zones"][1], "suit") == "T"
 assert all(gen_levels.zone_rule(z, u) == "L" for z in dress["zones"] for u in ("guard", "officer"))
 hall = dress["maps"][0]
 assert gen_levels.zone_rows(hall)[4] == "1" * 8 + "0" * 12
@@ -397,7 +397,7 @@ rle = gen_levels.zone_rle(hall)
 unpacked = [b for n, b in zip(rle[::2], rle[1::2]) for _ in range(n)]
 assert unpacked == [int(c, 16) for r in gen_levels.zone_rows(hall) for c in r] and max(rle[::2]) <= 255
 assert gen_levels.zone_rule_bytes(dress) == [A_["HOSTILE"], 0, A_["TRESPASS"], 0]
-assert all(lv["zones"] == [{"name": "everywhere", "rules": {"none": "H"}}]
+assert all(lv["zones"] == [{"name": "everywhere", "rules": {"suit": "H"}}]
            for n, lv in enumerate(levels) if n != 5)
 c6 = gen_levels.generated_files(levels)
 assert "const uint8_t level_zones5[] = { 8, 1, 12, 0," in c6["levels_maps.c"]
@@ -411,7 +411,7 @@ w6 = g.new_game(l6)
 st = w6.part[0]
 assert g.lib.game_access(C.byref(st), 3, 3) == A_["TRESPASS"]
 assert g.lib.game_access(C.byref(st), 12, 3) == A_["HOSTILE"]
-st.disguise = g.G["DISGUISE_GUARD"]
+st.disguise = g.UNIFORMS.index("guard")
 assert g.lib.game_access(C.byref(st), 12, 3) == A_["LEGAL"]
 st.px, st.py = 14, 5                      # in front of the officer, who checks guards
 assert g.view(l6, w6)["guards"][2]["regard"] == A_["TRESPASS"]
@@ -430,7 +430,7 @@ old["maps"][0]["access"] = {"none": ["T" * 5 + "H" * 15] * 16,
                             "officer": ["T" * 20] * 8 + ["L" * 20] * 8}
 up = gen_levels.upgrade(old)
 assert "access" not in up["maps"][0]
-assert [z["rules"] for z in up["zones"]] == [{"none": "H", "officer": "T"}, {"none": "H"},
+assert [z["rules"] for z in up["zones"]] == [{"suit": "H", "officer": "T"}, {"suit": "H"},
                                               {"officer": "T"}, {}]
 assert up["maps"][0]["zone_map"][0] == "2" * 5 + "0" * 15
 assert up["maps"][0]["zone_map"][15] == "3" * 5 + "1" * 15
@@ -438,7 +438,7 @@ assert not gen_levels.validate_level(up)
 # saved: zones per level, zone maps per map, defaults left out
 text = gen_levels.dumps([up])
 back = json.loads(text)[0]
-assert back["zones"][1] == {"name": "zone 2", "rules": {"none": "H"}} and "access" not in text
+assert back["zones"][1] == {"name": "zone 2", "rules": {"suit": "H"}} and "access" not in text
 assert back["maps"][0]["zone_map"] == up["maps"][0]["zone_map"]
 assert "zone_map" not in gen_levels.dumps(levels[:1]), "all zone 0: no zone map"
 
@@ -464,9 +464,65 @@ wu = g.new_game(lu)
 su = wu.part[0]
 assert g.lib.game_access(C.byref(su), 2, 3) == A_["TRESPASS"]     # zone 2: suit trespasses
 assert g.lib.game_access(C.byref(su), 9, 3) == A_["HOSTILE"]      # zone 0
-su.disguise = g.G["DISGUISE_OFFICER"]
+su.disguise = g.UNIFORMS.index("officer")
 assert g.lib.game_access(C.byref(su), 9, 3) == A_["TRESPASS"]
 assert g.lib.game_access(C.byref(su), 9, 12) == A_["LEGAL"]       # zone 1
+
+# disguises: a list in tilesets/characters.json, made in the editor; the
+# suit first. Each is drawn with a look; the player uses its down frame
+assert g.UNIFORMS == ["suit", "guard", "officer"] and gen_levels.UNIFORMS is g.UNIFORMS
+assert [d["look"] for d in gen_levels.disguises()] == ["player", "player_guard", "player_officer"]
+assert gen_levels.validate_disguises() == []
+vp = g.view(l6, g.new_game(l6))
+names = gen_levels.looks()["looks"]
+assert vp["sprites"][0]["t"] == g.T["SPRITE_TILE_COUNT"] + names.index("player") * 6 + g.G["DIR_DOWN"]
+assert g.player_sprite(2) == g.T["SPRITE_TILE_COUNT"] + names.index("player_officer") * 6 + 2
+gen_all = gen_levels.generated_files(levels)
+assert "#define DISGUISE_TYPES 3" in gen_all["levels.h"]
+assert "disguise_look[DISGUISE_TYPES] = { LOOK_PLAYER, LOOK_PLAYER_GUARD, LOOK_PLAYER_OFFICER }" \
+    in gen_all["levels.c"]
+assert "1 /* guard */" in gen_all["levels.c"] and "2 /* officer */" in gen_all["levels.c"]
+# who uses an outfit, and renaming one everywhere
+assert gen_levels.outfit_users(levels, "officer") == ["DRESS CODE", "AIR DUCTS", "ANNEX"], \
+    gen_levels.outfit_users(levels, "officer")
+assert len(gen_levels.outfit_users(levels, "suit")) == 9          # every level's zones
+assert gen_levels.outfit_users(levels, "chef") == []
+ren = json.loads(json.dumps(levels))
+gen_levels.rename_outfit(ren, "officer", "captain")
+assert gen_levels.outfit_users(ren, "officer") == [] and \
+    gen_levels.outfit_users(ren, "captain") == ["DRESS CODE", "AIR DUCTS", "ANNEX"]
+assert "captain" in ren[5]["maps"][0]["guards"][0]["enforcer"]
+# levels from before: the suit was called "none" in rules and enforcer tags
+older = json.loads(json.dumps(levels[5]))
+older["zones"][0]["rules"] = {"none": "H"}
+older["maps"][0]["guards"][0]["enforcer"] = ["none", "officer"]
+older = gen_levels.upgrade(older)
+assert older["zones"][0]["rules"] == {"suit": "H"}
+assert older["maps"][0]["guards"][0]["enforcer"] == ["suit", "officer"]
+# a body gives a disguise, never the suit
+assert any("uniform its body gives" in e for e in gen_levels.validate_level(
+    json.loads(json.dumps(levels[5]).replace('"uniform": "officer"', '"uniform": "suit"'))))
+# the list itself is checked (on a copy of the settings)
+with tempfile.TemporaryDirectory() as tmp:
+    for f in ("characters.json", "characters.png"):
+        shutil.copy(ROOT / "tilesets" / f, tmp)
+    real = ts.CHARACTERS
+    ts.CHARACTERS = Path(tmp) / "characters.json"
+    try:
+        cfg = json.loads(ts.CHARACTERS.read_text())
+        for bad, why in [({"name": "none", "look": "player"}, "lower-case"),
+                         ({"name": "Chef", "look": "player"}, "lower-case"),
+                         ({"name": "guard", "look": "player"}, "Two disguises"),
+                         ({"name": "chef", "look": "cat"}, "doesn't exist")]:
+            ts.CHARACTERS.write_text(json.dumps(dict(cfg, disguises=cfg["disguises"] + [bad])))
+            assert any(why in e for e in gen_levels.validate_disguises()), (bad, why)
+        ts.CHARACTERS.write_text(json.dumps(dict(cfg, disguises=cfg["disguises"] +
+                                                 [{"name": f"d{i}", "look": "player"} for i in range(6)])))
+        assert any("1-8 disguises" in e for e in gen_levels.validate_disguises())
+    finally:
+        ts.CHARACTERS = real
+        gen_levels.forget_tilesets()
+assert g.UNIFORMS == ["suit", "guard", "officer"]
 
 # validation catches common mistakes
 bad = with_map(levels[0], [row.replace("P", ".") for row in first_rows])

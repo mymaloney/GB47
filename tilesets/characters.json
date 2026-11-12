@@ -1,7 +1,7 @@
 {
   "image": "characters.png",
   "license": "CC0",
-  "notes": "Character looks: one row per look, 6 frames of 8x8 sprites each. Edit them in the level editor (a character's Look: Edit).",
+  "notes": "Character looks: one row per look, 6 frames of 8x8 sprites each (up, right, down, left, subdued, body). Disguises: what the player can wear, in order (the first is your own suit), each drawn with a look (the player uses its down frame). Edit both in the level editor.",
   "thresholds": [
     0.72,
     0.5,
@@ -18,6 +18,23 @@
   "looks": [
     "guard",
     "officer",
-    "dog"
+    "dog",
+    "player",
+    "player_guard",
+    "player_officer"
+  ],
+  "disguises": [
+    {
+      "name": "suit",
+      "look": "player"
+    },
+    {
+      "name": "guard",
+      "look": "player_guard"
+    },
+    {
+      "name": "officer",
+      "look": "player_officer"
+    }
   ]
 }

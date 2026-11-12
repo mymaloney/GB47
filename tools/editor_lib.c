@@ -22,7 +22,7 @@ int editor_info(int what)
     case 6:  return MAX_GUARDS;
     case 7:  return MAX_WAYPOINTS;
     case 8:  return ITEM_TYPES;
-    case 9:  return DISGUISE_TYPES;
+    case 9:  return DISGUISE_MAX;
     case 10: return ACT_COUNT;
     case 11: return TAKEDOWN_TURNS;
     case 12: return UNDO_DEPTH;

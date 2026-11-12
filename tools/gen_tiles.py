@@ -275,17 +275,11 @@ def guard_set(style):
     ]
 
 
-def player(hat0, hat1, body):
-    return [hat0, hat1, "..#::#..", "...##...", ".#" + body + "#.",
-            "..####..", "...##...", "..#..#.."]
+# The player isn't drawn here either: each disguise has a look in
+# tilesets/characters.png (see "disguises" in characters.json).
 
 
-# Order of the player tiles must match DISGUISE_* in game.h.
 SPRITES = [
-    ("SPR_PLAYER_NONE",    player("...##...", "..####..", ".##.")),
-    ("SPR_PLAYER_GUARD",   player("..####..", ".######.", "xxxx")),
-    ("SPR_PLAYER_OFFICER", player("..####..", "#::::::#", "x##x")),
-] + [
     ("SPR_BODY_STRIPPED", rotate_ccw([   # uniform taken
         "...::...", "..::::..", ".:x::x:.", ".::::::.",
         "..::::..", ".:::::..", ".::::::.", ".::..::.",
@@ -372,8 +366,7 @@ def main():
           f"#define BKG_TILE_COUNT {len(bkg)}", ""]
     for i, (n, _) in enumerate(SPRITES):
         h.append(f"#define {n} {i}")
-    h += ["#define SPR_PLAYER  SPR_PLAYER_NONE   /* + DISGUISE_* */",
-          "/* Character looks (levels.h) are loaded after these. */"]
+    h += ["/* Character looks (levels.h), the player's too, are loaded after these. */"]
     h += [f"#define SPRITE_TILE_COUNT {len(spr)}", "",
           "extern const uint8_t bkg_tile_data[];",
           "extern const uint8_t sprite_tile_data[];", "", "#endif", ""]

@@ -17,6 +17,11 @@
 #include "../src/world.h"
 #include "../src/trans.h"
 
+/* The test maps' outfits. Disguises are data now (tilesets/characters.json);
+ * these are the first three, as shipped: 0 is your own suit. */
+#define DISGUISE_GUARD   1
+#define DISGUISE_OFFICER 2
+
 static int failures = 0;
 
 /* Access layers for 20x16 test maps (run, byte pairs; two bits per
@@ -1118,6 +1123,8 @@ static void test_level_data(void)
         game_load(lv, &s);
         for (i = 0; i < lv->guard_count; i++) {
             const GuardDef *d = &lv->guards[i];
+            CHECK(d->uniform < DISGUISE_TYPES, "level %d guard %d gives a disguise that doesn't exist",
+                  l + 1, i);
             CHECK(d->enforcer < (1 << DISGUISE_TYPES),
                   "level %d guard %d: enforcer is a mask of the disguises", l + 1, i);
             for (w = 0; w < d->wp_count; w++) {
@@ -1369,6 +1376,12 @@ int main(void)
     test_disguise_suspicious();
     test_take_uniform();
     test_access();
+    CHECK(DISGUISE_TYPES >= 1 && DISGUISE_TYPES <= DISGUISE_MAX, "1-%d disguises", DISGUISE_MAX);
+    {
+        int d;
+        for (d = 0; d < DISGUISE_TYPES; d++)
+            CHECK(disguise_look[d] < LOOK_COUNT, "disguise %d is drawn with a look that exists", d);
+    }
     test_big_map();
     test_tile_types();
     test_patrol_detour();

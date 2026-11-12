@@ -33,16 +33,12 @@
 #define FONT_QMARK  60
 #define BKG_TILE_COUNT 61
 
-#define SPR_PLAYER_NONE 0
-#define SPR_PLAYER_GUARD 1
-#define SPR_PLAYER_OFFICER 2
-#define SPR_BODY_STRIPPED 3
-#define SPR_CURSOR 4
-#define SPR_CURSOR_BAD 5
-#define SPR_NOISE 6
-#define SPR_PLAYER  SPR_PLAYER_NONE   /* + DISGUISE_* */
-/* Character looks (levels.h) are loaded after these. */
-#define SPRITE_TILE_COUNT 7
+#define SPR_BODY_STRIPPED 0
+#define SPR_CURSOR 1
+#define SPR_CURSOR_BAD 2
+#define SPR_NOISE 3
+/* Character looks (levels.h), the player's too, are loaded after these. */
+#define SPRITE_TILE_COUNT 4
 
 extern const uint8_t bkg_tile_data[];
 extern const uint8_t sprite_tile_data[];

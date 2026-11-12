@@ -15,11 +15,18 @@ extern const MapArt *const level_art[LEVEL_COUNT];
 extern const char *const level_text[];        /* what characters say */
 
 /* Character looks (GuardDef.look), from tilesets/characters.json. */
-#define LOOK_COUNT 3
+#define LOOK_COUNT 6
 #define LOOK_FRAMES 6   /* up right down left subdued body */
 #define LOOK_GUARD 0
 #define LOOK_OFFICER 1
 #define LOOK_DOG 2
+#define LOOK_PLAYER 3
+#define LOOK_PLAYER_GUARD 4
+#define LOOK_PLAYER_OFFICER 5
 extern const uint8_t look_tile_data[];         /* LOOK_COUNT * LOOK_FRAMES tiles */
+
+/* Disguises (tilesets/characters.json): 0 is your own suit. */
+#define DISGUISE_TYPES 3   /* suit, guard, officer */
+extern const uint8_t disguise_look[DISGUISE_TYPES];
 
 #endif

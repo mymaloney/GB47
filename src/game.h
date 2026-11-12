@@ -63,12 +63,12 @@ typedef struct {
 
 extern const ItemDef item_defs[ITEM_TYPES];
 
-/* Disguises. A guard's uniform is what you get from its body. */
-#define DISGUISE_TYPES   3
+/* Disguises: what the player can wear. The level designer makes them
+ * (tilesets/characters.json), so the list is data: DISGUISE_TYPES and each
+ * one's look are in levels.h. Disguise 0 is always your own suit. A
+ * character's uniform is the disguise its body gives (0 = nothing). */
 #define DISGUISE_MAX     8   /* room in the enforcer mask and zone rules */
-#define DISGUISE_NONE    0   /* your own clothes */
-#define DISGUISE_GUARD   1
-#define DISGUISE_OFFICER 2
+#define DISGUISE_NONE    0   /* your own suit; as a uniform: nothing to take */
 
 /* Access: where each outfit may be. A level is divided into numbered
  * zones (a dance floor, a backstage, a security office...), shared by all
@@ -203,7 +203,7 @@ typedef struct {
     uint8_t facing;          /* initial facing; only matters if wp_count == 1 */
     uint8_t wp_count;        /* 1 = stationary sentry */
     Point   wp[MAX_WAYPOINTS]; /* patrol loop; guard starts on wp[0] */
-    uint8_t uniform;         /* DISGUISE_* worn; NONE = nothing to take */
+    uint8_t uniform;         /* disguise its body gives; NONE = nothing */
     /* Disguises it sees through: bit DISGUISE_x set = wearing x counts as
      * trespassing to this guard even where x is legal. 0 = just enforces
      * the map's access rules. */
@@ -272,7 +272,7 @@ typedef struct {
     uint8_t  items[ITEM_TYPES];   /* in the state so undo restores them */
     uint8_t  takedown_left;       /* turns left in a takedown, 0 = none */
     uint8_t  takedown_guard;      /* who is being taken down */
-    uint8_t  disguise;            /* DISGUISE_* the player is wearing */
+    uint8_t  disguise;            /* the disguise the player is wearing */
     uint8_t  flags;               /* the level's script flags (carried
                                      between its maps like the items) */
     Guard    guards[MAX_GUARDS];

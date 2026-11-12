@@ -5,7 +5,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "fade",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -46,7 +46,7 @@
           "........................................"
         ],
         "guards": [
-          {"facing": "right", "route": [[1, 5], [18, 5]], "uniform": "none"}
+          {"facing": "right", "route": [[1, 5], [18, 5]], "uniform": "none", "look": "guard"}
         ]
       }
     ],
@@ -58,7 +58,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "wipe",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -99,8 +99,8 @@
           "........................................"
         ],
         "guards": [
-          {"facing": "down", "route": [[7, 4], [7, 13], [7, 1]], "uniform": "none"},
-          {"facing": "up", "route": [[11, 10], [11, 1], [11, 13]], "uniform": "none"}
+          {"facing": "down", "route": [[7, 4], [7, 13], [7, 1]], "uniform": "none", "look": "guard"},
+          {"facing": "up", "route": [[11, 10], [11, 1], [11, 13]], "uniform": "none", "look": "guard"}
         ]
       }
     ],
@@ -112,7 +112,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "iris",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -153,8 +153,8 @@
           "......2001010101010101010101010101010123"
         ],
         "guards": [
-          {"facing": "left", "route": [[14, 10]], "uniform": "guard"},
-          {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "guard"},
+          {"facing": "left", "route": [[14, 10]], "uniform": "guard", "look": "guard"},
+          {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "guard", "look": "guard"},
           {"facing": "left", "route": [[11, 5]], "uniform": "none", "sees": false, "look": "dog", "verb": "PET", "script": [{"if": "dog", "then": [{"say": "The dog wags its tail."}], "else": [{"say": "You pet the dog."}, {"set": "dog"}]}]}
         ],
         "switches": [
@@ -170,7 +170,7 @@
     "items": {"stone": 1, "bottle": 1},
     "transition": "dissolve",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -211,7 +211,7 @@
           "........................................"
         ],
         "guards": [
-          {"facing": "left", "route": [[12, 6]], "uniform": "none"}
+          {"facing": "left", "route": [[12, 6]], "uniform": "none", "look": "guard"}
         ]
       }
     ],
@@ -223,7 +223,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "curtain",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -264,8 +264,8 @@
           "........................................"
         ],
         "guards": [
-          {"facing": "up", "route": [[9, 3]], "uniform": "guard"},
-          {"facing": "right", "route": [[5, 2], [13, 2]], "uniform": "none"}
+          {"facing": "up", "route": [[9, 3]], "uniform": "guard", "look": "guard"},
+          {"facing": "right", "route": [[5, 2], [13, 2]], "uniform": "none", "look": "guard"}
         ]
       }
     ],
@@ -277,7 +277,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "diagonal",
     "zones": [
-      {"name": "zone 1", "rules": {"none": "H"}},
+      {"name": "zone 1", "rules": {"suit": "H"}},
       {"name": "zone 2", "rules": {}}
     ],
     "maps": [
@@ -319,9 +319,9 @@
           "........................................"
         ],
         "guards": [
-          {"facing": "right", "route": [[2, 6], [7, 6]], "uniform": "guard", "enforcer": ["officer"]},
-          {"facing": "left", "route": [[17, 4]], "uniform": "guard", "enforcer": ["officer"]},
-          {"facing": "down", "route": [[14, 1], [14, 7]], "uniform": "officer", "enforcer": ["guard"]}
+          {"facing": "right", "route": [[2, 6], [7, 6]], "uniform": "guard", "enforcer": ["officer"], "look": "guard"},
+          {"facing": "left", "route": [[17, 4]], "uniform": "guard", "enforcer": ["officer"], "look": "guard"},
+          {"facing": "down", "route": [[14, 1], [14, 7]], "uniform": "officer", "enforcer": ["guard"], "look": "officer"}
         ],
         "zone_map": [
           "11111111000000000000",
@@ -351,7 +351,7 @@
     "items": {"stone": 1, "bottle": 0},
     "transition": "blinds",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -424,9 +424,9 @@
           "2001010101010101010101010123...................................................."
         ],
         "guards": [
-          {"facing": "right", "route": [[2, 20], [37, 20]], "uniform": "guard"},
-          {"facing": "down", "route": [[35, 9]], "uniform": "guard"},
-          {"facing": "left", "route": [[37, 4], [29, 4]], "uniform": "none", "enforcer": ["guard"]}
+          {"facing": "right", "route": [[2, 20], [37, 20]], "uniform": "guard", "look": "guard"},
+          {"facing": "down", "route": [[35, 9]], "uniform": "guard", "look": "guard"},
+          {"facing": "left", "route": [[37, 4], [29, 4]], "uniform": "none", "enforcer": ["guard"], "look": "guard"}
         ]
       }
     ],
@@ -438,7 +438,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "interlace",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -479,8 +479,8 @@
           "........................................"
         ],
         "guards": [
-          {"facing": "left", "route": [[17, 5], [2, 5]], "uniform": "guard", "enforcer": ["officer"]},
-          {"facing": "down", "route": [[12, 2], [12, 8]], "uniform": "officer", "enforcer": ["officer"]}
+          {"facing": "left", "route": [[17, 5], [2, 5]], "uniform": "guard", "enforcer": ["officer"], "look": "guard"},
+          {"facing": "down", "route": [[12, 2], [12, 8]], "uniform": "officer", "enforcer": ["officer"], "look": "officer"}
         ]
       }
     ],
@@ -492,7 +492,7 @@
     "items": {"stone": 0, "bottle": 0},
     "transition": "iris",
     "zones": [
-      {"name": "everywhere", "rules": {"none": "H"}}
+      {"name": "everywhere", "rules": {"suit": "H"}}
     ],
     "maps": [
       {
@@ -533,7 +533,7 @@
           "........................................"
         ],
         "guards": [
-          {"facing": "right", "route": [[9, 7], [18, 7]], "uniform": "none"}
+          {"facing": "right", "route": [[9, 7], [18, 7]], "uniform": "none", "look": "guard"}
         ]
       },
       {
@@ -574,8 +574,8 @@
           "................................................................................"
         ],
         "guards": [
-          {"facing": "left", "route": [[30, 7]], "uniform": "officer", "enforcer": ["officer"]},
-          {"facing": "down", "route": [[18, 3], [18, 11]], "uniform": "none"}
+          {"facing": "left", "route": [[30, 7]], "uniform": "officer", "enforcer": ["officer"], "look": "officer"},
+          {"facing": "down", "route": [[18, 3], [18, 11]], "uniform": "none", "look": "guard"}
         ]
       }
     ],

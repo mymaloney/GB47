@@ -76,12 +76,11 @@ def assets():
         "G": g.G,
         "items": g.ITEMS,
         "dirs": g.DIRS,
-        "uniforms": g.UNIFORMS,
+        **disguise_assets(),
         "transitions": g.TRANSITIONS,
         "max_switches": g.MAX_SWITCHES,
         "max_flags": gen_levels.MAX_FLAGS, "verb_max": gen_levels.VERB_MAX,
         "access": gen_levels.ACCESS, "access_names": gen_levels.ACCESS_NAMES,
-        "default_rules": {u: gen_levels.default_rule(u) for u in gen_levels.UNIFORMS},
         "max_zones": gen_levels.MAX_ZONES, "zone_digits": gen_levels.ZONE_DIGITS,
         "text_cols": gen_levels.TEXT_COLS, "text_rows": gen_levels.TEXT_ROWS,
         "view_w": g.VIEW_W, "view_h": g.VIEW_H,
@@ -122,6 +121,73 @@ def looks_assets():
             "max": gen_levels.sprite_slots_available() // ts.LOOK_FRAMES}
 
 
+def disguise_assets():
+    """The disguise list and everything in the editor that follows it."""
+    return {"uniforms": list(g.UNIFORMS), "disguises": gen_levels.disguises(),
+            "no_uniform": gen_levels.NO_UNIFORM, "disguise_max": gen_levels.DISGUISE_MAX,
+            "default_rules": {u: gen_levels.default_rule(u) for u in g.UNIFORMS}}
+
+
+def change_disguises(req):
+    """/api/disguises/*: add, rename, delete a disguise or change its look.
+    They are saved at once (like looks); a rename is also made in the saved
+    levels. Returns an error message, or None."""
+    action = req.get("action")
+    ds = gen_levels.disguises()
+    names = [d["name"] for d in ds]
+    i = req.get("index")
+    if action in ("rename", "delete", "look"):
+        if not isinstance(i, int) or not 0 <= i < len(ds):
+            return "There is no such disguise."
+        if i == 0 and action != "look":
+            return "Your own suit is always the first disguise: it can't be renamed or deleted."
+    if action in ("add", "rename"):
+        name = str(req.get("name", "")).strip().lower()
+        if not re.fullmatch(gen_levels.DISGUISE_NAME, name) or name == gen_levels.NO_UNIFORM:
+            return (f"A disguise's name is 1-12 lower-case letters, digits or _, starting "
+                    f"with a letter (and not \"{gen_levels.NO_UNIFORM}\").")
+        if name in names:
+            return f"There is already a disguise called {name}."
+    if action == "add":
+        if len(ds) >= gen_levels.DISGUISE_MAX:
+            return f"There can be at most {gen_levels.DISGUISE_MAX} disguises."
+        look = req.get("look")
+        if look is None:                       # a new look for it, from the suit's
+            looks = ts.load_looks()["looks"]
+            if len(looks) >= gen_levels.sprite_slots_available() // ts.LOOK_FRAMES:
+                return "There's no room for another look in sprite memory."
+            look = "player_" + name
+            while look in looks:
+                look += "_"
+            ts.add_look(look, looks.index(ds[0]["look"]))
+        ds.append({"name": name, "look": look})
+    elif action == "rename":
+        old = names[i]
+        ds[i]["name"] = name
+        saved = gen_levels.load()
+        gen_levels.rename_outfit(saved, old, name)
+        ts.save_disguises(ds)
+        gen_levels.reload_disguises()
+        gen_levels.JSON_PATH.write_text(gen_levels.dumps(saved))
+        return None
+    elif action == "delete":
+        users = sorted(set(gen_levels.outfit_users(req.get("levels", []), names[i]) +
+                           gen_levels.outfit_users(gen_levels.load(), names[i])))
+        if users:
+            return (f"The {names[i]} disguise is used by {', '.join(users)} (a zone rule, a "
+                    "character's uniform, or what someone sees through). Change those first.")
+        ds.pop(i)
+    elif action == "look":
+        if req.get("look") not in ts.load_looks()["looks"]:
+            return "There is no such look."
+        ds[i]["look"] = req["look"]
+    else:
+        return "Unknown change."
+    ts.save_disguises(ds)
+    gen_levels.reload_disguises()
+    return None
+
+
 def regenerate():
     """The ROM's copy of tileset tiles and looks lives in src/levels.c:
     regenerate it from the saved levels (if they're valid; Save does it
@@ -150,7 +216,7 @@ def analyze(level):
         checks.append(("drag", G["SOLVE_USE_DRAG"]))
     if any(gen_levels.can_talk(gd) for gd in guards):
         checks.append(("talk", G["SOLVE_USE_TALK"]))
-    if any(gd.get("uniform", "none") != "none" for gd in guards):
+    if any(gd.get("uniform", gen_levels.NO_UNIFORM) != gen_levels.NO_UNIFORM for gd in guards):
         checks.append(("uniform", G["SOLVE_USE_UNIFORM"]))
     for name, bit in checks:
         r = g.solve(level, G["SOLVE_USE_ALL"] & ~bit)
@@ -243,6 +309,11 @@ class Handler(BaseHTTPRequestHandler):
                 except ValueError as e:
                     return {"error": str(e)[0].upper() + str(e)[1:] + "."}
             return {"looks": looks_assets(), "regenerated": regenerate()}
+        if path == "/api/disguises":
+            err = change_disguises(req)
+            if err:
+                return {"error": err}
+            return {**disguise_assets(), "looks": looks_assets(), "regenerated": regenerate()}
         if path in ("/api/autopaint", "/api/autotile"):
             # learn the painted style from the levels open in the editor
             cfg = dict(ts.load()["autopaint"])

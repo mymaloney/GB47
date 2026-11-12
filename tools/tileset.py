@@ -251,3 +251,11 @@ def rename_look(index, name, path=CHARACTERS):
         raise ValueError(f"there is already a look called {name}")
     cfg["looks"][index] = name
     path.write_text(json.dumps(cfg, indent=2) + "\n")
+
+
+def save_disguises(ds, path=CHARACTERS):
+    """Write the disguise list ([{"name", "look"}], the suit first)."""
+    path = Path(path)
+    cfg = json.loads(path.read_text())
+    cfg["disguises"] = ds
+    path.write_text(json.dumps(cfg, indent=2) + "\n")

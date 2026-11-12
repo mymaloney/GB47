@@ -245,3 +245,11 @@ dialog pre { max-height: 60vh; overflow: auto; background: var(--panel-2); paddi
 .zone-rules label { display: inline-flex; gap: 4px; align-items: center; margin: 0; }
 .zone-rules select { width: auto; padding: 1px 4px; font-size: 12px; }
 .acc-txt-L { color: #2ea043; } .acc-txt-T { color: #c99400; } .acc-txt-H { color: #e4572e; }
+
+/* disguises: what the player can wear */
+.disguise-row { display: grid; grid-template-columns: auto 1fr auto; gap: 6px; align-items: center;
+  padding: 6px; border-radius: 8px; border: 1px solid var(--border); background: var(--panel-2); }
+.disguise-row canvas { width: 24px; height: 24px; image-rendering: pixelated; border-radius: 3px; }
+.disguise-row input, .disguise-row select { background: var(--panel); }
+.disguise-row select { grid-column: 2; }
+.disguise-row button { padding: 3px 8px; }

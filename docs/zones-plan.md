@@ -1,8 +1,18 @@
 # Zones with a rule table, then designer-made disguises
 
-Status: **zones are done** (steps 1-5 below). **Designer-made disguises
-(the last section) are not started**: that is the next task. Read
-`CLAUDE.md` first.
+Status: **done**, zones and designer-made disguises both. Kept for the
+reasoning; `CLAUDE.md` and `README.md` describe how it works now.
+
+How the disguises part was decided: the list is `"disguises"` in
+`tilesets/characters.json` (name + look), the first always "suit" (old
+levels' "none" in zone rules and enforcer tags is renamed by
+`upgrade_suit()`). The player gets a whole 6-frame look (one code path,
+the same painter) and is drawn with its Down frame; the three old player
+sprites became the looks `player`, `player_guard`, `player_officer`.
+Characters' looks used to default from their uniform's name; every
+character now stores its look, so renaming a disguise can't change how
+anyone looks. Renames are made in the saved levels too; deleting a
+disguise any level uses is refused with the level names.
 
 ## Why
 
@@ -40,7 +50,7 @@ outfit** (legal, trespassing or hostile).
   "zone 2": the room on the left). Every level solves in the same number
   of turns as before: 20, 24, 56, 25, 24, 32, 68, 36, 89.
 
-## Next: disguises made by the level designer
+## Disguises made by the level designer (done)
 
 The user's decision: disguises are made in the editor, including how
 they look. This is a bigger change than adding one outfit.

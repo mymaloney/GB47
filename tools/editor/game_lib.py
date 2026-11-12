@@ -51,7 +51,7 @@ MAP_MAX_CELLS = lib.editor_info(13)
 VIEW_W, VIEW_H = lib.editor_info(14), lib.editor_info(15)
 MAX_PARTS = lib.editor_info(17)
 MAX_GUARDS, MAX_WAYPOINTS = lib.editor_info(6), lib.editor_info(7)
-ITEM_TYPES, DISGUISE_TYPES = lib.editor_info(8), lib.editor_info(9)
+ITEM_TYPES, DISGUISE_MAX = lib.editor_info(8), lib.editor_info(9)
 MAX_SWITCHES = lib.editor_info(21)
 LOOK_FRAMES = ts.LOOK_FRAMES
 
@@ -166,7 +166,7 @@ CELL_BLOCKS = list((C.c_uint8 * len(CELL_NAMES)).in_dll(lib, "cell_blocks"))
 ITEM_DEFS = (ItemDef * ITEM_TYPES).in_dll(lib, "item_defs")
 ITEMS = [{"name": d.name.decode(), "range": d.range, "noise": d.noise} for d in ITEM_DEFS]
 DIRS = gen_levels.DIRS            # DIR_* order
-UNIFORMS = gen_levels.UNIFORMS    # DISGUISE_* order
+UNIFORMS = gen_levels.UNIFORMS    # the disguises, in order (the suit first)
 TRANSITIONS = gen_levels.TRANSITIONS
 assert [G["TRANS_" + n.upper()] for n in TRANSITIONS] == list(range(G["TRANS_COUNT"])), \
     "TRANS_* in src/trans.h changed: update TRANSITIONS in tools/gen_levels.py"
@@ -235,7 +235,8 @@ class Level:
                 gd.wp_count = len(route)
                 for w, (x, y) in enumerate(route):
                     gd.wp[w].x, gd.wp[w].y = x, y
-                gd.uniform = UNIFORMS.index(g.get("uniform", "none"))
+                u = g.get("uniform", gen_levels.NO_UNIFORM)
+                gd.uniform = 0 if u == gen_levels.NO_UNIFORM else UNIFORMS.index(u)
                 gd.enforcer = sum(1 << UNIFORMS.index(u) for u in set(g.get("enforcer", [])))
                 names = gen_levels.looks()["looks"]
                 look = gen_levels.guard_look(g)
@@ -369,7 +370,7 @@ def view(level, world, aim_item=None):
         tiles.append(row)
         aim.append(arow)
 
-    sprites = [{"t": T["SPR_PLAYER_NONE"] + state.disguise, "x": state.px, "y": state.py}]
+    sprites = [{"t": player_sprite(state.disguise), "x": state.px, "y": state.py}]
     noise, guards = [], []
     for i in range(state.guard_count):
         g = state.guards[i]
@@ -406,6 +407,15 @@ def view(level, world, aim_item=None):
         "flags": [f for i, f in enumerate(level.flags) if state.flags & (1 << i)],
         "guards": guards,
     }
+
+
+def player_sprite(disguise):
+    """Sprite tile of the player in a disguise: its look's down frame, as
+    main.c draws it."""
+    names = gen_levels.looks()["looks"]
+    ds = gen_levels.disguises()
+    look = ds[disguise]["look"] if disguise < len(ds) else ds[0]["look"]
+    return T["SPRITE_TILE_COUNT"] + names.index(look) * LOOK_FRAMES + G["DIR_DOWN"]
 
 
 MAX_STEPS = 1024
