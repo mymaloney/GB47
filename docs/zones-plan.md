@@ -1,6 +1,7 @@
 # Next task: numbered zones with a rule table
 
-Status: **not started**. A handoff spec. Read `CLAUDE.md` first.
+Status: **not started**. A handoff spec. Read `CLAUDE.md` first, then the
+"Decisions" section at the end: it overrides the per-map details above.
 
 ## Why
 
@@ -124,12 +125,49 @@ So: paint **zones**, and give each zone a **rule per outfit**.
 - Don't change the user's levels beyond the format conversion, and say so
   if anything else has to move.
 
-## Open questions for the user
+## Decisions (answered by the user)
 
-1. Is 16 zones per map enough?
-2. Should zones be per map (as above) or shared by all maps of a level?
-   Per map is simpler; shared saves retyping rules in multi-map levels.
-3. Levels 7 and 9 had guards hostile to the suit before access zones;
-   they currently play as trespassing. Restore the big cones there?
-4. Which new outfits are wanted first (e.g. techie)? Each needs a player
-   sprite and a uniform name.
+1. **16 zones is enough.**
+2. **Zones are shared by all maps of a level.** So `zones` (names and
+   rules) moves from each map to the level, and each map keeps only its
+   `zone_map`. In C, put the rule table once per level: every `LevelDef`
+   of the level can point at the same `const uint8_t *zone_rules` (a
+   pointer in the level table, data in `levels.c`, bank 1). The editor's
+   Zones panel is then per level, and painting is per map.
+3. **Levels 7 and 9 already have their big cones back.** The user painted
+   them in the editor and has not pushed yet. Before starting, get those
+   level edits (ask the user to push, then rebase onto the default
+   branch). Their `"access"` layers must go through the same `upgrade()`
+   conversion as level 6's, and the expected solution lengths in
+   "Constraints" above will differ for 7 and 9: take the new numbers from
+   `make test` on their version, before changing anything.
+4. **Disguises are made by the level designer in the editor, including
+   how they look.** This is a bigger change than adding one outfit:
+   - Disguises stop being the fixed `DISGUISE_NONE/GUARD/OFFICER`. They
+     become a list in data, like character looks: add
+     `tilesets/disguises.json` (or a `"disguises"` list beside the looks
+     in `tilesets/characters.json`) with a name and a look for each.
+     Disguise 0 stays "your own suit". Cap at `DISGUISE_MAX` 8 (the
+     enforcer mask and two rule bytes per zone).
+   - Appearance: the player's sprite per disguise is today a built-in
+     tile (`SPR_PLAYER + disguise`, `tools/gen_tiles.py`). Move it to the
+     painted looks in `tilesets/characters.png`, so the existing "Edit
+     look / New look" pixel painter edits it. A disguise needs at least
+     one player frame; decide whether the player gets the 6-frame row
+     characters have (it has no facing today: one frame is enough, but
+     using a whole look keeps one code path).
+   - A character's `uniform` becomes "which disguise its body gives" (a
+     name from the list, or none). Its own look stays separate.
+   - `game.h`: `DISGUISE_TYPES` becomes a count generated into
+     `levels.h`; `gen_levels.py` `UNIFORMS` is read from the data file;
+     `GameState.disguise` is unchanged (an index).
+   - Editor: a Disguises panel (add, rename, delete, edit look); the
+     Zones panel's rule pickers, the "Sees through" checkboxes, the
+     uniform dropdown and the cone-preview outfit list all read that
+     list. Deleting a disguise that levels use must be refused with a
+     plain message naming the levels.
+   - Sprite VRAM: looks are limited to 41 in total; each disguise look
+     counts toward that (`validate_all` already checks).
+   - Do this as its own step after the zones work (steps 1-5), since it
+     touches different code; zones must not assume three outfits anywhere
+     (loop over the list, never write "none/guard/officer").
