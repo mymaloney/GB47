@@ -44,7 +44,10 @@
         ],
         "guards": [
           {"facing": "right", "route": [[1, 5], [18, 5]], "uniform": "none"}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       }
     ],
     "links": []
@@ -95,7 +98,10 @@
         "guards": [
           {"facing": "down", "route": [[7, 4], [7, 13], [7, 1]], "uniform": "none"},
           {"facing": "up", "route": [[11, 10], [11, 1], [11, 13]], "uniform": "none"}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       }
     ],
     "links": []
@@ -148,6 +154,9 @@
           {"facing": "down", "route": [[6, 1], [6, 9], [18, 9], [18, 1]], "uniform": "guard"},
           {"facing": "left", "route": [[11, 5]], "uniform": "none", "sees": false, "look": "dog", "verb": "PET", "script": [{"if": "dog", "then": [{"say": "The dog wags its tail."}], "else": [{"say": "You pet the dog."}, {"set": "dog"}]}]}
         ],
+        "access": {
+          "none": "H"
+        },
         "switches": [
           {"x": 16, "y": 13, "flag": "dog", "on": "E", "on_art": 52}
         ]
@@ -200,7 +209,10 @@
         ],
         "guards": [
           {"facing": "left", "route": [[12, 6]], "uniform": "none"}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       }
     ],
     "links": []
@@ -251,7 +263,10 @@
         "guards": [
           {"facing": "up", "route": [[9, 3]], "uniform": "guard"},
           {"facing": "right", "route": [[5, 2], [13, 2]], "uniform": "none"}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       }
     ],
     "links": []
@@ -407,7 +422,10 @@
           {"facing": "right", "route": [[2, 20], [37, 20]], "uniform": "guard"},
           {"facing": "down", "route": [[35, 9]], "uniform": "guard"},
           {"facing": "left", "route": [[37, 4], [29, 4]], "uniform": "none", "enforcer": ["guard"]}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       }
     ],
     "links": []
@@ -458,7 +476,10 @@
         "guards": [
           {"facing": "left", "route": [[17, 5], [2, 5]], "uniform": "guard", "enforcer": ["officer"]},
           {"facing": "down", "route": [[12, 2], [12, 8]], "uniform": "officer", "enforcer": ["officer"]}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       }
     ],
     "links": []
@@ -508,7 +529,10 @@
         ],
         "guards": [
           {"facing": "right", "route": [[9, 7], [18, 7]], "uniform": "none"}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       },
       {
         "map": [
@@ -550,7 +574,10 @@
         "guards": [
           {"facing": "left", "route": [[30, 7]], "uniform": "officer", "enforcer": ["officer"]},
           {"facing": "down", "route": [[18, 3], [18, 11]], "uniform": "none"}
-        ]
+        ],
+        "access": {
+          "none": "H"
+        }
       }
     ],
     "links": [
